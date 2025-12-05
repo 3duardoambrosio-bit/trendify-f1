@@ -20,6 +20,8 @@ from enum import Enum
 class EntryType(str, Enum):
     PRODUCT_EVALUATION = "product_evaluation"
     CAPITAL_SPEND = "capital_spend"
+    PRODUCT_EXIT = "product_exit"  # NEW
+
 
 
 
