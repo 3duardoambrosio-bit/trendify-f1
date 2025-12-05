@@ -1,0 +1,34 @@
+app:
+  name: "trendify-fase1"
+  environment: "dev"
+
+buyer:
+  margin_threshold:
+    minimum: 0.30
+    default: 0.35
+  trust_threshold:
+    minimum: 7.0
+    default: 8.0
+  suspect_price:
+    lower_multiplier: 0.5
+    upper_multiplier: 2.5
+
+logging:
+  level: "INFO"
+  json: false
+
+operational:
+  maintenance_mode: false
+  environment: "dev"
+
+capital_shield:
+  # Tope diario total de gasto (learning + testing)
+  hard_daily_cap: 30.0
+
+  # Caps lógicos internos (por ahora solo ratios, luego afinamos)
+  daily_learning_cap: 15.0
+  daily_testing_cap: 15.0
+
+  # Qué tanto del cap diario puede comerse UN solo producto
+  product_soft_cap_ratio: 0.40   # >40% → warning
+  product_hard_cap_ratio: 0.70   # >70% → bloqueado

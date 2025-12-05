@@ -1,0 +1,41 @@
+[project]
+name = "trendify-fase1"
+version = "0.1.0"
+description = "Fase 1 - Trendify E-commerce Automation"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = [
+  "buyer/tests",
+  "infra/tests",
+  "synapse/tests",
+  "ops/tests",
+]
+
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+[tool.setuptools]
+# Le decimos explícitamente qué paquetes Python existen
+packages = ["buyer", "infra", "shared"]
+
+[tool.setuptools.package-data]
+# Por ahora nada especial
