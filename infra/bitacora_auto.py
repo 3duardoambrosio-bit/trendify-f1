@@ -152,3 +152,7 @@ class BitacoraAuto:
         self._entries.append(entry)
         self._save_entries()
         return entry
+    # Singleton de conveniencia para código legacy
+# Usa el BITACORA_PATH por defecto.
+bitacora = BitacoraAuto()
+

@@ -71,3 +71,4 @@ venv.bak/
 
 # Config files (except example)
 config/local.dev.yml
+data/bitacora/bitacora.jsonl
