@@ -1,4 +1,6 @@
 from __future__ import annotations
+from datetime import datetime, timezone
+
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -76,7 +78,8 @@ class HypothesisTracker:
         from uuid import uuid4
 
         hyp_id = f"HYP-{uuid4().hex[:8]}"
-        created_at = datetime.utcnow()
+        created_at = datetime.now(timezone.utc)
+
 
         hyp = Hypothesis(
             id=hyp_id,

@@ -16,57 +16,60 @@ def _simple_scoring(product: Dict[str, Any]) -> Tuple[str, Dict[str, Any], Quali
     """
     Evaluador simplificado para el demo de catálogo.
 
-    Usa solo campos básicos del catálogo:
-    - price, cost, shipping_cost
-    - supplier_rating
-    - reviews_count
-
-    No depende de BuyerBlock ni de QualityGate para evitar problemas de API.
+    Usa una regla muy básica basada en margen, rating y número de reseñas.
+    Devuelve:
+      - buyer_decision: "approved" o "rejected"
+      - record: payload listo para bitácora / pipeline
+      - quality: QualityResult con quality_score
     """
-
     price = float(product.get("price", 0.0) or 0.0)
     cost = float(product.get("cost", 0.0) or 0.0)
-    shipping = float(product.get("shipping_cost", 0.0) or 0.0)
-    rating = float(product.get("supplier_rating", 0.0) or 0.0)
-    reviews = float(product.get("reviews_count", 0.0) or 0.0)
+    shipping_cost = float(product.get("shipping_cost", 0.0) or 0.0)
 
-    # margen sobre precio (0–1)
-    margin = 0.0
-    if price > 0:
-        margin = max(0.0, min(1.0, (price - cost - shipping) / price))
+    rating = float(
+        product.get("rating", product.get("supplier_rating", 0.0)) or 0.0
+    )
+    reviews = int(
+        product.get("reviews", product.get("reviews_count", 0)) or 0
+    )
 
-    # normalizaciones burdas solo para demo
-    rating_norm = max(0.0, min(1.0, (rating - 3.0) / 2.0))      # 3★ → 0, 5★ → 1
-    reviews_norm = max(0.0, min(1.0, reviews / 200.0))          # 0–200 → 0–1
+    # margen simplificado
+    if price <= 0:
+        margin = 0.0
+    else:
+        margin = (price - cost - shipping_cost) / price
 
-    composite_score = 0.5 * margin + 0.3 * rating_norm + 0.2 * reviews_norm
+    # composite_score ultra simple para el demo (0-100)
+    composite_score = 0.0
+    composite_score += max(0.0, min(1.0, margin)) * 0.4
+    composite_score += max(0.0, min(1.0, rating / 5.0)) * 0.3
+    composite_score += max(0.0, min(1.0, min(reviews, 500) / 500.0)) * 0.3
+    composite_score *= 100.0
 
-    # reglas sencillas:
-    # - margen >= 0.3
-    # - rating >= 4.0
-    # - reviews >= 50
     if margin >= 0.30 and rating >= 4.0 and reviews >= 50:
         buyer_decision = "approved"
     else:
         buyer_decision = "rejected"
 
-    quality_score = composite_score  # para el demo, igualamos calidad al composite
+    # Para F1, calidad = composite (simplificado)
+    quality_score = composite_score
     quality = QualityResult(global_score=quality_score)
 
+    # 🔧 variables que te marcaba VSCode como “not defined”
+    product_id = str(product.get("product_id") or product.get("id") or "")
+    buyer_scores: Dict[str, float] = {"composite_score": composite_score}
+    final_decision = buyer_decision
+
     record: Dict[str, Any] = {
-        "product_id": product.get("product_id"),
+        "product_id": product_id,
         "buyer_decision": buyer_decision,
-        "buyer_scores": {
-            "composite_score": composite_score,
-            "margin": margin,
-            "rating_norm": rating_norm,
-            "reviews_norm": reviews_norm,
-        },
-        "quality_global_score": quality_score,
-        "final_decision": buyer_decision,
+        "buyer_scores": buyer_scores,
+        "quality_score": quality_score,  # 👈 ya normalizado (antes era quality_global_score)
+        "final_decision": final_decision,
     }
 
     return buyer_decision, record, quality
+
 
 
 def evaluate_product(

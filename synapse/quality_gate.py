@@ -9,6 +9,24 @@ from typing import Any, Dict, List, Optional
 
 from buyer.schemas import ProductSchema
 from infra.logging_config import get_logger
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+
+@dataclass
+class QualityResult:
+    """
+    Resultado de la evaluación de calidad de un producto.
+
+    F1 sólo necesita una estructura estable para que el evaluator
+    y los tests puedan usarla.
+    """
+    global_score: float
+    passed: bool = True
+    hard_failures: List[str] = field(default_factory=list)
+    soft_warnings: List[str] = field(default_factory=list)
+    details: Dict[str, Any] = field(default_factory=dict)
+
 
 logger = get_logger(__name__)
 

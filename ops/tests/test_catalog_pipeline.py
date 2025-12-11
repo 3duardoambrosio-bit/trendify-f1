@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Tuple
 
 from infra.bitacora_auto import BitacoraAuto
+from ops.capital_shield import CapitalShield
 from ops.catalog_pipeline import (
     CatalogItemResult,
     evaluate_catalog,
     load_catalog_csv,
     summarize_catalog,
 )
-from synapse import product_evaluator
-
+from synapse.quality_gate import QualityResult
 
 def test_load_catalog_csv_parses_rows(tmp_path: Path) -> None:
     path = tmp_path / "catalog.csv"
@@ -28,56 +30,75 @@ def test_load_catalog_csv_parses_rows(tmp_path: Path) -> None:
     assert products[1]["has_video"] is False
 
 
-def test_evaluate_catalog_uses_evaluator_and_capital_shield(monkeypatch, tmp_path: Path) -> None:
+def test_evaluate_catalog_uses_evaluator_and_capital_shield(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     """El pipeline debe usar evaluate_product y asignar budget sólo a aprobados."""
 
-    def fake_eval(product: Dict[str, Any], bitacora: BitacoraAuto):
+    # Import local para poder hacer monkeypatch sin conflictos
+    from synapse import product_evaluator
+
+    def fake_eval(product: Dict[str, Any]) -> Tuple[str, Dict[str, Any], QualityResult]:
+        """Simula evaluate_product para controlar las decisiones del pipeline."""
         pid = product["product_id"]
-        if pid == "good":
-            final_decision = "approved"
-            record = {
+
+        if pid == "p1":
+            buyer_decision = "approved"
+            record: Dict[str, Any] = {
                 "product_id": pid,
                 "buyer_decision": "approved",
                 "buyer_scores": {"composite_score": 0.8},
-                "quality_global_score": 0.9,
+                "quality_score": 0.9,  # 👈 antes era quality_global_score
                 "final_decision": "approved",
             }
         else:
-            final_decision = "rejected"
+            buyer_decision = "rejected"
             record = {
                 "product_id": pid,
                 "buyer_decision": "rejected",
                 "buyer_scores": {"composite_score": 0.3},
-                "quality_global_score": 0.4,
+                "quality_score": 0.4,  # 👈 antes era quality_global_score
                 "final_decision": "rejected",
             }
 
-        class Quality:
-            def __init__(self, score: float) -> None:
-                self.global_score = score
+        quality = QualityResult(global_score=record["quality_score"])
+        return buyer_decision, record, quality
 
-        quality = Quality(record["quality_global_score"])
-        return final_decision, record, quality
-
+    # El pipeline debe usar nuestro fake_eval
     monkeypatch.setattr(product_evaluator, "evaluate_product", fake_eval)
 
-    products: List[Dict[str, Any]] = [
-        {"product_id": "good"},
-        {"product_id": "bad"},
-    ]
+    # Preparamos un CSV chiquito en tmp_path
+    catalog_path = tmp_path / "demo_catalog.csv"
+    catalog_path.write_text(
+        "product_id,name,cost,price,shipping_cost,supplier_rating,reviews_count\n"
+        "p1,Prod 1,10,30,0,4.5,100\n"
+        "p2,Prod 2,10,30,0,4.5,100\n",
+        encoding="utf-8",
+    )
 
-    bitacora = BitacoraAuto(path=tmp_path / "bitacora.jsonl")
-    results = evaluate_catalog(products, total_test_budget=100.0, bitacora=bitacora)
+    # Ejecutamos el pipeline real
+    results, summary = evaluate_catalog(
+        catalog_path=catalog_path,
+        total_test_budget=100.0,
+        capital_shield=CapitalShield(),
+    )
 
+    # Sólo p1 debería tener presupuesto asignado
     assert len(results) == 2
 
-    good = next(r for r in results if r.product_id == "good")
-    bad = next(r for r in results if r.product_id == "bad")
+    approved = [r for r in results if r.final_decision == "approved"]
+    rejected = [r for r in results if r.final_decision == "rejected"]
 
-    assert good.final_decision == "approved"
-    assert good.allocated_test_budget > 0
-    assert bad.final_decision == "rejected"
-    assert bad.allocated_test_budget == 0.0
+    assert len(approved) == 1
+    assert approved[0].product_id == "p1"
+    assert approved[0].allocated_test_budget > 0
+
+    assert len(rejected) == 1
+    assert rejected[0].allocated_test_budget == 0
+    # summary se usa sólo para validar que no truene
+    assert summary.total_products == 2
+
 
 
 def test_summarize_catalog_counts_decisions() -> None:
