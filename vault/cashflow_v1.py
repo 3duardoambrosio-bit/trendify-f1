@@ -12,11 +12,11 @@ def _d(x: str | int | float | Decimal) -> Decimal:
 @dataclass(frozen=True)
 class CashFlowState:
     """
-    Modelo mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nimo, ACERO:
+    Modelo mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo, ACERO:
     - available_cash: lo que realmente puedes gastar hoy
     - held_cash: dinero retenido por pasarela (no disponible)
     - projected_refunds/chargebacks: buffer conservador (no inventes riqueza)
-    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
+    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
     """
     available_cash: Decimal
     held_cash: Decimal = Decimal("0")
@@ -182,3 +182,26 @@ class CashflowModel:  # legacy casing expected by tests
 CashFlowConfig = CashflowConfig
 CashFlowState = CashflowState
 
+# =========================
+# CASHFLOW_METHOD_ALIASES_V1
+# SpendGatewayV2 expects:
+# - cashflow.can_spend(amount)
+# - cashflow.spend(amount)  (optional but common)
+# Keep logic single-source: map to can_debit/debit.
+# =========================
+from decimal import Decimal as _Decimal
+
+def _cashflow_can_spend(self, amount: _Decimal) -> bool:
+    return self.can_debit(amount)
+
+def _cashflow_spend(self, amount: _Decimal):
+    return self.debit(amount)
+
+# attach aliases (no mutation of instances; just API surface)
+try:
+    CashflowModel.can_spend = _cashflow_can_spend  # type: ignore[attr-defined]
+    CashflowModel.spend = _cashflow_spend          # type: ignore[attr-defined]
+    CashflowModel.debit_cashflow = _cashflow_spend # type: ignore[attr-defined]
+except Exception:
+    # if CashflowModel is not defined for some reason, fail loudly during import elsewhere
+    pass
