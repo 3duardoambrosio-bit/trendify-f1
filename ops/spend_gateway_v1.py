@@ -2,84 +2,75 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal, Optional, Dict, Any
+from typing import Dict, Optional, Tuple
 
-from infra.ledger_ndjson import LedgerNDJSON
-from vault.vault_p0 import VaultP0
-from vault.cashflow_v1 import CashflowState
-
-
-PoolName = Literal["learning", "operational", "reserve"]
+from core.ledger import Ledger
+from vault.v1 import BudgetType, SpendRequest, SpendDecision, Vault, VaultState
 
 
 @dataclass(frozen=True)
-class SpendResult:
-    allowed: bool
-    reason: str
-    pool: PoolName
-    amount: Decimal
-    trace_id: str
+class ProductCaps:
+    max_total_learning: Decimal = Decimal("30")   # hard cap per product in learning
+    max_day1_learning: Decimal = Decimal("10")    # staged cap day 1
 
 
-class SpendGatewayV1:
+class SpendGateway:
     """
-    Single choke point for spending approvals.
-    Writes ledger events for:
-    - SPEND_REQUESTED
-    - SPEND_APPROVED / SPEND_DENIED
+    Single entry point for spend approvals.
+    - Applies per-product caps
+    - Calls Vault.request_spend
+    - Writes ledger events for approve/deny
     """
 
-    def __init__(self, *, ledger: LedgerNDJSON, vault: VaultP0, cashflow: CashflowState, safety_buffer: Decimal) -> None:
-        self.ledger = ledger
+    def __init__(self, vault: Vault, ledger: Optional[Ledger] = None, caps: Optional[ProductCaps] = None) -> None:
         self.vault = vault
-        self.cashflow = cashflow
-        self.safety_buffer = safety_buffer
+        self.ledger = ledger or Ledger()
+        self.caps = caps or ProductCaps()
+        self._product_spent_learning: Dict[str, Decimal] = {}
 
-    def request_spend(
-        self,
-        *,
-        product_id: str,
-        pool: PoolName,
-        amount: Decimal,
-        meta: Optional[Dict[str, Any]] = None,
-        trace_id: Optional[str] = None,
-    ) -> SpendResult:
-        ev_req = self.ledger.write(
-            event_type="SPEND_REQUESTED",
-            entity_type="product",
-            entity_id=product_id,
-            payload={"pool": pool, "amount": str(amount), "meta": meta or {}},
-            trace_id=trace_id,
-        )
+    def product_spent_learning(self, product_id: str) -> Decimal:
+        return self._product_spent_learning.get(product_id, Decimal("0"))
 
-        # cashflow guardrail (pre-check)
-        if not self.cashflow.can_spend(amount, self.safety_buffer):
-            self.ledger.write(
-                event_type="SPEND_DENIED",
-                entity_type="product",
-                entity_id=product_id,
-                payload={"reason": "cashflow_buffer", "pool": pool, "amount": str(amount)},
-                trace_id=ev_req.trace_id,
-            )
-            return SpendResult(False, "cashflow_buffer", pool, amount, ev_req.trace_id)
+    def request(self, req: SpendRequest) -> SpendDecision:
+        # caps apply only to learning (P0)
+        if req.budget == BudgetType.LEARNING:
+            spent = self.product_spent_learning(req.product_id)
+            if (spent + req.amount) > self.caps.max_total_learning:
+                dec = SpendDecision(False, "CAP_LEARNING_TOTAL")
+                self.ledger.append("SPEND_DENIED", "product", req.product_id, {
+                    "budget": req.budget.value, "amount": str(req.amount), "reason": dec.reason,
+                    "cap": str(self.caps.max_total_learning), "spent": str(spent)
+                })
+                return dec
 
-        # vault guardrail
-        decision = self.vault.request_spend(pool=pool, amount=amount)
-        if not decision.allowed:
-            self.ledger.write(
-                event_type="SPEND_DENIED",
-                entity_type="product",
-                entity_id=product_id,
-                payload={"reason": decision.reason, "pool": pool, "amount": str(amount)},
-                trace_id=ev_req.trace_id,
-            )
-            return SpendResult(False, decision.reason, pool, amount, ev_req.trace_id)
+            if req.day == 1 and (spent + req.amount) > self.caps.max_day1_learning:
+                dec = SpendDecision(False, "CAP_LEARNING_DAY1")
+                self.ledger.append("SPEND_DENIED", "product", req.product_id, {
+                    "budget": req.budget.value, "amount": str(req.amount), "reason": dec.reason,
+                    "cap": str(self.caps.max_day1_learning), "spent": str(spent), "day": req.day
+                })
+                return dec
 
-        self.ledger.write(
-            event_type="SPEND_APPROVED",
-            entity_type="product",
-            entity_id=product_id,
-            payload={"pool": pool, "amount": str(amount)},
-            trace_id=ev_req.trace_id,
-        )
-        return SpendResult(True, "approved", pool, amount, ev_req.trace_id)
+        # Reserve is protected by Vault anyway, but log the attempt.
+        if req.budget == BudgetType.RESERVE:
+            dec = self.vault.request_spend(req)
+            self.ledger.append("SPEND_DENIED", "product", req.product_id, {
+                "budget": req.budget.value, "amount": str(req.amount), "reason": dec.reason
+            })
+            return dec
+
+        dec = self.vault.request_spend(req)
+        if dec.allowed:
+            if req.budget == BudgetType.LEARNING:
+                self._product_spent_learning[req.product_id] = self.product_spent_learning(req.product_id) + req.amount
+
+            self.ledger.append("SPEND_APPROVED", "product", req.product_id, {
+                "budget": req.budget.value, "amount": str(req.amount), "reason": dec.reason,
+                "day": req.day
+            })
+        else:
+            self.ledger.append("SPEND_DENIED", "product", req.product_id, {
+                "budget": req.budget.value, "amount": str(req.amount), "reason": dec.reason,
+                "day": req.day
+            })
+        return dec
