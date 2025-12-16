@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, overload
+
+from core.evidence_schema_v1 import EvidenceV1
 
 
 Action = Literal["OK", "VERIFY", "BLOCK"]
@@ -17,10 +19,21 @@ class DataQualityReport:
 class DataQualityGuard:
     """
     Conservative data sanity checker for supplier evidence.
-    Goal: downgrade confidence / block launch when evidence smells like fantasy.
     """
 
-    def evaluate(self, evidence: Dict[str, Any]) -> DataQualityReport:
+    def evaluate(self, evidence: Dict[str, Any] | EvidenceV1) -> DataQualityReport:
+        if isinstance(evidence, EvidenceV1):
+            d = {
+                "price_usd": evidence.price_usd,
+                "shipping_usd_to_mexico": evidence.shipping_usd_to_mexico,
+                "rating": evidence.rating,
+                "reviews": evidence.reviews,
+                "sold": evidence.sold,
+            }
+            return self._evaluate_dict(d)
+        return self._evaluate_dict(evidence)
+
+    def _evaluate_dict(self, evidence: Dict[str, Any]) -> DataQualityReport:
         flags: List[str] = []
         score = 1.0
 
@@ -35,7 +48,6 @@ class DataQualityGuard:
         reviews = int(evidence.get("reviews", 0) or 0)
         sold = int(evidence.get("sold", 0) or 0)
 
-        # Hard invalids
         if price <= 0:
             return DataQualityReport(0.0, ["price_invalid"], "BLOCK")
         if ship < 0:
@@ -45,12 +57,9 @@ class DataQualityGuard:
         if reviews < 0 or sold < 0:
             return DataQualityReport(0.0, ["negative_counts"], "BLOCK")
 
-        # Soft anomalies
         if rating < 4.3:
             penalize(0.85, "rating_low")
 
-        # Suspicious ratio: too many reviews vs sold.
-        # NOTE: Make this *strongly* skeptical. High ratios are rare in the wild.
         if sold > 0:
             rr = reviews / max(sold, 1)
             if rr > 0.60:
@@ -58,7 +67,6 @@ class DataQualityGuard:
             elif rr > 0.35:
                 penalize(0.75, "reviews_to_sold_suspicious")
 
-        # Ultra-cheap + huge volume smells like bait
         if price < 6 and sold >= 3000:
             penalize(0.75, "price_too_low_for_volume")
 
