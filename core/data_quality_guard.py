@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, overload
+from typing import Any, Dict, List, Literal
 
 from core.evidence_schema_v1 import EvidenceV1
 
@@ -48,6 +48,7 @@ class DataQualityGuard:
         reviews = int(evidence.get("reviews", 0) or 0)
         sold = int(evidence.get("sold", 0) or 0)
 
+        # Hard invalids
         if price <= 0:
             return DataQualityReport(0.0, ["price_invalid"], "BLOCK")
         if ship < 0:
@@ -57,16 +58,21 @@ class DataQualityGuard:
         if reviews < 0 or sold < 0:
             return DataQualityReport(0.0, ["negative_counts"], "BLOCK")
 
+        # Soft anomalies
         if rating < 4.3:
             penalize(0.85, "rating_low")
 
+        # Suspicious ratio: too many reviews vs sold.
+        # Compatibility rule: if "highly" triggers, also emit generic flag.
         if sold > 0:
             rr = reviews / max(sold, 1)
             if rr > 0.60:
                 penalize(0.65, "reviews_to_sold_highly_suspicious")
+                flags.append("reviews_to_sold_suspicious")  # <- for downstream + tests
             elif rr > 0.35:
                 penalize(0.75, "reviews_to_sold_suspicious")
 
+        # Ultra-cheap + huge volume smells like bait
         if price < 6 and sold >= 3000:
             penalize(0.75, "price_too_low_for_volume")
 
