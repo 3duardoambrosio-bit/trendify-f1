@@ -12,11 +12,11 @@ def _d(x: str | int | float | Decimal) -> Decimal:
 @dataclass(frozen=True)
 class CashFlowState:
     """
-    Modelo mÃƒÆ’Ã‚Â­nimo, ACERO:
+    Modelo mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nimo, ACERO:
     - available_cash: lo que realmente puedes gastar hoy
     - held_cash: dinero retenido por pasarela (no disponible)
     - projected_refunds/chargebacks: buffer conservador (no inventes riqueza)
-    - safety_buffer_cash: mÃƒÆ’Ã‚Â­nimo intocable para no asfixiarte (runway)
+    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
     """
     available_cash: Decimal
     held_cash: Decimal = Decimal("0")
@@ -112,4 +112,73 @@ if "CashFlowConfig" not in _g:
     CashFlowConfig = CashflowConfig
 if "CashFlowState" not in _g:
     CashFlowState = CashflowState
+
+# =========================
+# BACKWARD_COMPAT_EXPORTS_V3
+# HARD CONTRACT for SpendGatewayV2 + tests:
+# - CashflowConfig(safety_buffer=Decimal(...), ...)
+# - CashflowState(available_cash=Decimal(...), ...)
+# - CashflowModel(CashflowConfig, CashflowState)
+# =========================
+from dataclasses import dataclass
+from decimal import Decimal
+
+@dataclass(frozen=True)
+class CashflowConfig:  # legacy casing expected by tests
+    # Minimal but correct knobs
+    safety_buffer: Decimal = Decimal("0.00")
+    payment_hold_days: int = 14
+    safety_buffer_days: int = 14  # optional; kept for future runway logic
+
+    @property
+    def safety_buffer_amount(self) -> Decimal:
+        return self.safety_buffer
+
+@dataclass(frozen=True)
+class CashflowState:  # legacy casing expected by tests
+    available_cash: Decimal = Decimal("0.00")
+    held_cash: Decimal = Decimal("0.00")
+    projected_refunds: Decimal = Decimal("0.00")
+    projected_chargebacks: Decimal = Decimal("0.00")
+
+    @property
+    def projected_available_cash(self) -> Decimal:
+        return self.available_cash - self.projected_refunds - self.projected_chargebacks
+
+@dataclass(frozen=True)
+class CashflowModel:  # legacy casing expected by tests
+    config: CashflowConfig
+    state: CashflowState
+
+    @property
+    def available_cash(self) -> Decimal:
+        return self.state.available_cash
+
+    @property
+    def projected_available_cash(self) -> Decimal:
+        return self.state.projected_available_cash
+
+    def can_debit(self, amount: Decimal) -> bool:
+        if amount < 0:
+            return False
+        return (self.projected_available_cash - self.config.safety_buffer) >= amount
+
+    def debit(self, amount: Decimal) -> "CashflowModel":
+        if amount < 0:
+            raise ValueError("amount must be >= 0")
+        if not self.can_debit(amount):
+            raise ValueError("cash buffer would be breached")
+        return CashflowModel(
+            config=self.config,
+            state=CashflowState(
+                available_cash=self.state.available_cash - amount,
+                held_cash=self.state.held_cash,
+                projected_refunds=self.state.projected_refunds,
+                projected_chargebacks=self.state.projected_chargebacks,
+            ),
+        )
+
+# Canonical aliases for internal code (both casings supported)
+CashFlowConfig = CashflowConfig
+CashFlowState = CashflowState
 
