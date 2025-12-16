@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Dict, Optional, Tuple
+from typing import Dict
 
 
 def _d(x: str | int | float | Decimal) -> Decimal:
@@ -34,19 +34,17 @@ class BudgetPool:
 class VaultV1:
     """
     Vault 3 budgets:
-      - learning: para experiments
-      - operational: para operar lo que ya probó señal
+      - learning: experiments
+      - operational: operar ganadores
       - reserve: INTOCABLE (solo admin)
     """
     learning: BudgetPool
     operational: BudgetPool
     reserve: BudgetPool
 
-    # caps de seguridad
     max_learning_per_product_total: Decimal = Decimal("30")
     max_learning_per_product_day1: Decimal = Decimal("10")
 
-    # tracking mínimo por producto (en memoria v1; luego persistimos/ledger)
     _learning_spent_by_product: Dict[str, Decimal] = field(default_factory=dict)
 
     def pools(self) -> Dict[str, BudgetPool]:
@@ -65,16 +63,19 @@ class VaultV1:
             return SpendResult(False, "RESERVE_PROTECTED", pool, amount, product_id)
 
         p = self.pools()[pool]
-        if amount > p.available:
-            return SpendResult(False, "INSUFFICIENT_POOL_FUNDS", pool, amount, product_id)
 
-        # Caps (solo aplican a Learning)
+        # ✅ ACERO: en Learning, los caps tienen prioridad sobre "no hay fondos"
+        # (razón más específica > razón genérica)
         if pool == "learning":
             spent = self._learning_spent_by_product.get(product_id, Decimal("0"))
             if day == 1 and (spent + amount) > self.max_learning_per_product_day1:
                 return SpendResult(False, "DAY1_CAP_REACHED", pool, amount, product_id)
             if (spent + amount) > self.max_learning_per_product_total:
                 return SpendResult(False, "PRODUCT_TOTAL_CAP_REACHED", pool, amount, product_id)
+
+        # Funds gate (aplica ya después de caps)
+        if amount > p.available:
+            return SpendResult(False, "INSUFFICIENT_POOL_FUNDS", pool, amount, product_id)
 
         # approve + mutate state (v1)
         p.spent += amount
@@ -88,7 +89,6 @@ class VaultV1:
         amount = _d(amount)
         if amount <= 0:
             return
-        # mover desde operational si hay
         take = min(amount, self.operational.available)
         self.operational.spent += take
         self.reserve.total += take
