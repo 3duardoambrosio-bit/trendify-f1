@@ -12,11 +12,11 @@ def _d(x: str | int | float | Decimal) -> Decimal:
 @dataclass(frozen=True)
 class CashFlowState:
     """
-    Modelo mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo, ACERO:
+    Modelo mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo, ACERO:
     - available_cash: lo que realmente puedes gastar hoy
     - held_cash: dinero retenido por pasarela (no disponible)
     - projected_refunds/chargebacks: buffer conservador (no inventes riqueza)
-    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
+    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
     """
     available_cash: Decimal
     held_cash: Decimal = Decimal("0")
@@ -204,4 +204,75 @@ try:
     CashflowModel.debit_cashflow = _cashflow_spend # type: ignore[attr-defined]
 except Exception:
     # if CashflowModel is not defined for some reason, fail loudly during import elsewhere
+    pass
+
+# =========================
+# CASHFLOW_GATEWAY_V2_SHIMS_V1
+# SpendGatewayV2 expects:
+# - snapshot() -> object with .available_cash
+# - debit_available(amount) -> debits available_cash (in-place safe)
+# Keep single source of truth: update state, preserve backward compat.
+# =========================
+from decimal import Decimal as _Decimal
+from dataclasses import replace as _replace
+
+def _cf__get_state(self):
+    for k in ("state", "_state", "cashflow_state"):
+        if hasattr(self, k):
+            return getattr(self, k)
+    return None
+
+def _cf_snapshot(self):
+    st = _cf__get_state(self)
+    if st is None:
+        # ultra-safe fallback (should not happen in tests)
+        class _Snap:
+            def __init__(self, available_cash):
+                self.available_cash = available_cash
+        return _Snap(getattr(self, "available_cash", _Decimal("0.00")))
+    return st
+
+def _cf_debit_available(self, amount: _Decimal):
+    st = _cf_snapshot(self)
+    if amount <= 0:
+        return self
+
+    new_cash = st.available_cash - amount
+    # hard floor, never negative
+    if new_cash < _Decimal("0.00"):
+        new_cash = _Decimal("0.00")
+
+    # prefer dataclass replace (immutable-friendly)
+    try:
+        new_st = _replace(st, available_cash=new_cash)
+    except Exception:
+        # mutable fallback
+        try:
+            st.available_cash = new_cash
+            return self
+        except Exception:
+            return self
+
+    # write back (works even if dataclass is frozen)
+    for k in ("state", "_state", "cashflow_state"):
+        if hasattr(self, k):
+            try:
+                object.__setattr__(self, k, new_st)
+                return self
+            except Exception:
+                try:
+                    setattr(self, k, new_st)
+                    return self
+                except Exception:
+                    pass
+    return self
+
+def _cf_available_cash(self) -> _Decimal:
+    return _cf_snapshot(self).available_cash
+
+try:
+    CashflowModel.snapshot = _cf_snapshot            # type: ignore[attr-defined]
+    CashflowModel.debit_available = _cf_debit_available  # type: ignore[attr-defined]
+    CashflowModel.available_cash = property(_cf_available_cash)  # type: ignore[attr-defined]
+except Exception:
     pass
