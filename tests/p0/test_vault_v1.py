@@ -1,34 +1,40 @@
-from __future__ import annotations
-
 from decimal import Decimal
-
-import pytest
-
-from vault.v1 import BudgetType, SpendRequest, Vault, VaultConfig
+from vault.vault_v1 import BudgetPool, VaultV1
 
 
-def test_vault_reserve_protected() -> None:
-    v = Vault(VaultConfig(total=Decimal("100.00")))
-    d = v.request_spend(SpendRequest(product_id="r004", amount=Decimal("1"), budget=BudgetType.RESERVE, reason="no"))
-    assert d.allowed is False
-    assert d.reason == "RESERVE_PROTECTED"
+def test_reserve_is_protected() -> None:
+    v = VaultV1(
+        learning=BudgetPool("learning", Decimal("30")),
+        operational=BudgetPool("operational", Decimal("55")),
+        reserve=BudgetPool("reserve", Decimal("15")),
+    )
+    r = v.request_spend(pool="reserve", product_id="r004", amount=Decimal("1"), day=1)
+    assert r.allowed is False
+    assert r.reason == "RESERVE_PROTECTED"
 
 
-def test_vault_learning_spend_and_insufficient() -> None:
-    v = Vault(VaultConfig(total=Decimal("100.00")))
-    # learning = 30
-    ok = v.request_spend(SpendRequest("r004", Decimal("10"), BudgetType.LEARNING, "test"))
+def test_day1_cap_enforced() -> None:
+    v = VaultV1(
+        learning=BudgetPool("learning", Decimal("30")),
+        operational=BudgetPool("operational", Decimal("55")),
+        reserve=BudgetPool("reserve", Decimal("15")),
+    )
+    ok = v.request_spend(pool="learning", product_id="r004", amount=Decimal("10"), day=1)
     assert ok.allowed is True
-    bad = v.request_spend(SpendRequest("r004", Decimal("25"), BudgetType.LEARNING, "too much"))
-    assert bad.allowed is False
-    assert bad.reason == "INSUFFICIENT_LEARNING"
+    nope = v.request_spend(pool="learning", product_id="r004", amount=Decimal("0.01"), day=1)
+    assert nope.allowed is False
+    assert nope.reason == "DAY1_CAP_REACHED"
 
 
-def test_vault_operational_spend_and_insufficient() -> None:
-    v = Vault(VaultConfig(total=Decimal("100.00")))
-    # operational = 55
-    ok = v.request_spend(SpendRequest("r004", Decimal("50"), BudgetType.OPERATIONAL, "ops"))
-    assert ok.allowed is True
-    bad = v.request_spend(SpendRequest("r004", Decimal("10"), BudgetType.OPERATIONAL, "too much"))
-    assert bad.allowed is False
-    assert bad.reason == "INSUFFICIENT_OPERATIONAL"
+def test_product_total_cap_enforced() -> None:
+    v = VaultV1(
+        learning=BudgetPool("learning", Decimal("30")),
+        operational=BudgetPool("operational", Decimal("55")),
+        reserve=BudgetPool("reserve", Decimal("15")),
+    )
+    ok1 = v.request_spend(pool="learning", product_id="r004", amount=Decimal("10"), day=1)
+    ok2 = v.request_spend(pool="learning", product_id="r004", amount=Decimal("20"), day=2)
+    assert ok1.allowed and ok2.allowed
+    nope = v.request_spend(pool="learning", product_id="r004", amount=Decimal("0.01"), day=3)
+    assert nope.allowed is False
+    assert nope.reason == "PRODUCT_TOTAL_CAP_REACHED"
