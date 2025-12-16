@@ -113,3 +113,7 @@ data/evidence/
 
 # CSVs reales (ruido); demos sí pueden vivir
 data/catalog/candidates_real*.csv
+# --- SYNAPSE runtime artifacts ---
+data/ledger/events.ndjson
+**/__pycache__/
+*.pyo
