@@ -1,0 +1,20 @@
+# ACERO: diffs limpios, reproducibles, sin ruido de EOL
+* text=auto eol=lf
+
+# Windows scripts: ok con CRLF para que no chillen editores/herramientas
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Datos / configs
+*.ndjson text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+
+# Binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
