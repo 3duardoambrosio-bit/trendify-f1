@@ -12,11 +12,11 @@ def _d(x: str | int | float | Decimal) -> Decimal:
 @dataclass(frozen=True)
 class CashFlowState:
     """
-    Modelo mínimo, ACERO:
+    Modelo mÃ­nimo, ACERO:
     - available_cash: lo que realmente puedes gastar hoy
     - held_cash: dinero retenido por pasarela (no disponible)
     - projected_refunds/chargebacks: buffer conservador (no inventes riqueza)
-    - safety_buffer_cash: mínimo intocable para no asfixiarte (runway)
+    - safety_buffer_cash: mÃ­nimo intocable para no asfixiarte (runway)
     """
     available_cash: Decimal
     held_cash: Decimal = Decimal("0")
@@ -40,3 +40,6 @@ class CashFlowState:
         if daily_burn <= 0:
             return None
         return (self.net_available / daily_burn).quantize(Decimal("0.01"))
+
+# Backward-compat alias (older modules expect CashflowModel)
+CashflowModel = CashFlowState
