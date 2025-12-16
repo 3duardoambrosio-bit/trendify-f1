@@ -1,49 +1,42 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import List
+from typing import Optional
 
 
-def _d(x) -> Decimal:
+def _d(x: str | int | float | Decimal) -> Decimal:
     return x if isinstance(x, Decimal) else Decimal(str(x))
 
 
 @dataclass(frozen=True)
-class Hold:
-    amount: Decimal
-    release_in_days: int  # 0 = hoy
-
-
-@dataclass
-class CashflowV1:
+class CashFlowState:
     """
-    Cashflow minimalista pero real:
-    - available_cash: lo gastable hoy
-    - holds: dinero vendido pero no liberado por pasarela
-    - projected_refunds: buffer conservador (no optimista)
+    Modelo mínimo, ACERO:
+    - available_cash: lo que realmente puedes gastar hoy
+    - held_cash: dinero retenido por pasarela (no disponible)
+    - projected_refunds/chargebacks: buffer conservador (no inventes riqueza)
+    - safety_buffer_cash: mínimo intocable para no asfixiarte (runway)
     """
     available_cash: Decimal
-    holds: List[Hold] = field(default_factory=list)
+    held_cash: Decimal = Decimal("0")
     projected_refunds: Decimal = Decimal("0")
-    safety_buffer: Decimal = Decimal("10")  # no bajamos de esto
+    projected_chargebacks: Decimal = Decimal("0")
+    safety_buffer_cash: Decimal = Decimal("0")
 
-    def projected_available_in(self, days: int) -> Decimal:
-        days = int(days)
-        releasing = sum(h.amount for h in self.holds if h.release_in_days <= days)
-        v = self.available_cash + releasing - self.projected_refunds
-        return v
+    @property
+    def net_available(self) -> Decimal:
+        net = self.available_cash - self.projected_refunds - self.projected_chargebacks
+        return net if net > 0 else Decimal("0")
 
-    def runway_days(self, burn_per_day: Decimal) -> int:
-        burn_per_day = _d(burn_per_day)
-        if burn_per_day <= 0:
-            return 9999
-        cash = self.projected_available_in(0) - self.safety_buffer
-        if cash <= 0:
-            return 0
-        return int((cash / burn_per_day).to_integral_value(rounding="ROUND_FLOOR"))
-
-    def can_spend_today(self, amount: Decimal) -> bool:
+    def can_spend(self, amount: Decimal) -> bool:
         amount = _d(amount)
-        after = self.projected_available_in(0) - amount
-        return after >= self.safety_buffer
+        if amount <= 0:
+            return False
+        return (self.net_available - amount) >= self.safety_buffer_cash
+
+    def runway_days(self, daily_burn: Decimal) -> Optional[Decimal]:
+        daily_burn = _d(daily_burn)
+        if daily_burn <= 0:
+            return None
+        return (self.net_available / daily_burn).quantize(Decimal("0.01"))
