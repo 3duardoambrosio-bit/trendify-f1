@@ -87,3 +87,16 @@ data/evidence/
 
 # CSVs reales (los tuyos), dejamos demos como plantillas
 data/catalog/candidates_real*.csv
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+data/ledger/
+data/backups/
+data/evidence/
+
+# CSVs reales (ruido); demos sí pueden vivir
+data/catalog/candidates_real*.csv
