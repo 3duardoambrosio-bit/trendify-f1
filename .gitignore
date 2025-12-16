@@ -72,3 +72,18 @@ venv.bak/
 # Config files (except example)
 config/local.dev.yml
 data/bitacora/bitacora.jsonl
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local runtime outputs (NO versionar)
+data/ledger/
+data/backups/
+data/evidence/
+
+# CSVs reales (los tuyos), dejamos demos como plantillas
+data/catalog/candidates_real*.csv

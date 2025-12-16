@@ -21,17 +21,15 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = [
-  "buyer/tests",
-  "infra/tests",
-  "synapse/tests",
-  "ops/tests",
+python_files = [
+    "test_*.py",
+    "*_test.py",
 ]
 
-python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+
+
 
 [tool.setuptools]
 # Le decimos explícitamente qué paquetes Python existen
