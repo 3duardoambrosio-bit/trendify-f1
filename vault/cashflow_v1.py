@@ -12,11 +12,11 @@ def _d(x: str | int | float | Decimal) -> Decimal:
 @dataclass(frozen=True)
 class CashFlowState:
     """
-    Modelo mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo, ACERO:
+    Modelo mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo, ACERO:
     - available_cash: lo que realmente puedes gastar hoy
     - held_cash: dinero retenido por pasarela (no disponible)
     - projected_refunds/chargebacks: buffer conservador (no inventes riqueza)
-    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
+    - safety_buffer_cash: mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo intocable para no asfixiarte (runway)
     """
     available_cash: Decimal
     held_cash: Decimal = Decimal("0")
@@ -276,3 +276,42 @@ try:
     CashflowModel.available_cash = property(_cf_available_cash)  # type: ignore[attr-defined]
 except Exception:
     pass
+
+# =========================
+# CASHFLOW_STATE_V1_COMPAT
+# Contract expected by tests/p0/test_cashflow_v1.py + spend_policy_v1:
+# - CashFlowState(... safety_buffer_cash=..., projected_refunds=..., projected_chargebacks=...)
+# - .net_available (never negative)
+# - .can_spend(amount) respects safety buffer
+# Keep this as a stable public contract (P0).
+# =========================
+from dataclasses import dataclass as _dataclass
+from decimal import Decimal as _Decimal
+
+@_dataclass(frozen=True)
+class CashFlowState:
+    available_cash: _Decimal
+    projected_refunds: _Decimal = _Decimal("0")
+    projected_chargebacks: _Decimal = _Decimal("0")
+    safety_buffer_cash: _Decimal = _Decimal("0")
+
+    @property
+    def net_available(self) -> _Decimal:
+        v = self.available_cash - self.projected_refunds - self.projected_chargebacks - self.safety_buffer_cash
+        return v if v > _Decimal("0") else _Decimal("0")
+
+    def can_spend(self, amount: _Decimal) -> bool:
+        return amount > _Decimal("0") and self.net_available >= amount
+
+    def debit_available(self, amount: _Decimal) -> "CashFlowState":
+        if amount <= _Decimal("0"):
+            return self
+        new_cash = self.available_cash - amount
+        if new_cash < _Decimal("0"):
+            new_cash = _Decimal("0")
+        return CashFlowState(
+            available_cash=new_cash,
+            projected_refunds=self.projected_refunds,
+            projected_chargebacks=self.projected_chargebacks,
+            safety_buffer_cash=self.safety_buffer_cash,
+        )
