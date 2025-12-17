@@ -1,49 +1,39 @@
-$ErrorActionPreference="Stop"
-$env:PYTHONPATH="."
+$ErrorActionPreference="Continue"
+
+function Add-Line($out, $s) { $s | Add-Content -Path $out -Encoding utf8 }
+function Run-Cmd($out, $label, $cmd) {
+  Add-Line $out "=============================="
+  Add-Line $out $label
+  Add-Line $out "=============================="
+  try {
+    $res = Invoke-Expression $cmd 2>&1
+    $res | Add-Content -Path $out -Encoding utf8
+  } catch {
+    Add-Line $out ("ERROR: " + $_.Exception.Message)
+  }
+  Add-Line $out ""
+}
 
 New-Item -ItemType Directory -Force "data\backups\audit" | Out-Null
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"
 $out = "data\backups\audit\audit_$ts.txt"
 
-function Add([string]$s) { Add-Content -Path $out -Value $s }
+Add-Line $out ("timestamp=" + (Get-Date -Format o))
+Run-Cmd $out "PYTHON" "python -c `"import sys; print(sys.version.replace(chr(10),' '))`""
+Run-Cmd $out "GIT STATUS" "git status"
+Run-Cmd $out "GIT HEAD" "git rev-parse HEAD"
+Run-Cmd $out "GIT BRANCH" "git rev-parse --abbrev-ref HEAD"
+Run-Cmd $out "PYTEST" "pytest -q"
+Run-Cmd $out "SMOKE P0" "python scripts\run_smoke_p0.py"
 
-Add "=== SYNAPSE AUDIT PACKET ==="
-Add ("timestamp=" + (Get-Date).ToString("o"))
-Add ("python=" + (& python -c "import sys; print(sys.version.replace('`n',' '))"))
-Add ("cwd=" + (Get-Location).Path)
-Add ("branch=" + (git rev-parse --abbrev-ref HEAD))
-Add ("commit=" + (git rev-parse HEAD))
-Add ""
-
-Add "=== GIT STATUS ==="
-git status | Add-Content -Path $out
-Add ""
-
-Add "=== GIT LOG (last 30) ==="
-git --no-pager log --oneline -n 30 | Add-Content -Path $out
-Add ""
-
-Add "=== PYTEST ==="
-pytest -q 2>&1 | Add-Content -Path $out
-Add ""
-
-Add "=== SMOKE P0 ==="
-python scripts\run_smoke_p0.py 2>&1 | Add-Content -Path $out
-Add ""
-
-Add "=== LEDGER STATS ==="
-if (Test-Path "scripts\ledger_stats.py") {
-  python scripts\ledger_stats.py 2>&1 | Add-Content -Path $out
-} else {
-  Add "LEDGER_STATS: MISSING scripts/ledger_stats.py"
+if (Test-Path "data\ledger\events.ndjson") {
+  Run-Cmd $out "LEDGER TAIL (last 20)" "Get-Content data\ledger\events.ndjson -Tail 20"
 }
-Add ""
 
-Add "=== CHECK (FAST) ==="
-if (Test-Path "scripts\check.ps1") {
-  powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -Fast 2>&1 | Add-Content -Path $out
+if (Test-Path "scripts\ledger_stats.py") {
+  Run-Cmd $out "LEDGER STATS" "python scripts\ledger_stats.py"
 } else {
-  Add "CHECK: MISSING scripts/check.ps1"
+  Add-Line $out "ledger_stats.py missing (non-fatal)"
 }
 
 Write-Host "Audit packet => $out"
