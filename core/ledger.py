@@ -64,6 +64,8 @@ class Ledger:
         line = json.dumps(ev.to_dict(), ensure_ascii=False)
         with self.path.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
+            f.flush()
+            os.fsync(f.fileno())
         return ev
 
     def iter_events(self) -> Iterable[Dict[str, Any]]:
