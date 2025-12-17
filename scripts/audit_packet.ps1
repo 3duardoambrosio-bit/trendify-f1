@@ -1,4 +1,4 @@
-$ErrorActionPreference="Continue"
+﻿$ErrorActionPreference="Continue"
 
 function Add-Line($out, $s) { $s | Add-Content -Path $out -Encoding utf8 }
 function Run-Cmd($out, $label, $cmd) {
