@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import argparse, json
 from collections import Counter
 from pathlib import Path
@@ -40,7 +40,7 @@ def main() -> int:
 
     print("\nTAIL")
     for ev in tail:
-        ts = ev.get("ts","?")
+        ts = (ev.get("ts") or ev.get("timestamp") or ev.get("time") or ev.get("created_at") or "?")
         et = ev.get("event_type","?")
         ent = f'{ev.get("entity_type","?")}:{ev.get("entity_id","?")}'
         print(f"- {ts} | {et} | {ent}")
