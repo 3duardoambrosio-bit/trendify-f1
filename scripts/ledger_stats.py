@@ -40,7 +40,7 @@ def main() -> int:
 
     print("\nTAIL")
     for ev in tail:
-        ts = (ev.get("ts") or ev.get("timestamp") or ev.get("time") or ev.get("created_at") or "?")
+        ts = (ev.get("ts_utc") or ev.get("ts") or ev.get("timestamp") or ev.get("time") or ev.get("created_at") or "?")
         et = ev.get("event_type","?")
         ent = f'{ev.get("entity_type","?")}:{ev.get("entity_id","?")}'
         print(f"- {ts} | {et} | {ent}")
@@ -48,3 +48,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
