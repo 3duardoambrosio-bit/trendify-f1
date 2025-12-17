@@ -1,8 +1,8 @@
-import json
+﻿import json
 from pathlib import Path
 
 def _get_ts(ev: dict) -> str:
-    return (ev.get("ts") or ev.get("timestamp") or ev.get("time") or ev.get("created_at") or "")
+    return (ev.get("ts_utc") or ev.get("ts") or ev.get("timestamp") or ev.get("time") or ev.get("created_at") or "")
 
 def test_ledger_events_have_timestamp_field_parseable():
     p = Path("data/ledger/events.ndjson")
@@ -15,5 +15,5 @@ def test_ledger_events_have_timestamp_field_parseable():
         ev = json.loads(ln)
         ts = _get_ts(ev)
         assert ts, f"missing timestamp field in event: keys={sorted(ev.keys())}"
-        # ISO-ish: mínimo presencia de 'T' y zona o offset (no perfecto, pero evita basura)
+        # ISO-ish: mÃ­nimo presencia de 'T' y zona o offset (no perfecto, pero evita basura)
         assert "T" in ts
