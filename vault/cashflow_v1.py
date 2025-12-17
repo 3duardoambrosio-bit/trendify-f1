@@ -14,21 +14,16 @@ def _d(x) -> Decimal:
 @dataclass(frozen=True)
 class CashflowConfig:
     """
-    Canonical cashflow config.
-
-    safety_buffer:
-      - Hard buffer de liquidez (P0). Si available_cash neto - buffer < amount => deny.
+    Canonical config.
+    safety_buffer: hard buffer de liquidez (P0).
     """
     safety_buffer: Decimal = D0
 
 @dataclass
 class CashflowState:
     """
-    Canonical cashflow state.
-
-    safety_buffer_cash:
-      - Legacy field (compat). Si config.safety_buffer == 0 y safety_buffer_cash > 0,
-        lo tratamos como buffer efectivo.
+    Canonical state.
+    safety_buffer_cash: legacy buffer (compat). Se usa en State.can_spend / net_available.
     """
     available_cash: Decimal = D0
     held_cash: Decimal = D0
@@ -36,11 +31,25 @@ class CashflowState:
     projected_chargebacks: Decimal = D0
     safety_buffer_cash: Decimal = D0  # legacy compat
 
+    def projected_available_cash(self) -> Decimal:
+        net = _d(self.available_cash) - _d(self.projected_refunds) - _d(self.projected_chargebacks)
+        return net if net > D0 else D0
+
     @property
     def net_available(self) -> Decimal:
-        # Legacy behavior: net = available - refunds - chargebacks - legacy_buffer (clamped >=0)
-        net = _d(self.available_cash) - _d(self.projected_refunds) - _d(self.projected_chargebacks) - _d(self.safety_buffer_cash)
+        # legacy behavior: net = available - refunds - chargebacks - legacy_buffer (clamped >=0)
+        net = self.projected_available_cash() - _d(self.safety_buffer_cash)
         return net if net > D0 else D0
+
+    def can_spend(self, amount: Decimal) -> bool:
+        amt = _d(amount)
+        if amt <= D0:
+            return False
+        return self.net_available >= amt
+
+    # legacy alias
+    def can_debit(self, amount: Decimal) -> bool:
+        return self.can_spend(amount)
 
     def snapshot(self) -> "CashflowState":
         return CashflowState(
@@ -58,9 +67,7 @@ class CashflowModel:
       - snapshot()
       - debit_available(amount)
 
-    Also provides legacy aliases:
-      - can_debit(amount)
-      - debit(amount)
+    Uses config.safety_buffer if set, else falls back to state.safety_buffer_cash (legacy).
     """
     def __init__(self, config: Optional[CashflowConfig] = None, state: Optional[CashflowState] = None):
         self.config = config or CashflowConfig()
@@ -74,8 +81,7 @@ class CashflowModel:
         return legacy if legacy > D0 else D0
 
     def projected_available_cash(self) -> Decimal:
-        net = _d(self.state.available_cash) - _d(self.state.projected_refunds) - _d(self.state.projected_chargebacks)
-        return net if net > D0 else D0
+        return self.state.projected_available_cash()
 
     def can_spend(self, amount: Decimal) -> bool:
         amt = _d(amount)
@@ -102,7 +108,7 @@ class CashflowModel:
     def snapshot(self) -> CashflowState:
         return self.state.snapshot()
 
-# --- Legacy exports (SpendGatewayV2 / older tests) ---
+# --- Legacy exports (older modules/tests) ---
 CashFlowConfig = CashflowConfig
 CashFlowState = CashflowState
 CashFlowModel = CashflowModel
