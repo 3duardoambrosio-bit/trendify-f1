@@ -1,19 +1,31 @@
-﻿import json
+from __future__ import annotations
+
+import json
+from datetime import datetime
 from pathlib import Path
 
-def _get_ts(ev: dict) -> str:
-    return (ev.get("ts_utc") or ev.get("ts") or ev.get("timestamp") or ev.get("time") or ev.get("created_at") or "")
 
-def test_ledger_events_have_timestamp_field_parseable():
+def _is_iso8601(ts: str) -> bool:
+    try:
+        # soporta "Z" y "+00:00"
+        datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return True
+    except Exception:
+        return False
+
+
+def test_ledger_events_have_ts_utc_parseable():
     p = Path("data/ledger/events.ndjson")
     assert p.exists()
+
     lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert len(lines) > 0
 
-    # valida 5 primeras para speed; suficiente para contrato
-    for ln in lines[:5]:
+    # Contrato del WRITER actual: valida eventos recientes (no basura histórica vieja)
+    sample = lines[-10:] if len(lines) >= 10 else lines
+
+    for ln in sample:
         ev = json.loads(ln)
-        ts = _get_ts(ev)
-        assert ts, f"missing timestamp field in event: keys={sorted(ev.keys())}"
-        # ISO-ish: mÃ­nimo presencia de 'T' y zona o offset (no perfecto, pero evita basura)
-        assert "T" in ts
+        ts = (ev.get("ts_utc") or "").strip()
+        assert ts, f"missing/blank ts_utc: keys={sorted(ev.keys())}"
+        assert _is_iso8601(ts), f"ts_utc not ISO8601: {ts}"
