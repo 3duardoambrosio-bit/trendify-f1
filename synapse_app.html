@@ -1,0 +1,1100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>SYNAPSE — Operaciones</title>
+  <style>
+    :root{
+      --bg:#070A0F;
+      --panel:#0D1220;
+      --panel2:#0B1020;
+      --card:#0F1730;
+      --muted:#9AA6B2;
+      --text:#EAF0FF;
+      --line:#1C2642;
+      --good:#2BE4A7;
+      --warn:#F7B84B;
+      --bad:#FF5C7A;
+      --blue:#4D7CFE;
+      --blue2:#2B5BFF;
+      --shadow: 0 14px 40px rgba(0,0,0,.45);
+      --r: 16px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:var(--font);
+      background: radial-gradient(1100px 700px at 30% -10%, rgba(77,124,254,.16), transparent 55%),
+                  radial-gradient(900px 600px at 80% 10%, rgba(43,228,167,.10), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+    }
+    a{color:inherit; text-decoration:none}
+    .app{display:flex; min-height:100vh}
+    .sidebar{
+      width:270px; padding:18px 14px;
+      background: linear-gradient(180deg, rgba(10,14,24,.92), rgba(8,10,16,.92));
+      border-right:1px solid rgba(255,255,255,.06);
+      position:sticky; top:0; height:100vh;
+    }
+    .brand{display:flex; align-items:center; gap:10px; padding:10px 10px 14px 10px}
+    .logo{
+      width:34px; height:34px; border-radius:12px;
+      background: linear-gradient(135deg, var(--blue), rgba(43,228,167,.85));
+      box-shadow: 0 10px 24px rgba(77,124,254,.22);
+    }
+    .brand h1{font-size:16px; margin:0; letter-spacing:.9px}
+    .sectionTitle{margin:16px 10px 8px; font-size:11px; color:rgba(255,255,255,.45); letter-spacing:1.3px}
+    .nav{display:flex; flex-direction:column; gap:6px}
+    .nav a{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 10px; border-radius:12px;
+      border:1px solid transparent;
+      color:rgba(234,240,255,.86);
+    }
+    .nav a:hover{background:rgba(77,124,254,.10); border-color:rgba(77,124,254,.18)}
+    .nav a.active{
+      background:rgba(77,124,254,.18);
+      border-color:rgba(77,124,254,.28);
+      box-shadow: inset 0 0 0 1px rgba(43,91,255,.18);
+    }
+    .pill{
+      font-size:11px; padding:3px 8px; border-radius:999px;
+      background:rgba(255,255,255,.08); color:rgba(255,255,255,.75)
+    }
+    .statusDot{width:10px;height:10px;border-radius:999px;background:var(--good);display:inline-block;margin-right:8px}
+    .sidebarFooter{
+      position:absolute; bottom:14px; left:14px; right:14px;
+      padding:10px 12px; border-radius:14px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.06);
+      color:rgba(255,255,255,.72);
+      display:flex; align-items:center; gap:10px;
+    }
+
+    .main{flex:1; padding:22px 22px 60px}
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:14px; margin-bottom:18px;
+    }
+    .crumb{color:rgba(255,255,255,.62); font-size:13px}
+    .actions{display:flex; gap:10px; align-items:center}
+    .btn{
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.06);
+      color:rgba(234,240,255,.92);
+      padding:10px 12px; border-radius:12px;
+      cursor:pointer;
+      display:inline-flex; align-items:center; gap:10px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.25);
+      user-select:none;
+    }
+    .btn:hover{background:rgba(255,255,255,.09)}
+    .btn.primary{
+      background: linear-gradient(135deg, var(--blue2), var(--blue));
+      border-color: rgba(77,124,254,.50);
+    }
+    .btn.primary:hover{filter:brightness(1.04)}
+    .btn.danger{
+      background: rgba(255,92,122,.12);
+      border-color: rgba(255,92,122,.32);
+    }
+    .grid{display:grid; gap:14px}
+    .kpis{grid-template-columns:repeat(3, minmax(0,1fr))}
+    .row2{grid-template-columns: 1.2fr .8fr}
+    .card{
+      background: linear-gradient(180deg, rgba(15,23,48,.85), rgba(11,16,32,.85));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      padding:14px;
+    }
+    .card h2{margin:0 0 10px 0; font-size:14px; color:rgba(255,255,255,.88)}
+    .muted{color:rgba(255,255,255,.55)}
+    .kpiVal{font-size:26px; font-weight:750; margin-top:6px}
+    .kpiSub{font-size:12px; color:rgba(255,255,255,.55); margin-top:6px}
+    .kpiBadge{
+      font-size:12px; padding:4px 10px; border-radius:999px;
+      display:inline-flex; align-items:center; gap:8px;
+      background: rgba(43,228,167,.10);
+      border:1px solid rgba(43,228,167,.22);
+      color: rgba(43,228,167,.92);
+      margin-top:10px;
+    }
+    .sep{height:1px; background:rgba(255,255,255,.08); margin:12px 0}
+    canvas{width:100%; height:180px; display:block}
+    .list{display:flex; flex-direction:column; gap:10px}
+    .event{
+      display:flex; gap:12px; align-items:flex-start;
+      padding:10px 12px; border-radius:14px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.04);
+    }
+    .tag{
+      font-size:11px; padding:3px 8px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.70);
+    }
+    .icon{
+      width:30px; height:30px; border-radius:12px;
+      display:grid; place-items:center;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      font-weight:800;
+    }
+    .icon.good{border-color:rgba(43,228,167,.25); background:rgba(43,228,167,.10); color:rgba(43,228,167,.92)}
+    .icon.warn{border-color:rgba(247,184,75,.25); background:rgba(247,184,75,.10); color:rgba(247,184,75,.92)}
+    .icon.bad{border-color:rgba(255,92,122,.25); background:rgba(255,92,122,.10); color:rgba(255,92,122,.92)}
+
+    table{width:100%; border-collapse:separate; border-spacing:0 10px}
+    thead th{
+      text-align:left; font-size:12px; color:rgba(255,255,255,.55);
+      font-weight:650; padding:0 10px 6px 10px;
+    }
+    tbody tr{
+      background: rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.10);
+    }
+    tbody td{
+      padding:12px 10px;
+      border-top:1px solid rgba(255,255,255,.08);
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    tbody tr td:first-child{
+      border-left:1px solid rgba(255,255,255,.08);
+      border-top-left-radius:14px; border-bottom-left-radius:14px;
+    }
+    tbody tr td:last-child{
+      border-right:1px solid rgba(255,255,255,.08);
+      border-top-right-radius:14px; border-bottom-right-radius:14px;
+    }
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:12px; padding:4px 10px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.78);
+      white-space:nowrap;
+    }
+    .chip.good{border-color:rgba(43,228,167,.28); background:rgba(43,228,167,.10); color:rgba(43,228,167,.92)}
+    .chip.warn{border-color:rgba(247,184,75,.28); background:rgba(247,184,75,.10); color:rgba(247,184,75,.92)}
+    .chip.bad{border-color:rgba(255,92,122,.28); background:rgba(255,92,122,.10); color:rgba(255,92,122,.92)}
+    .miniBtn{
+      padding:8px 10px; border-radius:12px;
+      border:1px solid rgba(77,124,254,.28);
+      background: rgba(77,124,254,.14);
+      cursor:pointer;
+      color:rgba(234,240,255,.92);
+      font-weight:650;
+    }
+    .miniBtn:hover{background: rgba(77,124,254,.20)}
+    .twoCols{display:grid; grid-template-columns: 1.05fr .95fr; gap:14px}
+    .hero{
+      border-radius:18px;
+      background: linear-gradient(135deg, rgba(77,124,254,.18), rgba(43,228,167,.12));
+      border:1px solid rgba(255,255,255,.08);
+      padding:14px;
+    }
+    .storeGrid{display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-top:12px}
+    .productTile{
+      background: rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;
+      overflow:hidden;
+    }
+    .tileImg{
+      height:120px; background: rgba(255,255,255,.06);
+      display:grid; place-items:center; color:rgba(255,255,255,.45); font-size:12px;
+    }
+    .tileBody{padding:10px}
+    .tileName{font-weight:700; font-size:13px; margin:0 0 8px 0}
+    .tilePrice{display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12px; color:rgba(255,255,255,.70)}
+    .small{font-size:12px; color:rgba(255,255,255,.55)}
+    .hidden{display:none !important}
+    .toast{
+      position:fixed; right:18px; bottom:18px;
+      background: rgba(15,23,48,.92);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:14px;
+      padding:12px 14px;
+      box-shadow: var(--shadow);
+      color: rgba(234,240,255,.9);
+      max-width: 420px;
+    }
+    .toast .t{font-weight:750}
+    .toast .s{font-size:12px;color:rgba(255,255,255,.62);margin-top:6px}
+    .inputRow{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    input[type="file"]{display:none}
+    .hint{font-size:12px;color:rgba(255,255,255,.55);line-height:1.4}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1>SYNAPSE</h1>
+        <div class="small">Operaciones / Fase 1</div>
+      </div>
+    </div>
+
+    <div class="sectionTitle">PRINCIPAL</div>
+    <nav class="nav" id="navMain">
+      <a href="#/dashboard" data-route="dashboard">Dashboard <span class="pill" id="pillActive">—</span></a>
+      <a href="#/products" data-route="products">Productos <span class="pill" id="pillProducts">0</span></a>
+      <a href="#/vault" data-route="vault">Vault <span class="pill">β</span></a>
+    </nav>
+
+    <div class="sectionTitle">MARKETING</div>
+    <nav class="nav" id="navMkt">
+      <a href="#/creatives" data-route="creatives">Creativos <span class="pill" id="pillCreatives">0</span></a>
+      <a href="#/campaigns" data-route="campaigns">Campañas <span class="pill">—</span></a>
+    </nav>
+
+    <div class="sectionTitle">INTELIGENCIA</div>
+    <nav class="nav" id="navIntel">
+      <a href="#/forecasting" data-route="forecasting">Forecasting <span class="pill">—</span></a>
+      <a href="#/insights" data-route="insights">Insights <span class="pill">—</span></a>
+    </nav>
+
+    <div class="sectionTitle">SISTEMA</div>
+    <nav class="nav" id="navSys">
+      <a href="#/store" data-route="store">Mi Tienda <span class="pill">preview</span></a>
+      <a href="#/log" data-route="log">Bitácora <span class="pill" id="pillLog">0</span></a>
+      <a href="#/settings" data-route="settings">Configuración <span class="pill">⚙</span></a>
+    </nav>
+
+    <div class="sidebarFooter">
+      <span class="statusDot" id="statusDot"></span>
+      <div>
+        <div style="font-weight:700">Sistema operacional</div>
+        <div class="small" id="statusText">Idle · listo para importar</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb" id="crumb">SYNAPSE / Dashboard</div>
+        <div class="small" id="subtitle">Tu HQ: decisiones, productos, ejecución.</div>
+      </div>
+      <div class="actions">
+        <label class="btn" for="filePick" id="btnImport">Importar JSON (dump / candidates)</label>
+        <input id="filePick" type="file" accept=".json,application/json"/>
+        <button class="btn primary" id="btnNew">+ Nuevo producto</button>
+        <button class="btn danger" id="btnReset">Reset UI</button>
+      </div>
+    </div>
+
+    <div id="view"></div>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden">
+  <div class="t" id="toastT">Listo</div>
+  <div class="s" id="toastS">—</div>
+</div>
+
+<script>
+/* =======================
+   SYNAPSE UI (prototype)
+   - Single-file SPA
+   - Importa:
+     a) data\\dropi_products_dump.json (respuesta "index" de Dropi)
+     b) data\\evidence\\launch_candidates_dropi_dump.json (tu shortlist)
+   ======================= */
+
+const $ = (q, el=document)=>el.querySelector(q);
+const $$ = (q, el=document)=>[...el.querySelectorAll(q)];
+const fmtMoney = (n)=> (n==null || isNaN(n)) ? "—" : "$" + Number(n).toLocaleString("es-MX");
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+
+const STORAGE_KEY = "synapse_ui_state_v1";
+
+const defaultState = ()=>{
+  const products = [
+    {id:"p1", name:"LED Ring Light Pro", category:"Tecnología", sale_price:199, suggested_price:399, margin:0.50, score:0.78, confidence:0.72, psuccess:0.78, imgs:1, status:"aprobado"},
+    {id:"p2", name:"Mini Projector HD", category:"Tecnología", sale_price:699, suggested_price:1299, margin:0.46, score:0.62, confidence:0.54, psuccess:0.61, imgs:1, status:"revisión"},
+    {id:"p3", name:"USB Cable 3m", category:"Gadgets", sale_price:89, suggested_price:109, margin:0.18, score:0.28, confidence:0.64, psuccess:0.12, imgs:1, status:"rechazado"},
+  ];
+  const log = [
+    ev("good","Producto aprobado","LED Ring Light Pro aprobado · Score 84±6 · P(Success)=78%"),
+    ev("good","Quality Gate","Quality Gate completado · 6/6 checks passed · Margin: 42%"),
+    ev("warn","En revisión","Mini Projector enviado a revisión · Confianza baja (54%)"),
+    ev("bad","Rechazado","USB Cable 3m rechazado · Margen insuficiente (18%)"),
+  ];
+  return {
+    kpis:{
+      roas:2.34,
+      active:`${products.filter(p=>p.status!=="rechazado").length} / ${products.length}`,
+      pool:73
+    },
+    products,
+    log,
+    creatives: [],
+    selectedProductId: null,
+    lastImport: null
+  };
+};
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    const st = JSON.parse(raw);
+    if(!st || !Array.isArray(st.products)) return defaultState();
+    return st;
+  }catch(e){ return defaultState(); }
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+function toast(t,s){
+  $("#toastT").textContent=t;
+  $("#toastS").textContent=s||"";
+  $("#toast").classList.remove("hidden");
+  setTimeout(()=>$("#toast").classList.add("hidden"), 2600);
+}
+
+function ev(kind, title, detail){
+  return { id: crypto.randomUUID(), ts: new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}), kind, title, detail };
+}
+
+function statusChip(p){
+  if(p.status==="aprobado") return `<span class="chip good">✔ Aprobado</span>`;
+  if(p.status==="revisión") return `<span class="chip warn">⚠ Revisión</span>`;
+  if(p.status==="rechazado") return `<span class="chip bad">✖ Rechazado</span>`;
+  return `<span class="chip">—</span>`;
+}
+
+function inferStatus(p){
+  const m = (p.margin ?? 0);
+  const s = (p.score ?? 0);
+  const c = (p.confidence ?? 0.6);
+  if(p.imgs===0) return "rechazado";
+  if(m < 0.25) return "rechazado";
+  if(s >= 0.62 && c >= 0.60) return "aprobado";
+  if(s >= 0.45) return "revisión";
+  return "rechazado";
+}
+
+function route(){
+  const h = (location.hash || "#/dashboard").replace("#/","");
+  const [r, param] = h.split("/");
+  return {r:r||"dashboard", param:param||null};
+}
+
+function setActiveNav(r){
+  $$(".nav a").forEach(a=>a.classList.toggle("active", a.dataset.route===r));
+}
+
+function setCrumb(text, sub){
+  $("#crumb").textContent = text;
+  $("#subtitle").textContent = sub || "";
+}
+
+function updateSidebarPills(){
+  $("#pillProducts").textContent = state.products.length;
+  $("#pillLog").textContent = state.log.length;
+  $("#pillCreatives").textContent = state.creatives.length;
+  $("#pillActive").textContent = state.products.filter(p=>p.status!=="rechazado").length;
+}
+
+function setSystemStatus(kind, text){
+  const dot = $("#statusDot");
+  dot.style.background = kind==="good"? "var(--good)" : kind==="warn"? "var(--warn)" : "var(--bad)";
+  $("#statusText").textContent = text;
+}
+
+/* ==============
+   Render Views
+   ============== */
+
+function renderDashboard(){
+  setCrumb("SYNAPSE / Dashboard", "Tu HQ: decisiones, productos, ejecución.");
+  const activeCount = state.products.filter(p=>p.status!=="rechazado").length;
+  const pool = Math.round((activeCount / Math.max(1, state.products.length))*100);
+  state.kpis.active = `${activeCount} / ${state.products.length}`;
+  state.kpis.pool = clamp(pool, 0, 99);
+
+  const html = `
+    <div class="grid kpis">
+      <div class="card">
+        <h2>ROAS Promedio</h2>
+        <div class="kpiVal">${Number(state.kpis.roas).toFixed(2)}</div>
+        <div class="kpiSub">Estimado con señales actuales (no magia, estadística).</div>
+        <div class="kpiBadge">📈 Tendencia: +${(Math.random()*0.4+0.1).toFixed(2)}</div>
+      </div>
+      <div class="card">
+        <h2>Productos Activos</h2>
+        <div class="kpiVal">${state.kpis.active}</div>
+        <div class="kpiSub">No rechazados · listos para empujar a tienda.</div>
+        <div class="kpiBadge">🧪 Quality Gate: ${Math.min(12, activeCount+3)}/${Math.max(12, state.products.length)} checks</div>
+      </div>
+      <div class="card">
+        <h2>P(Success) Pool</h2>
+        <div class="kpiVal">${state.kpis.pool}%</div>
+        <div class="kpiSub">Probabilidad agregada del portafolio.</div>
+        <div class="kpiBadge">🧠 Bayes: activo · Drift: bajo</div>
+      </div>
+    </div>
+
+    <div class="grid row2" style="margin-top:14px">
+      <div class="card">
+        <h2>Rendimiento (simulado)</h2>
+        <div class="hint">Esto es UI demo. Cuando conectemos backend, aquí se grafica tu ledger real.</div>
+        <div class="sep"></div>
+        <canvas id="chart"></canvas>
+      </div>
+
+      <div class="card">
+        <h2>Actividad Reciente</h2>
+        <div class="list">
+          ${state.log.slice(0,6).map(e=>`
+            <div class="event">
+              <div class="icon ${e.kind}">${e.kind==="good"?"✓":e.kind==="warn"?"!":"×"}</div>
+              <div>
+                <div style="font-weight:750">${e.title} <span class="tag">${e.ts}</span></div>
+                <div class="small">${escapeHtml(e.detail)}</div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>Portafolio (Top)</h2>
+      <div class="hint">Tabla estilo “Claude”: score, confianza, P(success), budget y estado.</div>
+      <div class="sep"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th>Score</th>
+            <th>Confianza</th>
+            <th>P(Success)</th>
+            <th>Margen</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.products
+            .slice()
+            .sort((a,b)=>(b.score??0)-(a.score??0))
+            .slice(0,12)
+            .map(p=>rowProduct(p)).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+  $("#view").innerHTML = html;
+  drawChart();
+  bindRowButtons();
+}
+
+function rowProduct(p){
+  const sc = p.score==null? "—" : (Number(p.score)*100).toFixed(1);
+  const cf = p.confidence==null? "—" : (Number(p.confidence)*100).toFixed(0);
+  const ps = p.psuccess==null? "—" : (Number(p.psuccess)*100).toFixed(0);
+  const mg = p.margin==null? "—" : (Number(p.margin)*100).toFixed(0)+"%";
+  return `
+    <tr>
+      <td style="font-weight:750">${escapeHtml(p.name)}</td>
+      <td class="muted">${escapeHtml(p.category||"—")}</td>
+      <td>${sc}</td>
+      <td>${cf}%</td>
+      <td>${ps}%</td>
+      <td>${mg}</td>
+      <td>${statusChip(p)}</td>
+      <td><button class="miniBtn" data-open="${p.id}">Ver</button></td>
+    </tr>
+  `;
+}
+
+function renderProducts(){
+  setCrumb("SYNAPSE / Productos", "Tu pipeline aterrizado en inventario accionable.");
+  const html = `
+    <div class="card">
+      <h2>Productos</h2>
+      <div class="inputRow">
+        <span class="chip">Total: ${state.products.length}</span>
+        <span class="chip good">Aprobados: ${state.products.filter(p=>p.status==="aprobado").length}</span>
+        <span class="chip warn">Revisión: ${state.products.filter(p=>p.status==="revisión").length}</span>
+        <span class="chip bad">Rechazados: ${state.products.filter(p=>p.status==="rechazado").length}</span>
+        <span class="chip">Último import: ${state.lastImport ? escapeHtml(state.lastImport) : "—"}</span>
+      </div>
+      <div class="sep"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Precio proveedor</th>
+            <th>Precio sugerido</th>
+            <th>Margen</th>
+            <th>Score</th>
+            <th>Confianza</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.products.map(p=>`
+            <tr>
+              <td style="font-weight:750">${escapeHtml(p.name)}</td>
+              <td>${fmtMoney(p.sale_price)}</td>
+              <td>${fmtMoney(p.suggested_price)}</td>
+              <td>${p.margin==null?"—":(p.margin*100).toFixed(0)+"%"}</td>
+              <td>${p.score==null?"—":(p.score*100).toFixed(1)}</td>
+              <td>${p.confidence==null?"—":(p.confidence*100).toFixed(0)+"%"}</td>
+              <td>${statusChip(p)}</td>
+              <td><button class="miniBtn" data-open="${p.id}">Ver</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="sep"></div>
+      <div class="hint">
+        Tip: importa <b>launch_candidates_dropi_dump.json</b> para que se cargue tu shortlist real (los 10).
+        Si importas el <b>dropi_products_dump.json</b>, la UI calcula margen y arma un score base (demo).
+      </div>
+    </div>
+  `;
+  $("#view").innerHTML = html;
+  bindRowButtons();
+}
+
+function renderProductDetail(id){
+  const p = state.products.find(x=>String(x.id)===String(id));
+  if(!p){ location.hash="#/products"; return; }
+  setCrumb(`SYNAPSE / Productos / ${p.name}`, "Ficha: decisión + ejecución.");
+  const mg = p.margin==null ? "—" : (p.margin*100).toFixed(0)+"%";
+  const sc = p.score==null ? "—" : (p.score*100).toFixed(1);
+  const cf = p.confidence==null ? "—" : (p.confidence*100).toFixed(0)+"%";
+  const ps = p.psuccess==null ? "—" : (p.psuccess*100).toFixed(0)+"%";
+  const img = p.image_url || null;
+
+  const html = `
+    <div class="twoCols">
+      <div class="card">
+        <h2>Resumen</h2>
+        <div class="sep"></div>
+        <div style="display:flex; gap:14px; align-items:flex-start">
+          <div style="width:160px">
+            <div class="productTile">
+              <div class="tileImg">${img ? `<img src="${img}" style="width:100%;height:120px;object-fit:cover"/>` : "sin imagen"}</div>
+              <div class="tileBody">
+                <div class="tileName">${escapeHtml(p.name)}</div>
+                <div class="tilePrice">
+                  <span>${fmtMoney(p.sale_price)} → <b>${fmtMoney(p.suggested_price)}</b></span>
+                  <span class="tag">${escapeHtml(p.category||"—")}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+              ${statusChip(p)}
+              <span class="chip">Margen: <b>${mg}</b></span>
+              <span class="chip">Score: <b>${sc}</b></span>
+              <span class="chip">Confianza: <b>${cf}</b></span>
+              <span class="chip">P(Success): <b>${ps}</b></span>
+              <span class="chip">Imgs: <b>${p.imgs ?? 0}</b></span>
+            </div>
+            <div class="sep"></div>
+            <div class="hint">
+              Esto es una ficha “operativa”. La versión real se conectará al ledger: evidence, tests, rollback, push idempotente.
+            </div>
+            <div class="sep"></div>
+            <div class="inputRow">
+              <button class="btn primary" id="btnApprove">Aprobar</button>
+              <button class="btn" id="btnReview">Mandar a revisión</button>
+              <button class="btn danger" id="btnReject">Rechazar</button>
+              <button class="btn" id="btnBack">Volver</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Checklist (demo)</h2>
+        <div class="sep"></div>
+        ${checkRow("Imagen mínima", p.imgs>0)}
+        ${checkRow("Margen ≥ 25%", (p.margin??0) >= 0.25)}
+        ${checkRow("Score ≥ 0.45", (p.score??0) >= 0.45)}
+        ${checkRow("No marca prohibida", true)}
+        ${checkRow("Precio rango OK", true)}
+        ${checkRow("Duplicados", true)}
+        <div class="sep"></div>
+        <div class="hint">
+          En el backend: aquí conectamos tus reglas reales (price gate, brand gate, dupe gate, cashflow gate, etc.).
+        </div>
+      </div>
+    </div>
+  `;
+  $("#view").innerHTML = html;
+
+  $("#btnBack").onclick = ()=>history.back();
+  $("#btnApprove").onclick = ()=>{
+    p.status="aprobado"; state.log.unshift(ev("good","Producto aprobado", `${p.name} aprobado · Score ${(p.score??0.5)*100|0} · P(Success)=${(p.psuccess??0.6)*100|0}%`));
+    saveState(); updateSidebarPills(); toast("Aprobado", p.name); renderProductDetail(p.id);
+  };
+  $("#btnReview").onclick = ()=>{
+    p.status="revisión"; state.log.unshift(ev("warn","En revisión", `${p.name} enviado a revisión · Confianza ${(p.confidence??0.5)*100|0}%`));
+    saveState(); updateSidebarPills(); toast("En revisión", p.name); renderProductDetail(p.id);
+  };
+  $("#btnReject").onclick = ()=>{
+    p.status="rechazado"; state.log.unshift(ev("bad","Rechazado", `${p.name} rechazado · Margen ${(p.margin??0)*100|0}%`));
+    saveState(); updateSidebarPills(); toast("Rechazado", p.name); renderProductDetail(p.id);
+  };
+}
+
+function checkRow(name, ok){
+  const cls = ok ? "good" : "bad";
+  const sym = ok ? "✓" : "×";
+  return `
+    <div class="event">
+      <div class="icon ${cls}">${sym}</div>
+      <div>
+        <div style="font-weight:750">${escapeHtml(name)}</div>
+        <div class="small">${ok ? "OK" : "Falla"}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderVault(){
+  setCrumb("SYNAPSE / Vault", "Capital: protegido, asignado, auditable.");
+  const html = `
+    <div class="card">
+      <h2>Vault (demo)</h2>
+      <div class="sep"></div>
+      <div class="grid kpis">
+        <div class="card" style="box-shadow:none">
+          <h2>Learning</h2>
+          <div class="kpiVal">${fmtMoney(90)}</div>
+          <div class="kpiSub">Experimentos controlados.</div>
+        </div>
+        <div class="card" style="box-shadow:none">
+          <h2>Operational</h2>
+          <div class="kpiVal">${fmtMoney(165)}</div>
+          <div class="kpiSub">Ejecución / ads / tools.</div>
+        </div>
+        <div class="card" style="box-shadow:none">
+          <h2>Reserve</h2>
+          <div class="kpiVal">${fmtMoney(45)}</div>
+          <div class="kpiSub">No se toca salvo emergencia.</div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="hint">
+        Esto es UI. El Vault real vive en tu ledger + caps + rollback. Aquí solo estamos alineando el “cómo se ve”.
+      </div>
+    </div>
+  `;
+  $("#view").innerHTML = html;
+}
+
+function renderCreatives(){
+  setCrumb("SYNAPSE / Creativos", "Creativos: pipeline de assets, hooks y variaciones.");
+  const html = `
+    <div class="card">
+      <h2>Creativos (demo)</h2>
+      <div class="sep"></div>
+      <div class="hint">
+        Próximo: generación de hooks + captions + variantes, amarrado a producto/candidato.
+      </div>
+      <div class="sep"></div>
+      <div class="event">
+        <div class="icon warn">!</div>
+        <div>
+          <div style="font-weight:750">Aún no hay creativos</div>
+          <div class="small">Cuando conectemos backend, aquí cae el output del módulo marketing.</div>
+        </div>
+      </div>
+    </div>
+  `;
+  $("#view").innerHTML = html;
+}
+
+function renderCampaigns(){
+  setCrumb("SYNAPSE / Campañas", "Campañas: ROAS, pruebas, scaling.");
+  $("#view").innerHTML = `
+    <div class="card">
+      <h2>Campañas (demo)</h2>
+      <div class="sep"></div>
+      <div class="hint">UI placeholder. Aquí va tu módulo de ejecución (TikTok/Meta) con controles y límites.</div>
+    </div>
+  `;
+}
+
+function renderForecasting(){
+  setCrumb("SYNAPSE / Forecasting", "Predicción: demanda, inventario, riesgo.");
+  $("#view").innerHTML = `
+    <div class="card">
+      <h2>Forecasting (demo)</h2>
+      <div class="sep"></div>
+      <div class="hint">UI placeholder. Después conectamos tu simulación / montecarlo.</div>
+    </div>
+  `;
+}
+
+function renderInsights(){
+  setCrumb("SYNAPSE / Insights", "Insights: qué hacer, por qué, y cuánto apostar.");
+  $("#view").innerHTML = `
+    <div class="card">
+      <h2>Insights (demo)</h2>
+      <div class="sep"></div>
+      <div class="hint">UI placeholder. Después conectamos evidence + reasoning + decisión.</div>
+    </div>
+  `;
+}
+
+function renderStore(){
+  setCrumb("SYNAPSE / Mi Tienda", "Preview: cómo se vería en vitrina.");
+  const tiles = state.products
+    .filter(p=>p.status!=="rechazado")
+    .slice(0,9)
+    .map(p=>`
+      <div class="productTile">
+        <div class="tileImg">${p.image_url ? `<img src="${p.image_url}" style="width:100%;height:120px;object-fit:cover"/>` : "imagen"}</div>
+        <div class="tileBody">
+          <div class="tileName">${escapeHtml(p.name)}</div>
+          <div class="tilePrice">
+            <span><b>${fmtMoney(p.suggested_price)}</b></span>
+            <span class="tag">${escapeHtml(p.category||"—")}</span>
+          </div>
+        </div>
+      </div>
+    `).join("");
+
+  $("#view").innerHTML = `
+    <div class="hero">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start">
+        <div>
+          <div style="font-weight:850; font-size:18px">TrendifyHub</div>
+          <div class="small">Sección demo · productos “aprobados/revisión” solamente.</div>
+        </div>
+        <span class="chip">Catálogo visible: ${state.products.filter(p=>p.status!=="rechazado").length}</span>
+      </div>
+      <div class="storeGrid">${tiles || `<div class="hint">No hay productos visibles aún.</div>`}</div>
+    </div>
+  `;
+}
+
+function renderLog(){
+  setCrumb("SYNAPSE / Bitácora", "Todo queda registrado. Nada de ‘yo juraba que…’.");
+  const html = `
+    <div class="card">
+      <h2>Bitácora del Sistema</h2>
+      <div class="sep"></div>
+      <div class="list">
+        ${state.log.map(e=>`
+          <div class="event">
+            <div class="icon ${e.kind}">${e.kind==="good"?"✓":e.kind==="warn"?"!":"×"}</div>
+            <div style="flex:1">
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:center">
+                <div style="font-weight:800">${escapeHtml(e.title)}</div>
+                <span class="tag">${e.ts}</span>
+              </div>
+              <div class="small">${escapeHtml(e.detail)}</div>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+  $("#view").innerHTML = html;
+}
+
+function renderSettings(){
+  setCrumb("SYNAPSE / Configuración", "Ajustes del sistema (UI demo).");
+  $("#view").innerHTML = `
+    <div class="card">
+      <h2>Configuración</h2>
+      <div class="sep"></div>
+      <div class="hint">
+        Aquí van flags: read-only, chaos, audit, thresholds (margin gate, score gate, brand gate).
+      </div>
+      <div class="sep"></div>
+      <div class="event">
+        <div class="icon good">✓</div>
+        <div>
+          <div style="font-weight:750">Import JSON habilitado</div>
+          <div class="small">Acepta dump o candidates.</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ======================
+   Chart (simple canvas)
+   ====================== */
+function drawChart(){
+  const c = $("#chart");
+  if(!c) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  c.width = Math.floor(rect.width * dpr);
+  c.height = Math.floor(180 * dpr);
+  const ctx = c.getContext("2d");
+
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+
+  // fake series
+  const points = [];
+  let v = 55 + Math.random()*10;
+  for(let i=0;i<30;i++){
+    v += (Math.random()-.48)*6;
+    v = clamp(v, 35, 85);
+    points.push(v);
+  }
+
+  // grid
+  ctx.globalAlpha = .9;
+  ctx.strokeStyle = "rgba(255,255,255,.08)";
+  for(let i=0;i<5;i++){
+    const y = (H*0.12) + (i*(H*0.18));
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  // line
+  ctx.lineWidth = 2*dpr;
+  const padX = 14*dpr, padY = 16*dpr;
+  const min = 30, max = 90;
+  const xStep = (W - padX*2) / (points.length-1);
+  ctx.strokeStyle = "rgba(77,124,254,.95)";
+  ctx.beginPath();
+  points.forEach((val,i)=>{
+    const x = padX + i*xStep;
+    const y = padY + (1-(val-min)/(max-min))*(H - padY*2);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // fill
+  ctx.globalAlpha = .20;
+  ctx.fillStyle = "rgba(77,124,254,.70)";
+  ctx.lineTo(padX + (points.length-1)*xStep, H-padY);
+  ctx.lineTo(padX, H-padY);
+  ctx.closePath(); ctx.fill();
+
+  // marker
+  ctx.globalAlpha = 1;
+  const lastVal = points[points.length-1];
+  const lx = padX + (points.length-1)*xStep;
+  const ly = padY + (1-(lastVal-min)/(max-min))*(H - padY*2);
+  ctx.fillStyle = "rgba(43,228,167,.92)";
+  ctx.beginPath(); ctx.arc(lx,ly, 4.5*dpr, 0, Math.PI*2); ctx.fill();
+}
+
+/* ======================
+   Import JSON
+   ====================== */
+function normalizeFromCandidatesJson(j){
+  // Esperado: { top: [ {name, margin, score, imgs/images, suggested_price, sale_price/cost, category} ] }
+  const arr = j?.top || j?.candidates || [];
+  if(!Array.isArray(arr) || arr.length===0) return null;
+
+  const products = arr.map((p, idx)=>{
+    const name = p.name || p.title || `Producto ${idx+1}`;
+    const sp = p.suggested_price ?? p.price ?? p.suggestedPrice ?? null;
+    const cost = p.sale_price ?? p.cost ?? p.provider_price ?? p.salePrice ?? null;
+    const imgs = p.imgs ?? (Array.isArray(p.images)? p.images.length : (Array.isArray(p.gallery)? p.gallery.length : 0));
+    const image_url = p.image_url || (Array.isArray(p.images) && p.images[0]) || null;
+    const margin = p.margin ?? ((sp && cost) ? (sp-cost)/sp : null);
+    const score = p.score ?? p.final_score ?? p.s ?? null;
+    const confidence = p.confidence ?? p.conf ?? 0.62;
+    const psuccess = p.psuccess ?? p.p_success ?? clamp((score??0.5)*0.95, 0.05, 0.92);
+
+    const category = p.category || p.cat || p?.categories?.[0]?.name || "—";
+
+    const prod = {
+      id: p.id ?? `c_${idx}_${crypto.randomUUID()}`,
+      name: String(name),
+      category: String(category),
+      sale_price: (cost==null? null : Number(cost)),
+      suggested_price: (sp==null? null : Number(sp)),
+      margin: (margin==null? null : Number(margin)),
+      score: (score==null? null : Number(score)),
+      confidence: Number(confidence),
+      psuccess: Number(psuccess),
+      imgs: Number(imgs || 0),
+      image_url: image_url,
+    };
+    prod.status = inferStatus(prod);
+    return prod;
+  });
+
+  return { products, kind:"candidates" };
+}
+
+function normalizeFromDropiDumpJson(j){
+  // Esperado: { isSuccess:true, objects:[{ id,name, sale_price, suggested_price, gallery:[{urlS3}], categories:[{name}] }]}
+  const arr = j?.objects || [];
+  if(!Array.isArray(arr) || arr.length===0) return null;
+
+  const products = arr.map((p, idx)=>{
+    const name = p.name || p.title || `Producto ${idx+1}`;
+    const sp = p.suggested_price ?? p.price ?? null;
+    const cost = p.sale_price ?? p.cost ?? null;
+
+    const img = p?.gallery?.find(g=>g?.urlS3)?.urlS3 || p?.gallery?.[0]?.urlS3 || null;
+    const image_url = img ? ("https://cdn.dropi.mx/" + String(img).replace(/^\/+/,"")) : null;
+
+    const category =
+      (Array.isArray(p.categories) && p.categories[0]?.name) ||
+      (Array.isArray(p.categories) && p.categories[0]) ||
+      "—";
+
+    const margin = (sp && cost) ? (sp-cost)/sp : null;
+
+    // Score demo: mezcla margen + precio rango + “simplicidad”
+    const marginScore = margin==null ? 0.2 : clamp(margin, 0, 0.85);
+    const priceScore = sp==null ? 0.2 : (sp>=199 && sp<=999 ? 0.75 : 0.45);
+    const typeScore  = (String(p.type||"SIMPLE").toUpperCase()==="SIMPLE") ? 0.70 : 0.55;
+    const score = clamp((marginScore*0.55 + priceScore*0.25 + typeScore*0.20), 0.05, 0.92);
+
+    const confidence = 0.58 + Math.random()*0.18;
+    const psuccess = clamp(score*0.92, 0.05, 0.90);
+
+    const prod = {
+      id: p.id ?? `d_${idx}_${crypto.randomUUID()}`,
+      name: String(name),
+      category: String(category),
+      sale_price: (cost==null? null : Number(cost)),
+      suggested_price: (sp==null? null : Number(sp)),
+      margin: (margin==null? null : Number(margin)),
+      score,
+      confidence,
+      psuccess,
+      imgs: (image_url? 1 : 0),
+      image_url
+    };
+    prod.status = inferStatus(prod);
+    return prod;
+  });
+
+  return { products, kind:"dump" };
+}
+
+function importJson(text, filename){
+  let j;
+  try{ j = JSON.parse(text); }
+  catch(e){ toast("JSON inválido", "Ese archivo no es JSON."); return; }
+
+  const normalized =
+      normalizeFromCandidatesJson(j) ||
+      normalizeFromDropiDumpJson(j);
+
+  if(!normalized){
+    toast("No reconocido", "No veo 'top/candidates' ni 'objects'.");
+    return;
+  }
+
+  state.products = normalized.products;
+  state.lastImport = filename || "import";
+  state.log.unshift(ev("good","Import listo", `Se importó ${state.products.length} productos desde ${normalized.kind}.`));
+  if(normalized.kind==="dump"){
+    state.log.unshift(ev("warn","Nota", "Dump importado: score es DEMO (UI). El score real viene de tu pipeline Python."));
+  }else{
+    state.log.unshift(ev("good","Candidates cargados", "Shortlist importada: esto ya es accionable para tienda/creativos."));
+  }
+
+  saveState();
+  updateSidebarPills();
+  setSystemStatus("good", `Import OK · ${state.products.length} productos`);
+  toast("Import OK", `${state.products.length} productos cargados.`);
+  location.hash = "#/products";
+}
+
+function escapeHtml(str){
+  return String(str ?? "").replace(/[&<>"']/g, s=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[s]));
+}
+
+/* ======================
+   Wiring
+   ====================== */
+function bindRowButtons(){
+  $$("[data-open]").forEach(b=>{
+    b.onclick = ()=> location.hash = "#/product/" + b.dataset.open;
+  });
+}
+
+function render(){
+  const {r, param} = route();
+  setActiveNav(r);
+  updateSidebarPills();
+
+  if(r==="dashboard") return renderDashboard();
+  if(r==="products") return renderProducts();
+  if(r==="product") return renderProductDetail(param);
+  if(r==="vault") return renderVault();
+  if(r==="creatives") return renderCreatives();
+  if(r==="campaigns") return renderCampaigns();
+  if(r==="forecasting") return renderForecasting();
+  if(r==="insights") return renderInsights();
+  if(r==="store") return renderStore();
+  if(r==="log") return renderLog();
+  if(r==="settings") return renderSettings();
+
+  location.hash="#/dashboard";
+}
+
+let state = loadState();
+updateSidebarPills();
+setSystemStatus("good", "Idle · listo para importar");
+render();
+
+window.addEventListener("hashchange", render);
+window.addEventListener("resize", ()=>{ if(route().r==="dashboard") drawChart(); });
+
+$("#filePick").addEventListener("change", async (e)=>{
+  const f = e.target.files?.[0];
+  if(!f) return;
+  const text = await f.text();
+  importJson(text, f.name);
+  e.target.value = "";
+});
+
+$("#btnNew").onclick = ()=>{
+  const p = {
+    id: crypto.randomUUID(),
+    name: "Nuevo Producto (demo)",
+    category: "—",
+    sale_price: null,
+    suggested_price: null,
+    margin: null,
+    score: 0.45,
+    confidence: 0.60,
+    psuccess: 0.45,
+    imgs: 0,
+    status:"revisión"
+  };
+  state.products.unshift(p);
+  state.log.unshift(ev("warn","Producto creado", "Nuevo producto agregado (demo)."));
+  saveState(); updateSidebarPills();
+  toast("Creado", "Producto demo agregado.");
+  location.hash="#/product/"+p.id;
+};
+
+$("#btnReset").onclick = ()=>{
+  localStorage.removeItem(STORAGE_KEY);
+  state = defaultState();
+  saveState();
+  setSystemStatus("good","Reset · listo para importar");
+  toast("Reset", "Estado de UI reiniciado.");
+  location.hash="#/dashboard";
+};
+</script>
+</body>
+</html>

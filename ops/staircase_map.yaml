@@ -1,0 +1,29 @@
+version: 1
+steps:
+  STEP_0:
+    name: Foundation
+    status: COMPLETE
+    requires: []
+    dod_checks:
+      - type: ledger_event_exists
+        args: { event_type: "VAULT_READY" }
+        optional: true
+      - type: file_exists
+        args: { path: "core/ledger.py" }
+        optional: true
+
+  STEP_1:
+    name: Product Discovery (Dropi)
+    status: IN_PROGRESS
+    requires: [STEP_0]
+    dod_checks:
+      - type: glob_exists
+        args: { pattern: "data/catalog/dropi/*/catalog_*.ndjson" }
+      - type: glob_exists
+        args: { pattern: "data/catalog/dropi/*/manifest_*.json" }
+      - type: ledger_event_exists
+        args: { event_type: "CATALOG_SNAPSHOT_CREATED" }
+      - type: ledger_event_exists
+        args: { event_type: "LAUNCH_CANDIDATES_EMITTED" }
+      - type: file_exists
+        args: { path: "evidence/launch_candidates_dropi.json" }

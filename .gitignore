@@ -98,7 +98,7 @@ data/ledger/
 data/backups/
 data/evidence/
 
-# CSVs reales (ruido); demos sí pueden vivir
+# CSVs reales (ruido); demos sï¿½ pueden vivir
 data/catalog/candidates_real*.csv
 
 __pycache__/
@@ -111,9 +111,44 @@ data/ledger/
 data/backups/
 data/evidence/
 
-# CSVs reales (ruido); demos sí pueden vivir
+# CSVs reales (ruido); demos sï¿½ pueden vivir
 data/catalog/candidates_real*.csv
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
 **/__pycache__/
 *.pyo
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+
+# Env & secrets
+.env
+.env.*
+
+# Data sensible / no determinÃ­stica
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+# === LOCAL / SECRETS ===
+.env
+_local_secrets/
+*.key
+*.pem
+
+# === PYTHON CACHE ===
+__pycache__/
+.pytest_cache/
+.hypothesis/
+
+# === DATA / OUTPUTS ===
+data/
+*.ndjson
+*.zip
+
+# === OS ===
+.DS_Store
+Thumbs.db

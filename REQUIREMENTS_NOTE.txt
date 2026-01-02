@@ -1,0 +1,1 @@
+This package uses PyYAML for ops/staircase_map.yaml. If missing: pip install pyyaml
