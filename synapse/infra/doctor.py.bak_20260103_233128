@@ -1,4 +1,5 @@
-﻿"""
+# synapse/infra/doctor.py
+"""
 Doctor CLI - Health checks para SYNAPSE.
 
 Uso:
@@ -8,17 +9,22 @@ Output:
     GREEN: Todo OK
     YELLOW: Warnings (puede operar)
     RED: Errores críticos (no operar)
+
+BOOTSTRAP MODE:
+    Si no existe ./data o SYNAPSE_BOOTSTRAP=1, el doctor no debe bloquear
+    por falta de datasets locales. En bootstrap, ciertos checks de data
+    bajan de RED -> YELLOW.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
-import sys
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Literal, Optional, Tuple
-import importlib
 
 
 # ============================================================
@@ -38,28 +44,6 @@ class CheckResult:
 
 
 # ============================================================
-# MODE SWITCHES
-# ============================================================
-
-def _is_ci_or_test() -> bool:
-    """
-    En tests/CI/bootstraps no debemos marcar RED por falta de data de pipeline.
-    Esto desbloquea repos limpios + test suites.
-    """
-    return (
-        os.getenv("PYTEST_CURRENT_TEST") is not None
-        or os.getenv("CI") in ("1", "true", "TRUE")
-        or os.getenv("SYNAPSE_BOOTSTRAP") in ("1", "true", "TRUE")
-        or os.getenv("SYNAPSE_RELAX_DOCTOR") in ("1", "true", "TRUE")
-    )
-
-
-def _data_missing_status() -> Status:
-    # En test/CI => warning. En operación real => RED.
-    return "YELLOW" if _is_ci_or_test() else "RED"
-
-
-# ============================================================
 # CHECK FUNCTIONS
 # ============================================================
 
@@ -68,11 +52,11 @@ def check_pack_exists() -> CheckResult:
     pack_path = Path("data/evidence/launch_candidates_dropi_dump_f1_v2.json")
 
     if not pack_path.exists():
-        return CheckResult("pack_exists", _data_missing_status(), "Pack no encontrado", str(pack_path))
+        return CheckResult("pack_exists", "RED", "Pack no encontrado", str(pack_path))
 
     try:
         data = json.loads(pack_path.read_text(encoding="utf-8"))
-        if data.get("isSuccess") != True:
+        if data.get("isSuccess") is not True:
             return CheckResult("pack_exists", "RED", "Pack inválido (isSuccess != true)")
 
         top = data.get("top", [])
@@ -92,7 +76,7 @@ def check_canonical_csv() -> CheckResult:
     csv_path = Path("data/catalog/candidates_real.csv")
 
     if not csv_path.exists():
-        return CheckResult("canonical_csv", _data_missing_status(), "CSV canónico no encontrado", str(csv_path))
+        return CheckResult("canonical_csv", "RED", "CSV canónico no encontrado", str(csv_path))
 
     try:
         content = csv_path.read_text(encoding="utf-8")
@@ -116,12 +100,12 @@ def check_evidence_fanout() -> CheckResult:
     evidence_path = Path("data/evidence/products")
 
     if not evidence_path.exists():
-        return CheckResult("evidence_fanout", _data_missing_status(), "Carpeta evidence/products no existe")
+        return CheckResult("evidence_fanout", "RED", "Carpeta evidence/products no existe")
 
     json_files = list(evidence_path.glob("*.json"))
 
     if len(json_files) < 1:
-        return CheckResult("evidence_fanout", _data_missing_status(), "Sin archivos JSON en evidence/products")
+        return CheckResult("evidence_fanout", "RED", "Sin archivos JSON en evidence/products")
 
     # Verify at least one is valid JSON
     valid = 0
@@ -160,7 +144,7 @@ def check_pytest_config() -> CheckResult:
     if not pytest_ini.exists():
         return CheckResult("pytest_config", "YELLOW", "pytest.ini no encontrado (usar --import-mode=prepend)")
 
-    content = pytest_ini.read_text(encoding="utf-8", errors="ignore")
+    content = pytest_ini.read_text()
     if "import-mode=prepend" not in content and "import_mode=prepend" not in content:
         return CheckResult("pytest_config", "YELLOW", "pytest.ini sin import-mode=prepend")
 
@@ -190,7 +174,7 @@ def check_imports_core() -> CheckResult:
 def check_imports_marketing_os() -> CheckResult:
     """Verifica imports específicos de Marketing OS."""
     try:
-        from synapse.marketing_os import InterrogationEngine, ProductContext  # type: ignore
+        from synapse.marketing_os import InterrogationEngine, QualityFilter, ProductContext  # noqa: F401
 
         # Quick smoke test
         engine = InterrogationEngine()
@@ -203,7 +187,7 @@ def check_imports_marketing_os() -> CheckResult:
         )
         result = engine.interrogate(ctx)
 
-        if getattr(result, "verdict", None) is None:
+        if result.verdict is None:
             return CheckResult("imports_marketing_os", "RED", "InterrogationEngine no produce verdict")
 
         return CheckResult("imports_marketing_os", "GREEN", "Marketing OS OK (smoke test passed)")
@@ -257,12 +241,13 @@ def check_disk_space() -> CheckResult:
     """Verifica espacio en disco."""
     try:
         import shutil
+
         total, used, free = shutil.disk_usage(".")
         free_gb = free / (1024 ** 3)
 
         if free_gb < 1:
             return CheckResult("disk_space", "RED", f"Poco espacio: {free_gb:.1f} GB")
-        elif free_gb < 5:
+        if free_gb < 5:
             return CheckResult("disk_space", "YELLOW", f"Espacio bajo: {free_gb:.1f} GB")
 
         return CheckResult("disk_space", "GREEN", f"Espacio OK: {free_gb:.1f} GB libres")
@@ -288,22 +273,66 @@ ALL_CHECKS: List[Callable[[], CheckResult]] = [
 ]
 
 
+_BOOTSTRAP_DOWNGRADE = {"pack_exists", "canonical_csv", "evidence_fanout"}
+
+
+def _is_bootstrap_mode() -> bool:
+    """
+    Bootstrap = repo listo para audit / CI sin datasets locales.
+    Activa si:
+      - SYNAPSE_BOOTSTRAP=1, true, yes
+      - o si ./data no existe
+    """
+    v = os.environ.get("SYNAPSE_BOOTSTRAP", "").strip().lower()
+    if v in {"1", "true", "yes", "y", "on"}:
+        return True
+    return not Path("data").exists()
+
+
+def _downgrade_if_bootstrap(result: CheckResult, bootstrap: bool) -> CheckResult:
+    """
+    En bootstrap, falta de data NO debe bloquear.
+    RED -> YELLOW solo para checks de data dura.
+    """
+    if not bootstrap:
+        return result
+    if result.name in _BOOTSTRAP_DOWNGRADE and result.status == "RED":
+        msg = f"BOOTSTRAP: {result.message}"
+        det = result.detail
+        if det:
+            det = f"{det} (data missing in bootstrap)"
+        else:
+            det = "data missing in bootstrap"
+        return CheckResult(result.name, "YELLOW", msg, det)
+    return result
+
+
 def run_doctor(verbose: bool = True) -> Tuple[Status, List[CheckResult]]:
     """
     Ejecuta todos los checks.
+
     Returns:
         (overall_status, list of results)
     """
+    bootstrap = _is_bootstrap_mode()
     results: List[CheckResult] = []
+
+    # Extra: señal visible para auditoría
+    if bootstrap:
+        results.append(CheckResult("bootstrap_mode", "YELLOW", "BOOTSTRAP mode activo (no bloquear por datasets locales)"))
 
     for check_fn in ALL_CHECKS:
         try:
             result = check_fn()
         except Exception as e:
             result = CheckResult(check_fn.__name__, "RED", "Check crashed", str(e))
+
+        result = _downgrade_if_bootstrap(result, bootstrap)
         results.append(result)
 
+    # Determine overall status
     statuses = [r.status for r in results]
+
     if "RED" in statuses:
         overall: Status = "RED"
     elif "YELLOW" in statuses:
@@ -326,10 +355,14 @@ def print_report(overall: Status, results: List[CheckResult]):
         "RESET": "\033[0m",
     }
 
-    green = colors["GREEN"]
-    yellow = colors["YELLOW"]
-    red = colors["RED"]
-    reset = colors["RESET"]
+    # Try colors, fallback to plain
+    try:
+        green = colors["GREEN"]
+        yellow = colors["YELLOW"]
+        red = colors["RED"]
+        reset = colors["RESET"]
+    except Exception:
+        green = yellow = red = reset = ""
 
     print("\n" + "=" * 60)
     print("SYNAPSE DOCTOR REPORT")
@@ -363,8 +396,8 @@ def main():
     """Entry point para CLI."""
     overall, _ = run_doctor(verbose=True)
 
-    # Exit code: GREEN/YELLOW = 0, RED = 1
-    if overall in ("GREEN", "YELLOW"):
+    # Exit code
+    if overall in {"GREEN", "YELLOW"}:
         sys.exit(0)
     sys.exit(1)
 

@@ -1,7 +1,7 @@
 ﻿"""
-synapse.cli
+SYNAPSE CLI package.
 
-Unified CLI entrypoint.
-Init hygiene: keep this module import-light (no side effects, no heavy imports).
+Import hygiene: this package must stay light on import.
+Do NOT import command implementations here.
 """
 __all__ = []

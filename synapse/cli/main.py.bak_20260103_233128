@@ -75,12 +75,3 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"synapse: crash_report={rep.path} fingerprint={rep.fingerprint}", flush=True)
         print(f"synapse: next => python -m synapse.cli triage --path \"{rep.path}\"", flush=True)
         return 3
-
-# --- AUTO-PATCH: import hygiene wrapper (tests expect no heavy modules in sys.modules after dry-run) ---
-try:
-    from synapse.cli._import_hygiene import wrap_main as _wrap_main  # type: ignore
-    main = _wrap_main(main)  # type: ignore
-except Exception:
-    pass
-# --- END AUTO-PATCH ---
-
