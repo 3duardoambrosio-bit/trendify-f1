@@ -1,4 +1,4 @@
-﻿"""
+"""
 Doctor CLI - Health checks para SYNAPSE.
 
 Uso:

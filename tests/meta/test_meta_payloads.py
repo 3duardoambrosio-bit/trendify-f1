@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from synapse.meta import (
     build_utm_content,

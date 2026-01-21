@@ -1,4 +1,4 @@
-﻿# synapse/infra/secrets.py
+# synapse/infra/secrets.py
 """
 Secrets — OLEADA 16
 ===================

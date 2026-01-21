@@ -1,4 +1,4 @@
-﻿# synapse/marketing_os/__init__.py
+# synapse/marketing_os/__init__.py
 """
 Marketing OS - Sistema de marketing automatizado F1.
 

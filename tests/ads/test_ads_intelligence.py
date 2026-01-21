@@ -1,4 +1,4 @@
-﻿# tests/ads/test_ads_intelligence.py
+# tests/ads/test_ads_intelligence.py
 import pytest
 
 from synapse.ads import (

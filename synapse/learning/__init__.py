@@ -1,4 +1,4 @@
-﻿# synapse/learning/__init__.py
+# synapse/learning/__init__.py
 """
 Learning package.
 

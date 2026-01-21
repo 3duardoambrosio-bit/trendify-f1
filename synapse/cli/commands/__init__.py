@@ -1,4 +1,4 @@
-﻿"""
+"""
 synapse.cli.commands
 
 Command modules must stay import-light.

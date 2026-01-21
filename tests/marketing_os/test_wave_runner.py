@@ -1,4 +1,4 @@
-﻿# tests/marketing_os/test_wave_runner.py
+# tests/marketing_os/test_wave_runner.py
 import pytest
 import tempfile
 import json

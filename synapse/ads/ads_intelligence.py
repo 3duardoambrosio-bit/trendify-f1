@@ -1,4 +1,4 @@
-﻿# synapse/ads/ads_intelligence.py
+# synapse/ads/ads_intelligence.py
 """
 Ads Intelligence - Best practices y estrategias para plataformas de ads.
 

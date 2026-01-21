@@ -1,4 +1,4 @@
-﻿# synapse/ads/__init__.py
+# synapse/ads/__init__.py
 from .ads_intelligence import (
     MetaAdsIntelligence,
     TikTokAdsIntelligence,

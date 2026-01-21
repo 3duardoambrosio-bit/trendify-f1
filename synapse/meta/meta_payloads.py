@@ -1,4 +1,4 @@
-﻿# synapse/meta/meta_payloads.py
+# synapse/meta/meta_payloads.py
 """
 Meta Payloads — OLEADA 19
 ========================

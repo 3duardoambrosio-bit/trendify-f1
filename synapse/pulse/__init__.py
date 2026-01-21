@@ -1,4 +1,4 @@
-﻿# synapse/pulse/__init__.py
+# synapse/pulse/__init__.py
 """
 Pulse package.
 

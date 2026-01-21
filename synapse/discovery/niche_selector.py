@@ -1,4 +1,4 @@
-﻿# synapse/discovery/niche_selector.py
+# synapse/discovery/niche_selector.py
 """
 Niche Selector - Seleccion estrategica de nicho.
 """

@@ -1,4 +1,4 @@
-﻿# tests/integration/test_secrets.py
+# tests/integration/test_secrets.py
 import os
 import tempfile
 

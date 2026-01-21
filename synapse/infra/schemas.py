@@ -1,4 +1,4 @@
-﻿# synapse/infra/schemas.py
+# synapse/infra/schemas.py
 """
 Schema Registry (F1).
 

@@ -1,4 +1,4 @@
-﻿# synapse/infra/__init__.py
+# synapse/infra/__init__.py
 """
 Infra package.
 

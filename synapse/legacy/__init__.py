@@ -1,4 +1,4 @@
-﻿# synapse/legacy/__init__.py
+# synapse/legacy/__init__.py
 """
 Legacy package.
 

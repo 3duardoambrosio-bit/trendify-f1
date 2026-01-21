@@ -1,4 +1,4 @@
-﻿# tests/integration/test_http_client.py
+# tests/integration/test_http_client.py
 import json
 import urllib.error
 from types import SimpleNamespace

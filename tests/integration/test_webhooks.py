@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from synapse.integration.webhooks import verify_hmac_sha256, WebhookRouter, WebhookError
 
 

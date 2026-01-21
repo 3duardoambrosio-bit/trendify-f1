@@ -1,4 +1,4 @@
-﻿import json, os
+import json, os
 
 def pick_list(raw):
     if isinstance(raw, dict):

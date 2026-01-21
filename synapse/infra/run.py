@@ -1,4 +1,4 @@
-﻿# synapse/infra/run.py
+# synapse/infra/run.py
 """
 Infra runner para evitar los warnings típicos de runpy cuando
 ya importaste módulos y luego ejecutas `python -m synapse.infra.doctor`.

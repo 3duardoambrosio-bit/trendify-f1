@@ -1,4 +1,4 @@
-﻿# synapse/integration/webhooks.py
+# synapse/integration/webhooks.py
 """
 Webhooks Core — OLEADA 17
 ========================

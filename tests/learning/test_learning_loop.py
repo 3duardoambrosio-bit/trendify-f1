@@ -1,4 +1,4 @@
-﻿# tests/learning/test_learning_loop.py
+# tests/learning/test_learning_loop.py
 import json
 from pathlib import Path
 

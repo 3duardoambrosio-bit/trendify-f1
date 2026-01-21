@@ -1,4 +1,4 @@
-﻿# synapse/discovery/pipeline_orchestrator.py
+# synapse/discovery/pipeline_orchestrator.py
 """
 Pipeline Orchestrator - E2E: nicho -> scan -> rank -> top -> kits.
 

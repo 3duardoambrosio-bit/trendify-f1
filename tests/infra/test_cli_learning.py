@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 
 def test_cli_learning_dry_run_no_heavy_imports() -> None:

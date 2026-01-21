@@ -1,4 +1,4 @@
-﻿# synapse/discovery/__init__.py
+# synapse/discovery/__init__.py
 from .niche_selector import (
     NicheSelector, NicheProfile, NicheSelection, NicheCategory, NicheRisk,
     CompetitionLevel, NICHE_CATALOG, list_niches, get_niche_keywords, get_niche_filters,

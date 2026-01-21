@@ -1,4 +1,4 @@
-﻿# synapse/reporting/audit_viewer.py
+# synapse/reporting/audit_viewer.py
 """
 Audit Trail Viewer (Ledger -> Markdown).
 

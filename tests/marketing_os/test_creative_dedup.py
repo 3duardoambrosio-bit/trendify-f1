@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from synapse.marketing_os.creative_dedup import dedup_creatives, normalize_text, token_set, jaccard
 

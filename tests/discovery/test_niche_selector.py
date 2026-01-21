@@ -1,4 +1,4 @@
-﻿# tests/discovery/test_niche_selector.py
+# tests/discovery/test_niche_selector.py
 import pytest
 import tempfile
 from pathlib import Path

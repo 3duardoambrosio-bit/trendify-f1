@@ -1,4 +1,4 @@
-﻿# tests/discovery/test_pipeline_orchestrator.py
+# tests/discovery/test_pipeline_orchestrator.py
 import pytest
 import tempfile
 import csv

@@ -1,4 +1,4 @@
-﻿# synapse/integration/http_client.py
+# synapse/integration/http_client.py
 """
 HTTP Client (stdlib) para SYNAPSE.
 

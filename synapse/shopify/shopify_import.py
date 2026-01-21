@@ -1,4 +1,4 @@
-﻿# synapse/shopify/shopify_import.py
+# synapse/shopify/shopify_import.py
 """
 Shopify Import Generator (CSV) para SYNAPSE.
 

@@ -1,4 +1,4 @@
-﻿# tests/discovery/test_product_ranker.py
+# tests/discovery/test_product_ranker.py
 import pytest
 from synapse.discovery import ProductRanker, ProductScore, ProductCandidate, rank_products
 

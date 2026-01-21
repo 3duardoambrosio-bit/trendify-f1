@@ -1,4 +1,4 @@
-﻿# synapse/webhooks/webhook_router.py
+# synapse/webhooks/webhook_router.py
 """
 Webhook Router (genérico) para SYNAPSE.
 

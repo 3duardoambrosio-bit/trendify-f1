@@ -1,4 +1,4 @@
-﻿# tests/infra/test_init_hygiene.py
+# tests/infra/test_init_hygiene.py
 import sys
 
 def test_import_infra_does_not_preload_doctor_and_does_not_error():

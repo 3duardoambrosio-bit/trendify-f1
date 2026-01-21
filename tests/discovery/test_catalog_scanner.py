@@ -1,4 +1,4 @@
-﻿# tests/discovery/test_catalog_scanner.py
+# tests/discovery/test_catalog_scanner.py
 import pytest
 import tempfile
 import csv

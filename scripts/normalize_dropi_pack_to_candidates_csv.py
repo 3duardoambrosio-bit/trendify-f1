@@ -1,4 +1,4 @@
-﻿import argparse, json, re
+import argparse, json, re
 from pathlib import Path
 
 CANON_MAP = {

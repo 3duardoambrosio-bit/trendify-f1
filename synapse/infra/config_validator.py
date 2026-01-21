@@ -1,4 +1,4 @@
-﻿# synapse/infra/config_validator.py
+# synapse/infra/config_validator.py
 """
 Config Validator — OLEADA 16
 ============================

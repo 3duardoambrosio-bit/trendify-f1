@@ -1,4 +1,4 @@
-﻿# tests/pulse/test_market_pulse.py
+# tests/pulse/test_market_pulse.py
 from __future__ import annotations
 
 import json

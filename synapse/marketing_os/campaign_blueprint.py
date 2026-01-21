@@ -1,4 +1,4 @@
-﻿# synapse/marketing_os/campaign_blueprint.py
+# synapse/marketing_os/campaign_blueprint.py
 """
 Campaign Blueprint - Planes ejecutables por plataforma.
 

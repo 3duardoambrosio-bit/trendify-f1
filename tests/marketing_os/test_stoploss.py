@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from synapse.marketing_os.experiment_stoploss import default_policy_mx, evaluate_stop_loss
 

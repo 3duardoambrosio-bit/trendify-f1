@@ -1,4 +1,4 @@
-﻿# synapse/discovery/catalog_scanner.py
+# synapse/discovery/catalog_scanner.py
 """
 Catalog Scanner - Filtra catalogo Droppi por nicho seleccionado.
 """

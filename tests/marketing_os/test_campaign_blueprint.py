@@ -1,4 +1,4 @@
-﻿# tests/marketing_os/test_campaign_blueprint.py
+# tests/marketing_os/test_campaign_blueprint.py
 import pytest
 from synapse.marketing_os.campaign_blueprint import (
     BlueprintGenerator, CampaignBlueprint, Platform, Objective,

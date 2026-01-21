@@ -1,4 +1,4 @@
-﻿# synapse/meta/utm.py
+# synapse/meta/utm.py
 """
 UTM — OLEADA 19
 ===============

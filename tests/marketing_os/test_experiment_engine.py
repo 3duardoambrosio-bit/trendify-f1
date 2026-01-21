@@ -1,4 +1,4 @@
-﻿# tests/marketing_os/test_experiment_engine.py
+# tests/marketing_os/test_experiment_engine.py
 import pytest
 from synapse.marketing_os.experiment_engine import (
     ExperimentEngine, ExperimentMetrics, ExperimentDecision,

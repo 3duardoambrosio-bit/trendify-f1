@@ -1,4 +1,4 @@
-﻿# synapse/marketing_os/experiment_engine.py
+# synapse/marketing_os/experiment_engine.py
 """
 Experiment Engine - Stop-loss, scaling, y decision rules.
 

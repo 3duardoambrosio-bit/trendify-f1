@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from synapse.marketing_os.quality_scoring import score_creatives
 

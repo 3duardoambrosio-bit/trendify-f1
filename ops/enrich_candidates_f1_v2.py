@@ -1,4 +1,4 @@
-﻿import json, math, pathlib, hashlib
+import json, math, pathlib, hashlib
 from datetime import datetime
 
 def clamp(x,a,b): return max(a, min(b, x))

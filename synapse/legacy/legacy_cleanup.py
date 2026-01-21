@@ -1,4 +1,4 @@
-﻿# synapse/legacy/legacy_cleanup.py
+# synapse/legacy/legacy_cleanup.py
 """
 Legacy Cleanup — OLEADA 14
 =========================

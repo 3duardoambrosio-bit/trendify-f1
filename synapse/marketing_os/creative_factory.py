@@ -1,4 +1,4 @@
-﻿# synapse/marketing_os/creative_factory.py
+# synapse/marketing_os/creative_factory.py
 """
 Creative Factory - Nivel F1
 

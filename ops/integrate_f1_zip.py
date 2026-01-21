@@ -1,4 +1,4 @@
-﻿import argparse, re, zipfile, shutil
+import argparse, re, zipfile, shutil
 from pathlib import Path
 from datetime import datetime
 

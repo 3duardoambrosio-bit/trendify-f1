@@ -1,4 +1,4 @@
-﻿# synapse/marketing_os/wave_runner.py
+# synapse/marketing_os/wave_runner.py
 """
 Wave Runner - Pipeline E2E para generacion de Marketing Kits.
 """

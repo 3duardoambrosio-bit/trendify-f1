@@ -1,4 +1,4 @@
-﻿# tests/reporting/test_audit_viewer.py
+# tests/reporting/test_audit_viewer.py
 import os
 import json
 import tempfile

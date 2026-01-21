@@ -1,4 +1,4 @@
-﻿# synapse/discovery/product_ranker.py
+# synapse/discovery/product_ranker.py
 """
 Product Ranker - Scoring multi-dimensional para ranking de productos.
 

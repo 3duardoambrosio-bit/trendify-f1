@@ -1,4 +1,4 @@
-﻿# tests/marketing_os/test_creative_factory.py
+# tests/marketing_os/test_creative_factory.py
 """
 Tests para Creative Factory.
 """

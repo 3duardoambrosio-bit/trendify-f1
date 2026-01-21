@@ -1,4 +1,4 @@
-﻿# synapse/pulse/market_pulse.py
+# synapse/pulse/market_pulse.py
 """
 Market Pulse — OLEADA 13
 =======================

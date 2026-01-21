@@ -1,4 +1,4 @@
-﻿# tests/shopify/test_shopify_import.py
+# tests/shopify/test_shopify_import.py
 import os
 import csv
 import tempfile

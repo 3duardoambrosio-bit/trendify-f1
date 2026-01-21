@@ -1,4 +1,4 @@
-﻿# synapse/integration/secrets.py
+# synapse/integration/secrets.py
 """
 Secrets/Config Loader (stdlib) para SYNAPSE.
 
