@@ -1,0 +1,505 @@
+=== PYTHON ===
+Python 3.11.9
+C:\Users\edu_a\AppData\Local\Programs\Python\Python311\python.exe
+['', 'C:\\Users\\edu_a\\AppData\\Local\\Programs\\Python\\Python311\\python311.zip', 'C:\\Users\\edu_a\\AppData\\Local\\Programs\\Python\\Python311\\DLLs', 'C:\\Users\\edu_a\\AppData\\Local\\Programs\\Python\\Python311\\Lib', 'C:\\Users\\edu_a\\AppData\\Local\\Programs\\Python\\Python311', 'C:\\Users\\edu_a\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages']
+
+=== TREE (top) ===
+
+Name                       Mode   LastWriteTime            
+----                       ----   -------------            
+.git                       d--h-- 05/01/2026 05:41:59 p. m.
+.hypothesis                d----- 01/01/2026 11:21:18 p. m.
+.pytest_cache              d----- 01/01/2026 11:21:19 p. m.
+buyer                      d----- 08/01/2026 10:08:46 p. m.
+config                     d----- 26/11/2025 05:44:08 p. m.
+core                       d----- 08/01/2026 10:19:34 p. m.
+data                       d----- 04/01/2026 01:02:38 a. m.
+docs                       d----- 31/12/2025 01:49:55 a. m.
+infra                      d----- 08/01/2026 10:08:46 p. m.
+intelligence               d----- 05/01/2026 07:21:34 p. m.
+learning                   d----- 08/01/2026 10:19:34 p. m.
+marketing                  d----- 05/01/2026 07:21:34 p. m.
+marketing_os               d----- 31/12/2025 01:55:13 a. m.
+ops                        d----- 08/01/2026 10:19:34 p. m.
+scripts                    d----- 08/01/2026 09:12:23 p. m.
+shared                     d----- 01/01/2026 11:15:08 p. m.
+synapse                    d----- 08/01/2026 10:19:35 p. m.
+tests                      d----- 08/01/2026 10:19:35 p. m.
+tools                      d----- 04/01/2026 05:10:36 p. m.
+trendify-f1                d----- 09/12/2025 11:07:12 p. m.
+trendify_fase1.egg-info    d----- 05/01/2026 05:34:51 p. m.
+vault                      d----- 08/01/2026 10:19:34 p. m.
+.editorconfig              -a---- 16/12/2025 06:11:42 p. m.
+.env.example               -a---- 26/11/2025 07:06:40 p. m.
+.gitattributes             -a---- 16/12/2025 05:26:34 p. m.
+.gitignore                 -a---- 01/01/2026 11:20:55 p. m.
+cloudbuild.yaml            -a---- 05/01/2026 05:42:42 p. m.
+learning_loop.py           -a---- 08/01/2026 10:08:47 p. m.
+pyproject.toml             -a---- 11/12/2025 10:42:05 p. m.
+pytest.ini                 -a---- 05/01/2026 10:51:16 p. m.
+README.md                  -a---- 26/11/2025 07:14:41 p. m.
+README_MVS_DROPi_STEP1.md  -a---- 29/12/2025 02:06:32 a. m.
+repo_snapshot_learning.txt -a---- 08/01/2026 10:19:46 p. m.
+REQUIREMENTS_NOTE.txt      -a---- 29/12/2025 02:06:32 a. m.
+synapse_app.html           -a---- 30/12/2025 05:28:24 p. m.
+
+
+
+
+=== learning/learning_loop.py ===
+from __future__ import annotations
+
+from dataclasses import dataclass, is_dataclass, asdict
+from pathlib import Path
+import hashlib
+import json
+import re
+from typing import Any, Dict, List, Optional
+
+
+EVIDENCE_KEYS = {
+    "spend", "roas", "hook_rate_3s", "clicks", "conversions", "impressions",
+    "platform", "product_id", "creative_id", "utm_content", "hook_id",
+}
+
+_NUMERIC_KEYS = ("spend", "roas", "hook_rate_3s", "clicks", "conversions", "impressions")
+_STRING_KEYS = ("platform", "product_id", "creative_id", "utm_content", "hook_id")
+
+# match: "roas": 1.23  OR  'roas': 1.23
+_RE_NUM = {
+    k: re.compile(r"(?:\"|')" + re.escape(k) + r"(?:\"|')\s*:\s*([-+]?\d+(?:\.\d+)?)")
+    for k in _NUMERIC_KEYS
+}
+_RE_STR = {
+    k: re.compile(r"(?:\"|')" + re.escape(k) + r"(?:\"|')\s*:\s*(?:\"|')([^\"']+)(?:\"|')")
+    for k in _STRING_KEYS
+}
+
+
+@dataclass(frozen=True)
+class LearningLoopConfig:
+    min_records: int = 8
+    min_spend_before_learn: float = 15.0
+    require_evidence: bool = True
+
+
+@dataclass(frozen=True)
+class LearningRunResult:
+    status: str
+    input_hash: str
+    state_path: str
+
+
+class LearningLoop:
+    """
+    LearningLoop (test-driven, robust):
+    - Intenta extraer payload deep (dict/dataclass/vars/__slots__/json string).
+    - Fallback NUCLEAR: regex sobre representaciÃ³n textual del evento para sacar spend/roas/hook_rate_3s/etc.
+    - Evidence gate: pasa si logramos payload >= cfg.min_records.
+    - dry_run => COMPLETED_DRY_RUN (sin escribir weights.json).
+    - No dry_run => escribe weights.json y COMPLETED.
+    """
+
+    def __init__(self, repo: Path | str):
+        self.repo = Path(repo)
+
+    def _state_file(self) -> Path:
+        return self.repo / "data" / "learning" / "learning_state.json"
+
+    def _weights_file(self) -> Path:
+        return self.repo / "data" / "config" / "weights.json"
+
+    def _ensure_dirs(self) -> None:
+        (self.repo / "data" / "learning").mkdir(parents=True, exist_ok=True)
+        (self.repo / "data" / "config").mkdir(parents=True, exist_ok=True)
+
+    def _iter_events(self, ledger_obj: Any) -> List[Any]:
+        if hasattr(ledger_obj, "events"):
+            ev = getattr(ledger_obj, "events")
+            try:
+                if callable(ev):
+                    out = ev()
+                    return list(out) if out is not None else []
+                return list(ev)
+            except Exception:
+                pass
+
+        for m in ("iter_events", "read_events", "load_events", "get_events"):
+            if hasattr(ledger_obj, m):
+                try:
+                    out = getattr(ledger_obj, m)()
+                    return list(out) if out is not None else []
+                except Exception:
+                    pass
+
+        try:
+            return list(ledger_obj)
+        except Exception:
+            return []
+
+    def _try_json(self, x: Any) -> Any:
+        if not isinstance(x, str):
+            return None
+        s = x.strip()
+        if not s:
+            return None
+        if not (s.startswith("{") or s.startswith("[")):
+            return None
+        try:
+            return json.loads(s)
+        except Exception:
+            return None
+
+    def _obj_to_mapping(self, obj: Any) -> Optional[Dict[str, Any]]:
+        try:
+            if is_dataclass(obj):
+                return asdict(obj)
+        except Exception:
+            pass
+
+        a = getattr(obj, "_asdict", None)
+        if callable(a):
+            try:
+                return dict(a())
+            except Exception:
+                pass
+
+        try:
+            d = vars(obj)
+            if isinstance(d, dict):
+                return d
+        except Exception:
+            pass
+
+        slots = getattr(obj, "__slots__", None)
+        if slots:
+            try:
+                out: Dict[str, Any] = {}
+                keys = slots if isinstance(slots, (list, tuple)) else [slots]
+                for k in keys:
+                    try:
+                        out[str(k)] = getattr(obj, k)
+                    except Exception:
+                        pass
+                return out if out else None
+            except Exception:
+                pass
+
+        return None
+
+    def _deep_payload(self, obj: Any, depth: int = 0) -> Dict[str, Any]:
+        if depth > 12:
+            return {}
+
+        if isinstance(obj, dict):
+            if any(k in obj for k in EVIDENCE_KEYS):
+                return obj
+
+            for k in ("payload", "data", "record", "event", "body"):
+                if k in obj:
+                    v = obj.get(k)
+                    if isinstance(v, dict):
+                        found = self._deep_payload(v, depth + 1)
+                        if found:
+                            return found
+                    parsed = self._try_json(v)
+                    if parsed is not None:
+                        found = self._deep_payload(parsed, depth + 1)
+                        if found:
+                            return found
+
+            for v in obj.values():
+                found = self._deep_payload(v, depth + 1)
+                if found:
+                    return found
+            return {}
+
+        if isinstance(obj, (list, tuple)):
+            for it in obj:
+                found = self._deep_payload(it, depth + 1)
+                if found:
+                    return found
+            return {}
+
+        parsed = self._try_json(obj)
+        if parsed is not None:
+            return self._deep_payload(parsed, depth + 1)
+
+        m = self._obj_to_mapping(obj)
+        if isinstance(m, dict) and m:
+            return self._deep_payload(m, depth + 1)
+
+        for attr in ("payload", "data", "event", "record", "body"):
+            try:
+                v = getattr(obj, attr, None)
+            except Exception:
+                v = None
+            if v is not None:
+                found = self._deep_payload(v, depth + 1)
+                if found:
+                    return found
+
+        return {}
+
+    def _event_text(self, e: Any) -> str:
+        # Prefer json if possible; else repr
+        try:
+            if isinstance(e, (dict, list, tuple)):
+                return json.dumps(e, ensure_ascii=False, default=str)
+        except Exception:
+            pass
+        try:
+            return repr(e)
+        except Exception:
+            return str(e)
+
+    def _payload_from_text(self, e: Any) -> Dict[str, Any]:
+        s = self._event_text(e)
+        out: Dict[str, Any] = {}
+
+        for k, rx in _RE_NUM.items():
+            m = rx.search(s)
+            if m:
+                try:
+                    v = float(m.group(1))
+                    # clicks/conversions/impressions pueden venir como int
+                    out[k] = int(v) if k in ("clicks", "conversions", "impressions") and v.is_integer() else v
+                except Exception:
+                    pass
+
+        for k, rx in _RE_STR.items():
+            m = rx.search(s)
+            if m:
+                out[k] = m.group(1)
+
+        return out if out else {}
+
+    def _coerce_payload(self, e: Any) -> Dict[str, Any]:
+        p = self._deep_payload(e)
+        if p:
+            return p
+
+        # fallback nuclear
+        return self._payload_from_text(e)
+
+    def _hash(self, payloads: List[Dict[str, Any]]) -> str:
+        try:
+            s = json.dumps(payloads, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        except Exception:
+            s = repr(payloads)
+        h = hashlib.sha256(s.encode("utf-8")).hexdigest()
+        return f"sha256:{h}"
+
+    def run(self, *, ledger_obj: Any, cfg: LearningLoopConfig, force: bool = False, dry_run: bool = False) -> LearningRunResult:
+        self._ensure_dirs()
+
+        events = self._iter_events(ledger_obj)
+        payloads: List[Dict[str, Any]] = [self._coerce_payload(e) for e in events]
+        payloads = [p for p in payloads if isinstance(p, dict) and p]
+
+        total_spend = 0.0
+        for p in payloads:
+            try:
+                total_spend += float(p.get("spend", 0.0))
+            except Exception:
+                pass
+
+        input_hash = self._hash(payloads)
+
+        if len(events) < cfg.min_records:
+            self._state_file().write_text(json.dumps({"input_hash": input_hash, "status": "INSUFFICIENT_RECORDS"}), encoding="utf-8")
+            return LearningRunResult("INSUFFICIENT_RECORDS", input_hash, str(self._state_file()))
+
+        if total_spend < cfg.min_spend_before_learn:
+            self._state_file().write_text(json.dumps({"input_hash": input_hash, "status": "INSUFFICIENT_SPEND"}), encoding="utf-8")
+            return LearningRunResult("INSUFFICIENT_SPEND", input_hash, str(self._state_file()))
+
+        if cfg.require_evidence:
+            # evidencia = cuÃ¡ntos eventos logramos convertir a payload usable
+            if len(payloads) < cfg.min_records:
+                self._state_file().write_text(json.dumps({"input_hash": input_hash, "status": "INSUFFICIENT_EVIDENCE"}), encoding="utf-8")
+                return LearningRunResult("INSUFFICIENT_EVIDENCE", input_hash, str(self._state_file()))
+
+        if (not force) and self._state_file().exists():
+            try:
+                prev = json.loads(self._state_file().read_text(encoding="utf-8"))
+                if prev.get("input_hash") == input_hash and prev.get("status") in ("COMPLETED", "COMPLETED_DRY_RUN", "NOOP"):
+                    self._state_file().write_text(json.dumps({"input_hash": input_hash, "status": "NOOP"}), encoding="utf-8")
+                    return LearningRunResult("NOOP", input_hash, str(self._state_file()))
+            except Exception:
+                pass
+
+        if dry_run:
+            self._state_file().write_text(json.dumps({"input_hash": input_hash, "status": "COMPLETED_DRY_RUN"}), encoding="utf-8")
+            return LearningRunResult("COMPLETED_DRY_RUN", input_hash, str(self._state_file()))
+
+        roas_vals: List[float] = []
+        hook_vals: List[float] = []
+        for p in payloads:
+            if "roas" in p:
+                try:
+                    roas_vals.append(float(p["roas"]))
+                except Exception:
+                    pass
+            if "hook_rate_3s" in p:
+                try:
+                    hook_vals.append(float(p["hook_rate_3s"]))
+                except Exception:
+                    pass
+
+        def _mean(xs: List[float]) -> float:
+            return (sum(xs) / len(xs)) if xs else 0.0
+
+        weights = {
+            "roas_mean": _mean(roas_vals),
+            "hook_rate_3s_mean": _mean(hook_vals),
+            "records": len(events),
+            "total_spend": total_spend,
+        }
+
+        self._weights_file().write_text(json.dumps(weights, indent=2, sort_keys=True), encoding="utf-8")
+        self._state_file().write_text(json.dumps({"input_hash": input_hash, "status": "COMPLETED"}), encoding="utf-8")
+        return LearningRunResult("COMPLETED", input_hash, str(self._state_file()))
+
+=== tests/learning/test_learning_loop.py ===
+# tests/learning/test_learning_loop.py
+import json
+from pathlib import Path
+
+import pytest
+
+from synapse.learning.learning_loop import (
+    LearningLoop,
+    LearningLoopConfig,
+    parse_utm_content,
+)
+
+
+class FakeLedger:
+    def __init__(self, events):
+        self._events = list(events)
+        self.writes = []
+
+    def query(self):
+        return list(self._events)
+
+    def write(self, event_type, entity_type, entity_id, payload):
+        self.writes.append(
+            {"event_type": event_type, "entity_type": entity_type, "entity_id": entity_id, "payload": payload}
+        )
+
+
+def _mk_event(ts, payload, event_type="EXPERIMENT_METRICS_RECORDED", entity_id="34357"):
+    return {
+        "timestamp": ts,
+        "event_type": event_type,
+        "entity_type": "product",
+        "entity_id": entity_id,
+        "payload": payload,
+    }
+
+
+def test_parse_utm_content():
+    utm = "Hhook01_Astatus_Fhands_V1"
+    out = parse_utm_content(utm)
+    assert out["hook_id"] == "hook01"
+    assert out["angle"] == "status"
+    assert out["format"] == "hands"
+
+
+def test_learning_loop_insufficient_evidence_writes_report(tmp_path):
+    repo = tmp_path
+    (repo / "data" / "learning").mkdir(parents=True, exist_ok=True)
+    (repo / "data" / "config").mkdir(parents=True, exist_ok=True)
+
+    ledger = FakeLedger(events=[])
+    cfg = LearningLoopConfig(min_records=8, require_evidence=True)
+
+    runner = LearningLoop(repo)
+    res = runner.run(ledger_obj=ledger, cfg=cfg)
+
+    assert res.status == "INSUFFICIENT_EVIDENCE"
+    report_path = Path(res.report_path)
+    assert report_path.exists()
+    txt = report_path.read_text(encoding="utf-8")
+    assert "INSUFFICIENT_EVIDENCE" in txt
+
+
+def test_learning_loop_updates_weights_and_is_idempotent(tmp_path):
+    repo = tmp_path
+    (repo / "data" / "learning").mkdir(parents=True, exist_ok=True)
+    (repo / "data" / "config").mkdir(parents=True, exist_ok=True)
+
+    events = []
+    # enough spend + multiple records
+    for i in range(10):
+        payload = {
+            "product_id": "34357",
+            "platform": "meta",
+            "utm_content": f"Hh{i}_Adolor_Fhands_V1",
+            "spend": 5.0,  # total 50
+            "impressions": 1000,
+            "clicks": 20 + i,
+            "conversions": 1,
+            "roas": 1.5 + (i * 0.05),
+            "hook_rate_3s": 18 + i,
+        }
+        events.append(_mk_event("2026-01-01T00:00:00Z", payload))
+
+    ledger = FakeLedger(events=events)
+    cfg = LearningLoopConfig(min_records=8, min_spend_before_learn=15.0, require_evidence=True)
+
+    runner = LearningLoop(repo)
+    res1 = runner.run(ledger_obj=ledger, cfg=cfg, force=False, dry_run=False)
+    assert res1.status in ("COMPLETED", "COMPLETED_DRY_RUN")
+    weights_path = Path(res1.weights_path)
+    assert weights_path.exists()
+
+    data1 = json.loads(weights_path.read_text(encoding="utf-8"))
+    assert data1["schema_version"] == "1.0.0"
+    assert "angles" in data1 and "formats" in data1 and "hooks" in data1
+
+    # second run with same input => SKIPPED
+    res2 = runner.run(ledger_obj=ledger, cfg=cfg, force=False, dry_run=False)
+    assert res2.status == "SKIPPED"
+
+    # verify ledger writes include completed + skipped
+    types = [w["event_type"] for w in ledger.writes]
+    assert "LEARNING_LOOP_COMPLETED" in types
+    assert "LEARNING_LOOP_SKIPPED" in types
+
+
+def test_learning_loop_respects_dry_run(tmp_path):
+    repo = tmp_path
+    (repo / "data" / "learning").mkdir(parents=True, exist_ok=True)
+    (repo / "data" / "config").mkdir(parents=True, exist_ok=True)
+
+    events = []
+    for i in range(8):
+        payload = {
+            "product_id": "34357",
+            "platform": "tiktok",
+            "creative_id": f"cr_{i}",
+            "angle": "status",
+            "format": "voiceover",
+            "hook_id": f"h{i}",
+            "spend": 3.0,  # total 24
+            "impressions": 800,
+            "clicks": 10,
+            "conversions": 1,
+            "roas": 1.2,
+            "hook_rate_3s": 22,
+        }
+        events.append(_mk_event("2026-01-01T00:00:00Z", payload))
+
+    ledger = FakeLedger(events=events)
+    cfg = LearningLoopConfig(min_records=8, min_spend_before_learn=15.0, require_evidence=True)
+
+    runner = LearningLoop(repo)
+    res = runner.run(ledger_obj=ledger, cfg=cfg, dry_run=True)
+
+    assert res.status == "COMPLETED_DRY_RUN"
+    # dry run still writes report + state, but weights may or may not exist
+    assert Path(res.report_path).exists()
+    assert Path(res.state_path).exists()
+

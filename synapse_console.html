@@ -1,0 +1,1448 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>SYNAPSE Console — Dashboard (Offline Prototype)</title>
+  <style>
+    :root{
+      --bg:#0b0f17;
+      --panel:#0f1624;
+      --panel2:#101c30;
+      --text:#e7eefc;
+      --muted:#9fb0d0;
+      --muted2:#7d8fb3;
+      --line:rgba(255,255,255,.08);
+      --line2:rgba(255,255,255,.12);
+      --good:#2be4a7;
+      --warn:#ffcc66;
+      --bad:#ff5c7a;
+      --info:#6aa8ff;
+      --accent:#7c5cff;
+      --accent2:#33d0ff;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --r:16px;
+      --r2:22px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      background: radial-gradient(1200px 800px at 20% 10%, rgba(124,92,255,.22), transparent 55%),
+                  radial-gradient(900px 700px at 80% 40%, rgba(51,208,255,.14), transparent 60%),
+                  radial-gradient(900px 600px at 55% 90%, rgba(43,228,167,.10), transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      overflow:hidden;
+    }
+    a{color:inherit}
+    .app{
+      display:grid;
+      grid-template-columns: 320px 1fr;
+      height:100vh;
+    }
+    .sidebar{
+      border-right:1px solid var(--line);
+      padding:18px 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,.02), transparent 50%),
+                  rgba(15,22,36,.55);
+      backdrop-filter: blur(8px);
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius: var(--r2);
+      background: linear-gradient(180deg, rgba(124,92,255,.14), rgba(255,255,255,.02));
+      box-shadow: var(--shadow);
+    }
+    .logo{
+      width:38px;height:38px;border-radius:14px;
+      background: radial-gradient(circle at 30% 30%, rgba(51,208,255,.9), rgba(124,92,255,.9));
+      display:grid; place-items:center;
+      border:1px solid rgba(255,255,255,.18);
+    }
+    .logo svg{filter: drop-shadow(0 6px 10px rgba(0,0,0,.25))}
+    .brand .title{font-weight:800; letter-spacing:.3px}
+    .brand .sub{color:var(--muted); font-size:12px; margin-top:2px}
+    .nav{
+      margin-top:14px;
+      display:flex; flex-direction:column; gap:8px;
+    }
+    .navbtn{
+      cursor:pointer;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color:var(--text);
+      padding:12px 12px;
+      border-radius: 14px;
+      display:flex; align-items:center; justify-content:space-between;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+      user-select:none;
+    }
+    .navbtn:hover{transform: translateY(-1px); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.03)}
+    .navbtn.active{
+      border-color: rgba(124,92,255,.55);
+      background: linear-gradient(90deg, rgba(124,92,255,.22), rgba(51,208,255,.10));
+    }
+    .navbtn .left{display:flex; align-items:center; gap:10px}
+    .pill{
+      font-size:11px;
+      padding:3px 8px;
+      border-radius: 999px;
+      border:1px solid var(--line);
+      color: var(--muted);
+      background: rgba(255,255,255,.02);
+    }
+    .main{
+      padding:18px;
+      overflow:auto;
+    }
+    .topbar{
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+      margin-bottom:14px;
+    }
+    .search{
+      flex:1;
+      display:flex; align-items:center; gap:10px;
+      border:1px solid var(--line);
+      border-radius: 999px;
+      padding:10px 14px;
+      background: rgba(255,255,255,.02);
+      max-width: 820px;
+    }
+    .search input{
+      width:100%;
+      border:none; outline:none;
+      background:transparent;
+      color:var(--text);
+      font-size:14px;
+    }
+    .actions{display:flex; gap:10px; align-items:center}
+    .btn{
+      cursor:pointer;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius: 14px;
+      display:flex; align-items:center; gap:8px;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .btn:hover{transform: translateY(-1px); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.03)}
+    .btn.primary{
+      border-color: rgba(124,92,255,.55);
+      background: linear-gradient(90deg, rgba(124,92,255,.25), rgba(51,208,255,.14));
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:12px;
+    }
+    .card{
+      border:1px solid var(--line);
+      background: rgba(15,22,36,.55);
+      border-radius: var(--r2);
+      padding:14px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card h3{
+      margin:0;
+      font-size:14px;
+      color: var(--muted);
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    .big{
+      font-size:22px;
+      font-weight:900;
+      margin-top:8px;
+      letter-spacing:.2px;
+    }
+    .muted{color:var(--muted)}
+    .mono{font-family:var(--mono)}
+    .row{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .kpi{
+      display:flex; flex-direction:column; gap:6px;
+    }
+    .badge{
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:12px;
+      padding:6px 10px;
+      border-radius: 999px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color: var(--muted);
+    }
+    .badge.good{border-color: rgba(43,228,167,.35); color: #b9ffe9; background: rgba(43,228,167,.08)}
+    .badge.warn{border-color: rgba(255,204,102,.35); color: #fff0cc; background: rgba(255,204,102,.08)}
+    .badge.bad{border-color: rgba(255,92,122,.35); color: #ffd0d8; background: rgba(255,92,122,.08)}
+    .badge.info{border-color: rgba(106,168,255,.35); color: #d9e8ff; background: rgba(106,168,255,.08)}
+    .split{
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap:12px;
+    }
+    .list{
+      margin-top:10px;
+      display:flex; flex-direction:column; gap:8px;
+    }
+    .item{
+      border:1px solid var(--line);
+      border-radius: 16px;
+      padding:10px 10px;
+      background: rgba(255,255,255,.02);
+    }
+    .item .t{font-weight:800}
+    .item .s{color:var(--muted); font-size:12px; margin-top:4px}
+    .tabs{
+      display:flex; gap:8px; flex-wrap:wrap;
+      margin-top:10px;
+    }
+    .tab{
+      cursor:pointer;
+      padding:8px 10px;
+      border-radius: 999px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color: var(--muted);
+      font-size:12px;
+      user-select:none;
+    }
+    .tab.active{
+      border-color: rgba(51,208,255,.45);
+      color: #dff7ff;
+      background: rgba(51,208,255,.10);
+    }
+    .table{
+      width:100%;
+      border-collapse: collapse;
+      margin-top:10px;
+      overflow:hidden;
+      border-radius: 16px;
+      border:1px solid var(--line);
+    }
+    .table th,.table td{
+      padding:10px 10px;
+      border-bottom:1px solid var(--line);
+      text-align:left;
+      font-size:12px;
+      vertical-align:top;
+    }
+    .table th{color:var(--muted); font-weight:800; background: rgba(255,255,255,.02)}
+    .table tr:hover td{background: rgba(255,255,255,.015)}
+    .codebox{
+      font-family: var(--mono);
+      font-size:12px;
+      white-space:pre-wrap;
+      word-break:break-word;
+      color:#dfe9ff;
+      border:1px solid var(--line);
+      background: rgba(0,0,0,.25);
+      border-radius: 16px;
+      padding:10px;
+      margin-top:10px;
+      max-height: 300px;
+      overflow:auto;
+    }
+    .dropzone{
+      border:1px dashed rgba(255,255,255,.20);
+      background: rgba(255,255,255,.02);
+      border-radius: var(--r2);
+      padding:14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .dropzone strong{font-weight:900}
+    .hint{color:var(--muted); font-size:12px; margin-top:4px}
+    .tiny{color:var(--muted2); font-size:11px}
+    .flexcol{display:flex; flex-direction:column; gap:10px}
+    .hr{height:1px; background: var(--line); margin:12px 0}
+    .footer{
+      margin-top:12px;
+      color: var(--muted2);
+      font-size:11px;
+    }
+    .kbd{
+      font-family: var(--mono);
+      font-size:11px;
+      padding:2px 6px;
+      border-radius: 8px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color: var(--muted);
+    }
+    @media (max-width: 1100px){
+      .app{grid-template-columns: 1fr}
+      .sidebar{display:none}
+      body{overflow:auto}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo" title="SYNAPSE">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2c3.6 0 6.2 1.8 7.6 4.7.3.7 0 1.5-.7 1.8-.7.3-1.5 0-1.8-.7C16 5.9 14.4 5 12 5c-3.5 0-6 2.5-6 7s2.5 7 6 7c2.4 0 4-1 5.1-2.8.4-.6 1.2-.9 1.8-.5.6.4.9 1.2.5 1.8C18.2 20.2 15.6 22 12 22 6.7 22 3 18.3 3 12S6.7 2 12 2Z" fill="rgba(255,255,255,.92)"/>
+          <path d="M20.5 12c0 .8-.7 1.5-1.5 1.5S17.5 12.8 17.5 12 18.2 10.5 19 10.5s1.5.7 1.5 1.5Z" fill="rgba(51,208,255,.95)"/>
+        </svg>
+      </div>
+      <div>
+        <div class="title">SYNAPSE Console</div>
+        <div class="sub">Prototipo offline • ACERO, NO HUMO</div>
+      </div>
+    </div>
+
+    <div class="nav" id="nav">
+      <div class="navbtn active" data-view="overview">
+        <div class="left"><span>📊</span><span>Overview</span></div>
+        <span class="pill" id="pillOverview">LIVE/SIM</span>
+      </div>
+      <div class="navbtn" data-view="meta">
+        <div class="left"><span>🧠</span><span>Meta Publish</span></div>
+        <span class="pill" id="pillMeta">13 steps</span>
+      </div>
+      <div class="navbtn" data-view="assets">
+        <div class="left"><span>🎞️</span><span>Assets</span></div>
+        <span class="pill" id="pillAssets">FILE refs</span>
+      </div>
+      <div class="navbtn" data-view="ledger">
+        <div class="left"><span>🧾</span><span>Ledger</span></div>
+        <span class="pill">idempotency</span>
+      </div>
+      <div class="navbtn" data-view="playbooks">
+        <div class="left"><span>📈</span><span>Growth Playbooks</span></div>
+        <span class="pill">legal hacks</span>
+      </div>
+      <div class="navbtn" data-view="ops">
+        <div class="left"><span>🧰</span><span>Ops & Autopilot</span></div>
+        <span class="pill">SYNAPSE</span>
+      </div>
+      <div class="navbtn" data-view="raw">
+        <div class="left"><span>🧪</span><span>Raw JSON</span></div>
+        <span class="pill">debug</span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div><span class="kbd">Ctrl</span> + <span class="kbd">K</span> abre “quick search”</div>
+      <div style="margin-top:6px">Arrastra tus JSON reales al dashboard y listo.</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search" title="Búsqueda rápida (Ctrl+K)">
+        <span>🔎</span>
+        <input id="searchInput" placeholder="Buscar: step_key, op, endpoint, error, fingerprint…" />
+        <span class="kbd">Ctrl</span><span class="kbd">K</span>
+      </div>
+      <div class="actions">
+        <label class="btn" title="Cargar JSON desde archivo">
+          📁 Cargar JSON
+          <input id="fileInput" type="file" accept=".json" multiple style="display:none"/>
+        </label>
+        <button class="btn" id="btnDemo" title="Carga data de demo (para ver todo funcionando)">✨ Demo</button>
+        <button class="btn primary" id="btnReset" title="Borra estado guardado en el navegador">🧨 Reset</button>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      <div>
+        <div><strong>Drop Zone</strong> — suelta aquí tus archivos: <span class="mono">meta_publish_plan.json</span>, <span class="mono">meta_publish_preflight.json</span>, <span class="mono">meta_publish_run.json</span>, <span class="mono">secrets_doctor.json</span></div>
+        <div class="hint">Se detectan por <span class="mono">marker</span> y estructura. Se guarda en tu navegador (localStorage). Nada sale a internet.</div>
+      </div>
+      <div class="tiny">Tip: también puedes pegar JSON en “Raw JSON”</div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div id="view"></div>
+  </main>
+</div>
+
+<script>
+(function(){
+  const LS_KEY = "synapse_console_state_v1";
+
+  const state = {
+    plan: null,
+    preflight: null,
+    run: null,
+    secrets_doctor: null,
+    // derived / convenience
+    view: "overview",
+    tabMeta: "steps",
+    tabOps: "pipelines",
+    rawPaste: "",
+  };
+
+  const el = (id)=>document.getElementById(id);
+
+  function safeStr(x, d=""){
+    if(x===null || x===undefined) return d;
+    const s = String(x).trim();
+    return s ? s : d;
+  }
+  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+  function loadSaved(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return;
+      const obj = JSON.parse(raw);
+      if(obj && typeof obj === "object"){
+        for(const k of ["plan","preflight","run","secrets_doctor","view","tabMeta","tabOps","rawPaste"]){
+          if(k in obj) state[k]=obj[k];
+        }
+      }
+    }catch(e){}
+  }
+  function save(){
+    try{
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        plan: state.plan,
+        preflight: state.preflight,
+        run: state.run,
+        secrets_doctor: state.secrets_doctor,
+        view: state.view,
+        tabMeta: state.tabMeta,
+        tabOps: state.tabOps,
+        rawPaste: state.rawPaste
+      }));
+    }catch(e){}
+  }
+  function reset(){
+    for(const k of ["plan","preflight","run","secrets_doctor"]){ state[k]=null; }
+    state.view="overview"; state.tabMeta="steps"; state.tabOps="pipelines"; state.rawPaste="";
+    localStorage.removeItem(LS_KEY);
+    render();
+  }
+
+  function detectType(obj){
+    const marker = safeStr(obj?.marker,"");
+    if(marker.includes("META_PUBLISH_PLAN")) return "plan";
+    if(marker.includes("META_PUBLISH_PREFLIGHT")) return "preflight";
+    if(marker.includes("META_PUBLISH_EXECUTE")) return "run";
+    if(marker.includes("SECRETS_DOCTOR")) return "secrets_doctor";
+    // fallback heuristics
+    if(obj && obj.steps && Array.isArray(obj.steps) && obj.plan_hash) return "plan";
+    if(obj && obj.per_step && Array.isArray(obj.per_step) && obj.placeholder_scan) return "preflight";
+    if(obj && obj.results && Array.isArray(obj.results) && obj.id_map) return "run";
+    if(obj && obj.counts && obj.counts.missing_required !== undefined && obj.scope) return "secrets_doctor";
+    return "unknown";
+  }
+
+  function mergeDetected(type, obj){
+    if(type==="plan") state.plan=obj;
+    else if(type==="preflight") state.preflight=obj;
+    else if(type==="run") state.run=obj;
+    else if(type==="secrets_doctor") state.secrets_doctor=obj;
+    else {
+      // if unknown, try to slot into raw paste view
+      state.rawPaste = JSON.stringify(obj, null, 2);
+      state.view = "raw";
+    }
+    save();
+    render();
+  }
+
+  function fmtTs(ts){
+    const s=safeStr(ts,"");
+    if(!s) return "";
+    return s.replace("T"," ").replace("Z"," UTC");
+  }
+
+  function badgeForStatus(status){
+    const s = safeStr(status,"").toUpperCase();
+    if(["OK","PASS"].includes(s)) return `<span class="badge good">✅ ${s}</span>`;
+    if(["WARN"].includes(s)) return `<span class="badge warn">⚠️ ${s}</span>`;
+    if(["FAIL","ERROR"].includes(s)) return `<span class="badge bad">🧨 ${s}</span>`;
+    if(["SKIP"].includes(s)) return `<span class="badge info">⏭️ ${s}</span>`;
+    if(["REUSED"].includes(s)) return `<span class="badge info">♻️ ${s}</span>`;
+    return `<span class="badge">${s || "—"}</span>`;
+  }
+
+  function getRunMode(){
+    return safeStr(state.run?.mode || state.preflight?.mode || "simulate");
+  }
+
+  function derive(){
+    const mode = getRunMode();
+    const run = state.run || {};
+    const pre = state.preflight || {};
+    const plan = state.plan || {};
+    const sd = state.secrets_doctor || {};
+
+    const stepsCount = Array.isArray(plan.steps) ? plan.steps.length :
+                       (run.counts?.steps ?? pre.counts?.steps ?? 0);
+
+    const runFp = safeStr(run.run_fingerprint_12 || "");
+    const preFp = safeStr(pre.run_fingerprint_12 || "");
+    const fpMatch = (runFp && preFp && runFp === preFp);
+
+    const filesRun = run.files || {};
+    const filesPre = pre.files || {};
+    const files = (filesRun.count !== undefined) ? filesRun : filesPre;
+    const filesMissing = Number(files?.missing ?? 0);
+
+    const issues = pre.issues || [];
+    const errors = (run.errors || []).length || Number(pre.counts?.errors ?? 0) || 0;
+
+    const runStatus = safeStr(run.status || pre.status || "—");
+    const gate = run.gate || null;
+
+    const fileRefsFromPlan = [];
+    if(Array.isArray(plan.steps)){
+      const R = /^<FILE:([^>]+)>$/;
+      const walk = (x)=>{
+        if(!x) return;
+        if(Array.isArray(x)) x.forEach(walk);
+        else if(typeof x === "object") Object.values(x).forEach(walk);
+        else if(typeof x === "string"){
+          const m = x.trim().match(R);
+          if(m) fileRefsFromPlan.push(m[1]);
+        }
+      };
+      plan.steps.forEach(s=>{
+        if(s && typeof s === "object") walk(s.payload || {});
+      });
+    }
+
+    const uniqFileRefs = Array.from(new Set(fileRefsFromPlan)).sort();
+
+    return {
+      mode, stepsCount, runFp, preFp, fpMatch, files, filesMissing,
+      issues, errors, runStatus, gate, uniqFileRefs
+    };
+  }
+
+  function renderOverview(d){
+    const mode = d.mode.toUpperCase();
+    const run = state.run || {};
+    const pre = state.preflight || {};
+    const plan = state.plan || {};
+    const sd = state.secrets_doctor || {};
+
+    const counts = run.counts || pre.counts || {};
+    const resultsN = Number(counts.results ?? 0);
+    const errorsN = Number(counts.errors ?? 0);
+    const warnsN = Number(counts.warns ?? 0);
+    const issuesN = Number(counts.issues ?? 0);
+
+    const planHash = safeStr((run.plan_hash || pre.plan_hash || plan.plan_hash) || "");
+    const graphV = safeStr((run.graph_version || pre.runtime_snapshot?.graph_version || plan.graph_version) || "v22.0");
+    const fp12 = safeStr(run.run_fingerprint_12 || pre.run_fingerprint_12 || "");
+    const fpBadge = d.fpMatch ? `<span class="badge good">🧬 FP match ✅</span>` :
+                    (d.preFp && d.runFp) ? `<span class="badge bad">🧬 FP mismatch 🧨</span>` :
+                    `<span class="badge">🧬 FP: —</span>`;
+
+    const gateBlock = (()=>{
+      const gate = run.gate;
+      if(!gate) return `<div class="item"><div class="t">Gate</div><div class="s">No hay gate en este run (normal en simulate)</div></div>`;
+      return `
+        <div class="item">
+          <div class="row">
+            <div class="t">LIVE Gate</div>
+            <div>${badgeForStatus(gate.status)}</div>
+          </div>
+          <div class="s">reason: <span class="mono">${safeStr(gate.reason,"")}</span></div>
+        </div>`;
+    })();
+
+    const sdBlock = (()=>{
+      if(!sd || !sd.counts) return `<div class="item"><div class="t">Secrets Doctor</div><div class="s">No cargado. (Carga <span class="mono">data/run/secrets_doctor.json</span>)</div></div>`;
+      const miss = sd.counts?.missing_required ?? 0;
+      const pres = sd.counts?.present_keys ?? 0;
+      return `
+        <div class="item">
+          <div class="row">
+            <div class="t">Secrets Doctor</div>
+            <div>${badgeForStatus(sd.status || (miss? "FAIL":"OK"))}</div>
+          </div>
+          <div class="s">present_keys: <span class="monole mono">${pres}</span> • missing_required: <span class="mono">${miss}</span></div>
+        </div>`;
+    })();
+
+    return `
+      <div class="grid">
+        <div class="card" style="grid-column: span 8;">
+          <div class="row">
+            <div>
+              <h3>Estado del sistema</h3>
+              <div class="big">SYNAPSE / TrendifyHub — Console</div>
+              <div class="muted">Modo actual: <span class="badge info">⚙️ ${mode}</span> ${fpBadge}</div>
+            </div>
+            <div class="badge">${safeStr(run.marker || pre.marker || plan.marker || "—")}</div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="grid" style="grid-template-columns: repeat(12, 1fr); gap:12px;">
+            <div class="card" style="grid-column: span 4; background: rgba(255,255,255,.02); box-shadow:none">
+              <h3>Steps</h3>
+              <div class="big">${d.stepsCount}</div>
+              <div class="muted">pipeline publish plan</div>
+            </div>
+            <div class="card" style="grid-column: span 4; background: rgba(255,255,255,.02); box-shadow:none">
+              <h3>Results</h3>
+              <div class="big">${resultsN}</div>
+              <div class="muted">ejecuciones/steps</div>
+            </div>
+            <div class="card" style="grid-column: span 4; background: rgba(255,255,255,.02); box-shadow:none">
+              <h3>Errores</h3>
+              <div class="big">${errorsN}</div>
+              <div class="muted">bloqueos reales</div>
+            </div>
+
+            <div class="card" style="grid-column: span 6; background: rgba(255,255,255,.02); box-shadow:none">
+              <h3>Fingerprints</h3>
+              <div class="big mono">${fp12 || "—"}</div>
+              <div class="muted">plan_hash: <span class="mono">${planHash.slice(0, 22) || "—"}</span> • graph: <span class="mono">${graphV}</span></div>
+            </div>
+            <div class="card" style="grid-column: span 6; background: rgba(255,255,255,.02); box-shadow:none">
+              <h3>Files (de &lt;FILE:...&gt;)</h3>
+              <div class="big">${Number(d.files?.count ?? 0)}</div>
+              <div class="muted">missing: <span class="mono">${Number(d.files?.missing ?? 0)}</span> • overall: <span class="mono">${safeStr(d.files?.overall_sha12||"") || "—"}</span></div>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="muted">
+            <span class="badge">${badgeForStatus(run.status || pre.status || "—")}</span>
+            <span class="badge">🕒 ${fmtTs(run.ts || pre.ts || "") || "—"}</span>
+            <span class="badge">⚠️ issues: ${Number(issuesN||0)} • warns: ${Number(warnsN||0)}</span>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column: span 4;">
+          <h3>Seguridad & Gate</h3>
+          <div class="list">
+            ${gateBlock}
+            ${sdBlock}
+            <div class="item">
+              <div class="t">Contrato clave</div>
+              <div class="s">Preflight → Execute deben terminar con el mismo <span class="mono">run_fingerprint_12</span>. Si no, es drift (aka “te vas a disparar al pie”).</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column: span 12;">
+          <h3>Qué puedes hacer aquí</h3>
+          <div class="split" style="margin-top:10px">
+            <div class="item">
+              <div class="t">1) Carga tus JSON reales</div>
+              <div class="s">Arrastra: <span class="mono">data/run/meta_publish_plan.json</span>, <span class="mono">data/run/meta_publish_preflight.json</span>, <span class="mono">data/run/meta_publish_run.json</span>, <span class="mono">data/run/secrets_doctor.json</span></div>
+              <div class="s">Luego ve a <b>Meta Publish</b> para inspeccionar steps, deps, endpoints, unresolved, errores, etc.</div>
+            </div>
+            <div class="item">
+              <div class="t">2) “API Day” sin drama</div>
+              <div class="s">Esto está pensado para que el día que metas keys, el sistema te grite <b>antes</b> de gastar dinero o duplicar assets.</div>
+              <div class="s">Mientras tanto, <b>simulate</b> funciona como “modo avión”: todo fluye sin tocar Meta.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMeta(d){
+    const run = state.run || {};
+    const pre = state.preflight || {};
+    const plan = state.plan || {};
+    const q = safeStr(el("searchInput").value,"").toLowerCase();
+
+    const tabs = [
+      ["steps","Steps"],
+      ["issues","Issues"],
+      ["gate","Gate/Secrets"],
+    ];
+    const tab = state.tabMeta;
+
+    function tabBtn(id,label){
+      return `<div class="tab ${tab===id?'active':''}" data-tab="${id}">${label}</div>`;
+    }
+
+    const steps = (run.results || pre.per_step || plan.steps || []);
+    const normalized = steps.map((s, idx)=>{
+      // handle different shapes
+      if(s && s.op && s.key) return {
+        i: s.i ?? idx,
+        key: safeStr(s.key),
+        op: safeStr(s.op),
+        endpoint: safeStr(s.endpoint || ""),
+        endpoint_resolved: safeStr(s.endpoint_resolved || ""),
+        status: safeStr(s.status || (pre.status?"OK":"—")),
+        unresolved: s.unresolved || [],
+        error: s.error || "",
+        created_id: s.created_id || "",
+        reused_id: s.reused_id || "",
+        simulated_id: s.simulated_id || "",
+        payload_sha256_12: s.payload_sha256_12 || "",
+        response: s.response || null
+      };
+      // plan step
+      return {
+        i: s.i ?? idx,
+        key: safeStr(s.key || `step_${idx}`),
+        op: safeStr(s.op || "—"),
+        endpoint: safeStr(s.endpoint || ""),
+        endpoint_resolved: "",
+        status: "—",
+        unresolved: [],
+        error: "",
+        created_id: "",
+        reused_id: "",
+        simulated_id: "",
+        payload_sha256_12: "",
+        response: null
+      };
+    }).filter(x=>{
+      if(!q) return true;
+      const hay = (x.key+" "+x.op+" "+x.endpoint+" "+x.endpoint_resolved+" "+safeStr(x.error)).toLowerCase();
+      return hay.includes(q);
+    });
+
+    const tableRows = normalized.slice(0, 250).map(s=>{
+      const idShow = s.created_id || s.reused_id || s.simulated_id || "";
+      const unresolved = (s.unresolved && s.unresolved.length) ? `<span class="badge warn">⚠️ ${s.unresolved.length} placeholders</span>` : `<span class="badge good">✅ resolved</span>`;
+      const st = badgeForStatus(s.status);
+      const err = s.error ? `<div class="badge bad" title="${escapeHtml(s.error)}">🧨 error</div>` : "";
+      return `
+        <tr>
+          <td class="mono">${escapeHtml(String(s.i))}</td>
+          <td class="mono">${escapeHtml(s.key)}</td>
+          <td class="mono">${escapeHtml(s.op)}</td>
+          <td class="mono">${escapeHtml(s.endpoint_resolved || s.endpoint)}</td>
+          <td>${st} ${unresolved} ${err}</td>
+          <td class="mono">${escapeHtml(idShow)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const issues = (pre.issues || []).filter(it=>{
+      if(!q) return true;
+      const hay = (safeStr(it.severity)+" "+safeStr(it.code)+" "+safeStr(it.msg)).toLowerCase();
+      return hay.includes(q);
+    });
+
+    const issuesBlock = issues.length ? `
+      <table class="table">
+        <thead><tr><th>Severity</th><th>Code</th><th>Msg</th></tr></thead>
+        <tbody>
+          ${issues.slice(0,200).map(it=>`
+            <tr>
+              <td>${badgeForStatus(it.severity)}</td>
+              <td class="mono">${escapeHtml(safeStr(it.code))}</td>
+              <td>${escapeHtml(safeStr(it.msg))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    ` : `<div class="item" style="margin-top:10px"><div class="t">Sin issues</div><div class="s">Eso es bueno. O estás en simulate, o ya lo dejaste fino.</div></div>`;
+
+    const gateBlock = (()=>{
+      if(!run.gate) return `<div class="item"><div class="t">Gate</div><div class="s">No cargado / no aplica. En <span class="mono">simulate</span> es normal.</div></div>`;
+      const g=run.gate;
+      return `
+        <div class="item">
+          <div class="row">
+            <div class="t">Gate status</div>
+            <div>${badgeForStatus(g.status)}</div>
+          </div>
+          <div class="s">reason: <span class="mono">${escapeHtml(safeStr(g.reason))}</span></div>
+          <div class="s">meta: <span class="mono">${escapeHtml(JSON.stringify(g.meta||{}, null, 0))}</span></div>
+        </div>`;
+    })();
+
+    const sdBlock = (()=>{
+      const sd = state.secrets_doctor;
+      if(!sd) return `<div class="item"><div class="t">Secrets Doctor</div><div class="s">No cargado. (arrástralo)</div></div>`;
+      const miss = sd.counts?.missing_required ?? 0;
+      const pres = sd.counts?.present_keys ?? 0;
+      return `
+        <div class="item">
+          <div class="row">
+            <div class="t">Secrets Doctor</div>
+            <div>${badgeForStatus(sd.status || (miss? "FAIL":"OK"))}</div>
+          </div>
+          <div class="s">present: <span class="mono">${pres}</span> • missing_required: <span class="mono">${miss}</span></div>
+          <div class="s">missing_required list (si viene): <span class="mono">${escapeHtml(JSON.stringify(sd.missing_required||[], null, 0))}</span></div>
+        </div>`;
+    })();
+
+    const head = `
+      <div class="row">
+        <div>
+          <h3>Meta Publish</h3>
+          <div class="big">Pipeline inspector (Plan → Preflight → Execute)</div>
+          <div class="muted">Aquí es donde SYNAPSE deja de ser sueño y se vuelve “máquina”.</div>
+        </div>
+        <div class="badge">mode: <span class="mono">${escapeHtml(d.mode)}</span> • steps: <span class="mono">${d.stepsCount}</span></div>
+      </div>
+
+      <div class="tabs">
+        ${tabs.map(t=>tabBtn(t[0],t[1])).join("")}
+      </div>
+    `;
+
+    if(tab==="steps"){
+      return head + `
+        <div class="card" style="margin-top:12px">
+          <h3>Steps</h3>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>key</th>
+                <th>op</th>
+                <th>endpoint</th>
+                <th>status</th>
+                <th>id</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows || ""}</tbody>
+          </table>
+          <div class="footer">Mostrando hasta 250 rows. Usa el search para filtrar.</div>
+        </div>
+      `;
+    }
+
+    if(tab==="issues"){
+      return head + `
+        <div class="card" style="margin-top:12px">
+          <h3>Issues (preflight)</h3>
+          ${issuesBlock}
+        </div>
+      `;
+    }
+
+    return head + `
+      <div class="grid" style="margin-top:12px">
+        <div class="card" style="grid-column: span 7;">
+          <h3>Gate</h3>
+          <div class="list">${gateBlock}</div>
+        </div>
+        <div class="card" style="grid-column: span 5;">
+          <h3>Secrets Doctor</h3>
+          <div class="list">${sdBlock}</div>
+          <div class="footer">Tip: en live, el gate debe ser OK antes de tocar Meta.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAssets(d){
+    const plan = state.plan || {};
+    const q = safeStr(el("searchInput").value,"").toLowerCase();
+    const refs = d.uniqFileRefs || [];
+    const filtered = refs.filter(r => !q || r.toLowerCase().includes(q));
+
+    const entries = (state.preflight?.runtime_snapshot?.file_fingerprints?.entries) ||
+                    (state.run?.runtime_snapshot?.file_fingerprints?.entries) ||
+                    null;
+
+    const rows = filtered.map((r)=>{
+      // in preflight/run we stored absolute-path entries; we can match by suffix
+      let meta = null;
+      if(entries){
+        const keys = Object.keys(entries);
+        const hit = keys.find(k => k.replaceAll("\\","/").endsWith(r.replaceAll("\\","/")));
+        if(hit) meta = entries[hit];
+      }
+      const missing = meta ? !!meta.missing : null;
+      const badge = (missing===null) ? `<span class="badge">unknown</span>` :
+                    (missing) ? `<span class="badge bad">missing</span>` :
+                               `<span class="badge good">present</span>`;
+      const sha12 = meta ? safeStr(meta.sha256_12||"") : "";
+      const size = meta ? Number(meta.size||0) : 0;
+      return `
+        <tr>
+          <td class="mono">${escapeHtml(r)}</td>
+          <td>${badge}</td>
+          <td class="mono">${sha12 || "—"}</td>
+          <td class="mono">${size ? size.toLocaleString() : "—"}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <div class="row">
+        <div>
+          <h3>Assets</h3>
+          <div class="big">Referencias &lt;FILE:...&gt;</div>
+          <div class="muted">Esto evita el clásico “subí el video equivocado” o “no existe el archivo” en live.</div>
+        </div>
+        <div class="badge">refs: <span class="mono">${refs.length}</span> • missing: <span class="mono">${d.filesMissing}</span></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>Archivo esperado vs realidad</h3>
+        <table class="table">
+          <thead><tr><th>ref</th><th>status</th><th>sha12</th><th>size</th></tr></thead>
+          <tbody>${rows || ""}</tbody>
+        </table>
+        <div class="footer">Nota: el browser no puede “ver tu disco” libremente. Aquí usamos el snapshot que ya generan preflight/execute (file_fingerprints).</div>
+      </div>
+    `;
+  }
+
+  function renderLedger(d){
+    const run = state.run || {};
+    const led = run.ledger || {};
+    const enabled = !!led.enabled;
+    const scope = safeStr(led.scope || "");
+    const dir = safeStr(led.dir || "");
+    const block = `
+      <div class="item">
+        <div class="row">
+          <div class="t">Idempotency Ledger</div>
+          <div>${enabled ? `<span class="badge good">♻️ enabled</span>` : `<span class="badge warn">⚠️ disabled</span>`}</div>
+        </div>
+        <div class="s">scope: <span class="mono">${escapeHtml(scope || "—")}</span></div>
+        <div class="s">dir: <span class="mono">${escapeHtml(dir || "—")}</span></div>
+        <div class="s">Objetivo: si ya subiste/creaste algo, el sistema lo detecta y <b>reusa</b> en vez de duplicar (aka quemar dinero).</div>
+      </div>
+    `;
+
+    const how = `
+      <div class="item">
+        <div class="t">Cómo se supone que se comporte (modo realista)</div>
+        <div class="s">1) <span class="mono">preflight</span> valida placeholders + archivos + fingerprint.</div>
+        <div class="s">2) <span class="mono">execute live</span> consulta ledger: si step_key ya existe y payload_sha coincide → <b>REUSED</b>.</div>
+        <div class="s">3) Si hay drift (cambiaste payload/endpoint) → <b>FAIL</b> antes de duplicar.</div>
+      </div>
+    `;
+
+    return `
+      <div class="row">
+        <div>
+          <h3>Ledger</h3>
+          <div class="big">Anti-duplicados / Anti-“me cobró doble”</div>
+          <div class="muted">El ledger es el CFO automático: no deja que te emociones y tires presupuesto por accidente.</div>
+        </div>
+        <div class="badge">run_fp12: <span class="mono">${escapeHtml(d.runFp || "—")}</span></div>
+      </div>
+
+      <div class="grid" style="margin-top:12px">
+        <div class="card" style="grid-column: span 6;"><h3>Estado</h3><div class="list">${block}</div></div>
+        <div class="card" style="grid-column: span 6;"><h3>Contrato</h3><div class="list">${how}</div></div>
+      </div>
+    `;
+  }
+
+  function renderPlaybooks(d){
+    const q = safeStr(el("searchInput").value,"").toLowerCase();
+    const playbooks = [
+      {
+        title:"Meta Ads — Ventaja legal (sin ser cochino)",
+        bullets:[
+          "Estructura: 1 campaña broad + 1 adset testing + 1 adset scaling (cuando haya señales).",
+          "Regla: Creativo manda. Targeting solo afina. (Meta ya es un “targeting machine”).",
+          "UTM hygiene: usa utm_content por variante para atribución real (y que SYNAPSE compare).",
+          "Ciclo: daily micro-iteración → weekly consolidación. Sin matar ads por emoción.",
+        ]
+      },
+      {
+        title:"Google Ads — Intent capture (cuando tengas landing lista)",
+        bullets:[
+          "Search: keywords con intención (comprar, precio, envío, antes/después).",
+          "Negativas: evita gastar en curiosos (gratis, pdf, review genérico).",
+          "Shopping: solo cuando feed esté limpio (titles, GTIN si hay, images pro).",
+          "Conversion tracking: si no hay pixel bien, todo es teatro.",
+        ]
+      },
+      {
+        title:"Shopify/Checkout — fricción = dinero perdido",
+        bullets:[
+          "Pago rápido: Shop Pay / Apple Pay / Google Pay (siempre que puedas).",
+          "Velocidad: imágenes comprimidas, theme ligero, apps mínimas.",
+          "Trust: políticas claras, shipping transparente, FAQ con objeciones.",
+          "Post-purchase: upsell suave y email/SMS para recuperar AOV.",
+        ]
+      },
+      {
+        title:"Dropbox/Drive — “asset ops” para no vivir en caos",
+        bullets:[
+          "Naming convention: Hh7_..._V1, V2, etc. SIN espacios raros.",
+          "Fingerprint de archivos: si cambias video, cambian hashes → SYNAPSE lo nota.",
+          "Source of truth: una carpeta ‘assets/’ y un export automático al plan.",
+          "Backups: zip diario del folder assets + data/run (barato y salva vidas).",
+        ]
+      },
+      {
+        title:"SYNAPSE — Autopilot con frenos",
+        bullets:[
+          "Modo simulate siempre primero (para validar pipeline).",
+          "Live Gate obligatorio (secrets OK + auth OK + files OK).",
+          "Ledger ON por default. Desactivarlo es ‘quiero quemar dinero’.",
+          "Todo queda en run history NDJSON/JSON para auditar.",
+        ]
+      }
+    ].filter(p => !q || (p.title.toLowerCase().includes(q) || p.bullets.join(" ").toLowerCase().includes(q)));
+
+    return `
+      <div class="row">
+        <div>
+          <h3>Growth Playbooks</h3>
+          <div class="big">Hacks legales + Sistema de ejecución</div>
+          <div class="muted">“Truco” útil = proceso repetible + medición + riesgo controlado. Lo demás es humo.</div>
+        </div>
+        <div class="badge">catálogo: <span class="mono">${playbooks.length}</span></div>
+      </div>
+
+      <div class="grid" style="margin-top:12px">
+        ${playbooks.map(p=>`
+          <div class="card" style="grid-column: span 6;">
+            <h3>${escapeHtml(p.title)}</h3>
+            <div class="list">
+              ${p.bullets.map(b=>`<div class="item"><div class="s">• ${escapeHtml(b)}</div></div>`).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderOps(d){
+    const run = state.run || {};
+    const pre = state.preflight || {};
+    const tab = state.tabOps;
+
+    const tabs = [
+      ["pipelines","Pipelines"],
+      ["connectors","Connectors"],
+      ["quality","Quality Gates"],
+    ];
+
+    function tabBtn(id,label){
+      return `<div class="tab ${tab===id?'active':''}" data-opstab="${id}">${label}</div>`;
+    }
+
+    const head = `
+      <div class="row">
+        <div>
+          <h3>Ops & Autopilot</h3>
+          <div class="big">La máquina que corre sin llorar</div>
+          <div class="muted">Aquí vive lo operativo: gates, runners, conectores, auditoría, “no me rompas producción”.</div>
+        </div>
+        <div class="badge">modo: <span class="mono">${escapeHtml(d.mode)}</span></div>
+      </div>
+
+      <div class="tabs">${tabs.map(t=>tabBtn(t[0],t[1])).join("")}</div>
+    `;
+
+    if(tab==="pipelines"){
+      const pipeline = `
+        <div class="item">
+          <div class="t">Meta API Day Runner</div>
+          <div class="s">1) Live gate → 2) Preflight → 3) Execute → 4) FP match</div>
+          <div class="s">Tu script actual: <span class="mono">synapse/meta_api_day_meta.py</span></div>
+        </div>
+        <div class="item">
+          <div class="t">Publish lifecycle</div>
+          <div class="s"><span class="mono">meta_publish_plan.json</span> = qué se va a hacer</div>
+          <div class="s"><span class="mono">meta_publish_preflight.json</span> = qué se rompería</div>
+          <div class="s"><span class="mono">meta_publish_run.json</span> = qué pasó (de verdad)</div>
+        </div>
+      `;
+      return head + `
+        <div class="grid" style="margin-top:12px">
+          <div class="card" style="grid-column: span 7;"><h3>Pipelines</h3><div class="list">${pipeline}</div></div>
+          <div class="card" style="grid-column: span 5;">
+            <h3>Estado actual</h3>
+            <div class="list">
+              <div class="item"><div class="row"><div class="t">Run status</div><div>${badgeForStatus(run.status || pre.status || "—")}</div></div><div class="s">${escapeHtml(run.marker || pre.marker || "—")}</div></div>
+              <div class="item"><div class="t">Run FP12</div><div class="s mono">${escapeHtml(d.runFp || d.preFp || "—")}</div></div>
+              <div class="item"><div class="t">Files overall</div><div class="s mono">${escapeHtml(safeStr(d.files?.overall_sha12||"—"))}</div></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    if(tab==="connectors"){
+      const connectors = [
+        {name:"Meta Graph API", status: state.secrets_doctor ? (state.secrets_doctor.counts?.missing_required ? "WARN":"OK") : "SKIP", note:"Se activa en API Day (keys/tokens)."},
+        {name:"Shopify Admin API", status:"SKIP", note:"Fase futura: catálogo, pedidos, webhooks."},
+        {name:"Google Ads API", status:"SKIP", note:"Fase futura: capture intent / reporting."},
+        {name:"Dropbox/Drive", status:"SKIP", note:"Asset pipeline (sync + naming + backups)."},
+        {name:"Observability", status:"OK", note:"Runs JSON + ledger NDJSON = auditoría base."},
+      ];
+      return head + `
+        <div class="card" style="margin-top:12px">
+          <h3>Connectors</h3>
+          <table class="table">
+            <thead><tr><th>Connector</th><th>Status</th><th>Nota</th></tr></thead>
+            <tbody>
+              ${connectors.map(c=>`
+                <tr>
+                  <td><b>${escapeHtml(c.name)}</b></td>
+                  <td>${badgeForStatus(c.status)}</td>
+                  <td class="muted">${escapeHtml(c.note)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    const gates = `
+      <div class="item"><div class="t">Gate 1: Secrets</div><div class="s">Sin <span class="mono">META_ACCESS_TOKEN</span> válido, no hay live. Punto.</div></div>
+      <div class="item"><div class="t">Gate 2: Files</div><div class="s">Si falta un video referenciado por <span class="mono">&lt;FILE:...&gt;</span>, live se cancela.</div></div>
+      <div class="item"><div class="t">Gate 3: Preflight OK</div><div class="s">Placeholders resueltos + fingerprint determinista.</div></div>
+      <div class="item"><div class="t">Gate 4: Ledger ON</div><div class="s">Evita duplicados. Si quieres apagarlo, tienes que hacerlo a propósito (y aguantar el riesgo).</div></div>
+    `;
+    return head + `
+      <div class="grid" style="margin-top:12px">
+        <div class="card" style="grid-column: span 7;"><h3>Quality Gates</h3><div class="list">${gates}</div></div>
+        <div class="card" style="grid-column: span 5;">
+          <h3>Notas “realistas”</h3>
+          <div class="list">
+            <div class="item"><div class="t">Lo que sí existe hoy</div><div class="s">Simulate + preflight + execute + file fingerprints + API Day runner.</div></div>
+            <div class="item"><div class="t">Lo que falta para “modo Amazon”</div><div class="s">Conectores Shopify/Ads completos + bucles de optimización + reporting + budgets dinámicos.</div></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRaw(d){
+    const show = (obj)=> obj ? JSON.stringify(obj, null, 2) : "";
+    const raw = state.rawPaste || "";
+
+    return `
+      <div class="row">
+        <div>
+          <h3>Raw JSON</h3>
+          <div class="big">Pega / inspecciona / debug</div>
+          <div class="muted">Si no se detecta el tipo, lo avienta aquí. También sirve para comparar rápido.</div>
+        </div>
+        <div class="badge">Tip: pega y luego “Importar”</div>
+      </div>
+
+      <div class="grid" style="margin-top:12px">
+        <div class="card" style="grid-column: span 6;">
+          <h3>Pegar JSON</h3>
+          <textarea id="rawBox" style="width:100%; height:320px; background:rgba(0,0,0,.25); color:var(--text); border:1px solid var(--line); border-radius:16px; padding:10px; font-family:var(--mono); font-size:12px; outline:none;">${escapeHtml(raw)}</textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="btn primary" id="btnImportRaw">📥 Importar</button>
+            <button class="btn" id="btnCopyRaw">📋 Copiar</button>
+          </div>
+          <div class="footer">Importar intenta detectar tipo (plan/preflight/run/secrets_doctor).</div>
+        </div>
+        <div class="card" style="grid-column: span 6;">
+          <h3>Estado cargado</h3>
+          <div class="tabs">
+            <div class="tab" data-rawshow="plan">plan</div>
+            <div class="tab" data-rawshow="preflight">preflight</div>
+            <div class="tab" data-rawshow="run">run</div>
+            <div class="tab" data-rawshow="secrets_doctor">secrets_doctor</div>
+          </div>
+          <div class="codebox" id="rawShow">${escapeHtml(show(state[state._rawShow || "run"]))}</div>
+          <div class="footer">Esto es lectura. Para meter JSON nuevo, usa el panel de la izquierda.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  function updatePills(d){
+    el("pillOverview").textContent = (d.mode || "simulate").toUpperCase();
+    el("pillMeta").textContent = (d.stepsCount ? d.stepsCount + " steps" : "steps");
+    el("pillAssets").textContent = (d.uniqFileRefs ? d.uniqFileRefs.length + " refs" : "FILE refs");
+  }
+
+  function render(){
+    const d = derive();
+    updatePills(d);
+
+    const v = state.view;
+    const viewEl = el("view");
+    if(v==="overview") viewEl.innerHTML = renderOverview(d);
+    else if(v==="meta") viewEl.innerHTML = renderMeta(d);
+    else if(v==="assets") viewEl.innerHTML = renderAssets(d);
+    else if(v==="ledger") viewEl.innerHTML = renderLedger(d);
+    else if(v==="playbooks") viewEl.innerHTML = renderPlaybooks(d);
+    else if(v==="ops") viewEl.innerHTML = renderOps(d);
+    else viewEl.innerHTML = renderRaw(d);
+
+    // wire dynamic handlers after render
+    wireViewHandlers();
+  }
+
+  function wireNav(){
+    const nav = el("nav");
+    nav.addEventListener("click", (ev)=>{
+      const btn = ev.target.closest(".navbtn");
+      if(!btn) return;
+      const view = btn.getAttribute("data-view");
+      if(!view) return;
+      state.view = view;
+      save();
+      for(const b of nav.querySelectorAll(".navbtn")) b.classList.remove("active");
+      btn.classList.add("active");
+      render();
+    });
+  }
+
+  function setActiveNav(){
+    const nav = el("nav");
+    for(const b of nav.querySelectorAll(".navbtn")){
+      b.classList.toggle("active", b.getAttribute("data-view")===state.view);
+    }
+  }
+
+  function wireTop(){
+    el("btnReset").addEventListener("click", reset);
+    el("btnDemo").addEventListener("click", ()=>{
+      loadDemo();
+      render();
+    });
+
+    el("fileInput").addEventListener("change", async (ev)=>{
+      const files = Array.from(ev.target.files || []);
+      await loadFiles(files);
+      ev.target.value = "";
+    });
+
+    el("searchInput").addEventListener("input", ()=>{
+      render();
+    });
+
+    // Ctrl+K focus search
+    document.addEventListener("keydown",(e)=>{
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==="k"){
+        e.preventDefault();
+        el("searchInput").focus();
+      }
+    });
+
+    // drop zone
+    const dz = el("dropzone");
+    dz.addEventListener("dragover",(e)=>{ e.preventDefault(); dz.style.borderColor="rgba(51,208,255,.55)"; });
+    dz.addEventListener("dragleave",()=>{ dz.style.borderColor="rgba(255,255,255,.20)"; });
+    dz.addEventListener("drop", async (e)=>{
+      e.preventDefault();
+      dz.style.borderColor="rgba(255,255,255,.20)";
+      const files = Array.from(e.dataTransfer.files || []).filter(f=>f.name.toLowerCase().endsWith(".json"));
+      await loadFiles(files);
+    });
+  }
+
+  async function loadFiles(files){
+    for(const f of files){
+      try{
+        const text = await f.text();
+        const obj = JSON.parse(text);
+        const type = detectType(obj);
+        mergeDetected(type, obj);
+      }catch(e){
+        // if parse fails, shove to raw
+        state.rawPaste = `/* Error leyendo ${f.name}: ${e} */\n` + (state.rawPaste || "");
+        state.view = "raw";
+      }
+    }
+    save();
+    setActiveNav();
+    render();
+  }
+
+  function wireViewHandlers(){
+    // tabs in meta
+    document.querySelectorAll("[data-tab]").forEach(t=>{
+      t.addEventListener("click", ()=>{
+        state.tabMeta = t.getAttribute("data-tab");
+        save(); render();
+      });
+    });
+
+    // tabs in ops
+    document.querySelectorAll("[data-opstab]").forEach(t=>{
+      t.addEventListener("click", ()=>{
+        state.tabOps = t.getAttribute("data-opstab");
+        save(); render();
+      });
+    });
+
+    // raw controls
+    const rawBox = document.getElementById("rawBox");
+    if(rawBox){
+      rawBox.addEventListener("input", ()=>{
+        state.rawPaste = rawBox.value;
+        save();
+      });
+    }
+    const btnImportRaw = document.getElementById("btnImportRaw");
+    if(btnImportRaw){
+      btnImportRaw.addEventListener("click", ()=>{
+        try{
+          const obj = JSON.parse(state.rawPaste || "{}");
+          mergeDetected(detectType(obj), obj);
+        }catch(e){
+          alert("JSON inválido (no lo puedo parsear).");
+        }
+      });
+    }
+    const btnCopyRaw = document.getElementById("btnCopyRaw");
+    if(btnCopyRaw){
+      btnCopyRaw.addEventListener("click", async ()=>{
+        try{
+          await navigator.clipboard.writeText(state.rawPaste || "");
+        }catch(e){
+          alert("No pude copiar (permiso del navegador).");
+        }
+      });
+    }
+
+    document.querySelectorAll("[data-rawshow]").forEach(t=>{
+      t.addEventListener("click", ()=>{
+        state._rawShow = t.getAttribute("data-rawshow");
+        save(); render();
+      });
+    });
+  }
+
+  function loadDemo(){
+    state.plan = demoPlan();
+    state.preflight = demoPreflight();
+    state.run = demoRun();
+    state.secrets_doctor = demoSecretsDoctor();
+    state.view="overview";
+    state.tabMeta="steps";
+    state.tabOps="pipelines";
+    save();
+    setActiveNav();
+  }
+
+  // --- DEMO DATA (realista al shape de tu repo) ---
+  function demoPlan(){
+    return {
+      marker:"META_PUBLISH_PLAN_DEMO_V1",
+      ts:new Date().toISOString(),
+      graph_version:"v22.0",
+      ad_account:"act_<META_AD_ACCOUNT_ID>",
+      plan_hash:"sha256:DEMO_"+Math.random().toString(16).slice(2),
+      steps:[
+        {i:1, op:"create_campaign", key:"meta:campaign:main", endpoint:"/act_<META_AD_ACCOUNT_ID>/campaigns", depends_on:[], payload:{name:"TrendifyHub | Broad | Demo", objective:"OUTCOME_SALES", status:"<STATUS>", special_ad_categories:[]}},
+        {i:2, op:"create_adset", key:"meta:adset:broad", endpoint:"/act_<META_AD_ACCOUNT_ID>/adsets", depends_on:["meta:campaign:main"], payload:{name:"MX Broad | Demo", daily_budget:"<DAILY_BUDGET_MINOR_UNITS>", targeting:"<TARGETING_JSON>", promoted_object:"<PROMOTED_OBJECT_JSON>", status:"<STATUS>"}},
+        {i:3, op:"upload_video", key:"meta:video:hh7", endpoint:"/act_<META_AD_ACCOUNT_ID>/advideos", depends_on:[], payload:{name:"Hh7 Demo", source:"<FILE:assets/Hh7_Adolor_Fhands_V1.mp4>"}},
+        {i:4, op:"create_creative", key:"meta:creative:hh7", endpoint:"/act_<META_AD_ACCOUNT_ID>/adcreatives", depends_on:["meta:video:hh7"], payload:{name:"Creative HH7", object_story_spec:{page_id:"<META_PAGE_ID>", instagram_actor_id:"<META_IG_ACTOR_ID>", video_data:{video_id:"<ID:meta:video:hh7>"}}}},
+        {i:5, op:"create_ad", key:"meta:ad:hh7", endpoint:"/act_<META_AD_ACCOUNT_ID>/ads", depends_on:["meta:adset:broad","meta:creative:hh7"], payload:{name:"Ad HH7", adset_id:"<ID:meta:adset:broad>", creative:{creative_id:"<ID:meta:creative:hh7>"}, status:"<STATUS>"}},
+      ]
+    };
+  }
+
+  function demoPreflight(){
+    return {
+      marker:"META_PUBLISH_PREFLIGHT_DEMO_V1",
+      ts:new Date().toISOString(),
+      status:"OK",
+      mode:"simulate",
+      plan_path:"data/run/meta_publish_plan.json",
+      plan_hash:"sha256:DEMO_PLAN",
+      run_fingerprint_12:"DEMOFP12AAAA",
+      runtime_snapshot:{
+        mode:"simulate",
+        graph_version:"v22.0",
+        meta_ad_account_id:"",
+        daily_budget_minor_units:500,
+        targeting_sha12:"abc123abc123",
+        promoted_object_sha12:"def456def456",
+        meta_page_id:"123",
+        meta_ig_actor_id:"123",
+        meta_pixel_id:"123",
+        status_override:"PAUSED",
+        file_fingerprints:{
+          algo:"sha256",
+          count:3,
+          missing:0,
+          overall_sha12:"7b5b43872870",
+          overall_sha256:"7b5b43872870deadbeef...demo",
+          entries:{
+            "C:\\\\repo\\\\assets\\\\Hh7_Adolor_Fhands_V1.mp4":{missing:false,size:1234567,mtime_ns:123,sha256:"aaa",sha256_12:"aaa111bbb222"},
+            "C:\\\\repo\\\\assets\\\\Hh8_Adolor_Fhands_V1.mp4":{missing:false,size:1234567,mtime_ns:123,sha256:"bbb",sha256_12:"bbb111ccc222"},
+            "C:\\\\repo\\\\assets\\\\Hh9_Adolor_Fhands_V1.mp4":{missing:false,size:1234567,mtime_ns:123,sha256:"ccc",sha256_12:"ccc111ddd222"},
+          }
+        }
+      },
+      counts:{steps:13, issues:0, errors:0, warns:0},
+      placeholder_scan:{needs_daily_budget:true,needs_targeting:true,needs_promoted_object:true,needs_page_id:true,needs_ig_actor_id:true,needs_pixel_id:true,has_file_refs:true},
+      env_meta:{META_AD_ACCOUNT_ID_present:false},
+      files:{count:3, missing:0, overall_sha12:"7b5b43872870"},
+      issues:[],
+      per_step:[]
+    };
+  }
+
+  function demoRun(){
+    return {
+      marker:"META_PUBLISH_EXECUTE_DEMO_V1",
+      ts:new Date().toISOString(),
+      status:"OK",
+      mode:"simulate",
+      plan_path:"data/run/meta_publish_plan.json",
+      plan_hash:"sha256:DEMO_PLAN",
+      run_fingerprint_12:"DEMOFP12AAAA",
+      graph_version:"v22.0",
+      counts:{steps:13, results:13, errors:0},
+      id_map:{
+        "meta:campaign:main":"SIMCAMP_AAAAA",
+        "meta:adset:broad":"SIMADSET_BBBBB",
+      },
+      results:[
+        {i:1,key:"meta:campaign:main",op:"create_campaign",endpoint:"/act_<META_AD_ACCOUNT_ID>/campaigns",endpoint_resolved:"/act_/campaigns",depends_on:[],unresolved:[],status:"OK",simulated_id:"SIMCAMP_AAAAA"},
+        {i:2,key:"meta:adset:broad",op:"create_adset",endpoint:"/act_<META_AD_ACCOUNT_ID>/adsets",endpoint_resolved:"/act_/adsets",depends_on:["meta:campaign:main"],unresolved:[],status:"OK",simulated_id:"SIMADSET_BBBBB"},
+      ],
+      errors:[],
+      ledger:{enabled:false,dir:"data/ledger",scope:"run_fingerprint"},
+      files:{count:3, missing:0, overall_sha12:"7b5b43872870"},
+      runtime_snapshot: demoPreflight().runtime_snapshot
+    };
+  }
+
+  function demoSecretsDoctor(){
+    return {
+      marker:"SECRETS_DOCTOR_DEMO_V1",
+      ts:new Date().toISOString(),
+      scope:"meta",
+      status:"FAIL",
+      counts:{missing_required:2, missing_optional:0, present_keys:2},
+      missing_required:["META_ACCESS_TOKEN","META_AD_ACCOUNT_ID"],
+      present_meta:{META_PAGE_ID:"***",META_IG_ACTOR_ID:"***"}
+    };
+  }
+
+  // boot
+  loadSaved();
+  wireNav();
+  wireTop();
+  setActiveNav();
+  render();
+
+})();
+</script>
+</body>
+</html>

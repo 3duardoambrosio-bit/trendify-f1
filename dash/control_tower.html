@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SYNAPSE — Meta Control Tower</title>
+  <style>
+    :root{
+      --bg0:#050816; --bg1:#070b1d; --card:#0b1026; --card2:#0b122e;
+      --bd:#182045; --bd2:#24305a; --txt:#e7e9f6; --mut:#aab0d6;
+      --mut2:#7c85b8; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+      --chip:#0d1a3a; --shadow: 0 10px 40px rgba(0,0,0,.35);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:var(--sans); color:var(--txt);
+      background:
+        radial-gradient(1200px 700px at 70% 10%, rgba(74,99,255,.20), transparent 55%),
+        radial-gradient(900px 500px at 20% 0%, rgba(0,185,255,.14), transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height:100vh;
+    }
+    .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 40px}
+    .top{
+      display:flex; gap:14px; align-items:flex-start; justify-content:space-between;
+      padding:18px; border:1px solid var(--bd); border-radius:18px; background:rgba(11,16,38,.6); box-shadow:var(--shadow);
+    }
+    .brand{display:flex; gap:12px; align-items:center}
+    .logo{
+      width:38px;height:38px;border-radius:14px;
+      display:grid;place-items:center;
+      background:linear-gradient(135deg, rgba(74,99,255,.35), rgba(0,185,255,.22));
+      border:1px solid var(--bd2);
+      font-weight:800;
+    }
+    .title{font-size:18px;font-weight:800;letter-spacing:.2px}
+    .sub{color:var(--mut);font-size:12.5px;margin-top:2px}
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px; border-radius:999px;
+      background:rgba(13,26,58,.7); border:1px solid var(--bd2);
+      color:var(--mut); font-size:12px; margin-left:10px;
+    }
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--ok)}
+    .actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end}
+    button,.btn{
+      border:1px solid var(--bd2); background:rgba(11,18,46,.65); color:var(--txt);
+      padding:9px 12px; border-radius:12px; font-size:12.5px; cursor:pointer;
+      transition: transform .08s ease, background .15s ease;
+    }
+    button:hover,.btn:hover{background:rgba(24,32,69,.75)}
+    button:active,.btn:active{transform:translateY(1px)}
+    .toggle{
+      display:flex; align-items:center; gap:10px; padding:8px 12px;
+      border:1px solid var(--bd2); border-radius:12px; background:rgba(11,18,46,.50);
+      color:var(--mut); font-size:12.5px;
+    }
+    .toggle input{accent-color:#7aa2ff}
+    .tabs{display:flex; gap:10px; margin:16px 0 14px; flex-wrap:wrap}
+    .tab{
+      padding:8px 12px;border-radius:12px;border:1px solid var(--bd2);
+      background:rgba(11,18,46,.45); color:var(--mut); cursor:pointer; font-size:12.5px;
+    }
+    .tab.active{background:rgba(24,32,69,.75); color:var(--txt)}
+    .grid{display:grid; gap:12px}
+    .grid.topkpi{grid-template-columns: repeat(5, minmax(0,1fr))}
+    .grid.mid{grid-template-columns: repeat(3, minmax(0,1fr))}
+    .card{
+      border:1px solid var(--bd); border-radius:18px; background:rgba(11,16,38,.55);
+      padding:14px; box-shadow:var(--shadow);
+    }
+    .kpiLabel{color:var(--mut);font-size:12px}
+    .kpiValue{font-size:22px;font-weight:800;margin-top:6px; letter-spacing:.2px}
+    .kpiSub{color:var(--mut2);font-size:12px;margin-top:4px}
+    .mono{font-family:var(--mono)}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    .row{display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
+    .sectionTitle{font-weight:800; font-size:16px}
+    .mut{color:var(--mut)}
+    .small{font-size:12.5px}
+    .pane{display:none}
+    .pane.active{display:block}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px; border-radius:999px;
+      border:1px solid var(--bd2); background:rgba(13,26,58,.55);
+      font-size:12px; color:var(--mut);
+    }
+    .hr{height:1px;background:rgba(36,48,90,.55); margin:14px 0}
+    pre{
+      margin:0; padding:12px; border-radius:14px;
+      background:rgba(0,0,0,.25); border:1px solid rgba(36,48,90,.5);
+      overflow:auto; max-height:420px; color:#eaf0ff; font-size:12px;
+    }
+    .two{display:grid;grid-template-columns: 1.1fr .9fr; gap:12px}
+    .three{display:grid;grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px}
+    @media (max-width: 1020px){
+      .grid.topkpi{grid-template-columns: repeat(2, minmax(0,1fr))}
+      .grid.mid{grid-template-columns: 1fr}
+      .two{grid-template-columns: 1fr}
+      .three{grid-template-columns: 1fr}
+      .actions{justify-content:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <div class="logo">CT</div>
+        <div>
+          <div class="title">
+            SYNAPSE — Meta Control Tower
+            <span class="chip"><span class="dot" id="dotMode"></span><span id="chipMode">SIM / Offline</span></span>
+          </div>
+          <div class="sub">Cabina local: observabilidad + policy + recomendaciones. No LIVE, no tokens, no drama.</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="btnRefresh">Refresh</button>
+        <button id="btnCopySim">Copy: SIM pipeline</button>
+        <button id="btnCopyPolicy">Copy: Policy</button>
+        <button id="btnCopyServe">Copy: Serve dashboard</button>
+        <div class="toggle">
+          <input type="checkbox" id="chkAuto" />
+          <label for="chkAuto">Auto refresh</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="trends">Trends</div>
+      <div class="tab" data-tab="autopilot">Autopilot</div>
+      <div class="tab" data-tab="policy">Policy</div>
+      <div class="tab" data-tab="history">History</div>
+      <div class="tab" data-tab="raw">Raw JSON</div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="pane active" id="pane-overview">
+      <div class="grid topkpi">
+        <div class="card">
+          <div class="kpiLabel">Policy</div>
+          <div class="kpiValue" id="kPolicy">—</div>
+          <div class="kpiSub" id="kPolicySub">—</div>
+        </div>
+        <div class="card">
+          <div class="kpiLabel">Autopilot</div>
+          <div class="kpiValue" id="kAutopilot">—</div>
+          <div class="kpiSub" id="kAutopilotSub">—</div>
+        </div>
+        <div class="card">
+          <div class="kpiLabel">Runs (indexed)</div>
+          <div class="kpiValue" id="kRuns">—</div>
+          <div class="kpiSub">Index OK (si existe)</div>
+        </div>
+        <div class="card">
+          <div class="kpiLabel">Last run health</div>
+          <div class="kpiValue" id="kHealth">—</div>
+          <div class="kpiSub" id="kHealthSub">—</div>
+        </div>
+        <div class="card">
+          <div class="kpiLabel">Determinism</div>
+          <div class="kpiValue" id="kStable">—</div>
+          <div class="kpiSub">Stability radar</div>
+        </div>
+      </div>
+
+      <div class="grid mid" style="margin-top:12px">
+        <div class="card">
+          <div class="kpiLabel">Fingerprint (FP12)</div>
+          <div class="kpiValue mono" id="kFP12">—</div>
+          <div class="kpiSub">Pre == Run contract</div>
+        </div>
+        <div class="card">
+          <div class="kpiLabel">Overall SHA12</div>
+          <div class="kpiValue mono" id="kSHA12">—</div>
+          <div class="kpiSub" id="kFilesLine">Files: — | Missing: —</div>
+        </div>
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="kpiLabel">Stability radar</div>
+              <div class="kpiSub" id="kRadarNotes">—</div>
+            </div>
+            <span class="pill" id="pillStable">STABLE</span>
+          </div>
+          <div class="hr"></div>
+          <div class="three">
+            <div>
+              <div class="kpiLabel">FP12 changes (last N)</div>
+              <div class="kpiValue" id="kFpChanges">0</div>
+            </div>
+            <div>
+              <div class="kpiLabel">Stable runs (last N)</div>
+              <div class="kpiValue" id="kStableRuns">0</div>
+            </div>
+            <div>
+              <div class="kpiLabel">Rows / Errors</div>
+              <div class="kpiValue"><span id="kRows">—</span> / <span id="kErrs">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="row">
+          <div>
+            <div class="sectionTitle">Resumen ejecutivo (CFO/Ops-friendly)</div>
+            <div class="small mut">Fuente principal: <span class="mono">control_tower_snapshot.json</span> (fallback a JSONs legacy)</div>
+          </div>
+          <span class="pill" id="pillTS">TS: —</span>
+        </div>
+        <div class="hr"></div>
+        <div class="three">
+          <div>
+            <div class="kpiLabel">Mode</div>
+            <div class="kpiValue" id="kMode">—</div>
+          </div>
+          <div>
+            <div class="kpiLabel">Rows / Errors</div>
+            <div class="kpiValue"><span id="kRows2">—</span> rows | <span id="kErrs2">—</span> errors</div>
+          </div>
+          <div>
+            <div class="kpiLabel">Created / Reused</div>
+            <div class="kpiValue"><span id="kCreated">—</span> / <span id="kReused">—</span></div>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="small" id="kHighlights">SIM activo: —</div>
+      </div>
+    </div>
+
+    <!-- TRENDS -->
+    <div class="pane" id="pane-trends">
+      <div class="card">
+        <div class="row">
+          <div class="sectionTitle">Trends</div>
+          <div class="small mut">Fuente: <span class="mono">snapshot.trends</span></div>
+        </div>
+        <div class="hr"></div>
+        <pre id="trendsPre">—</pre>
+      </div>
+    </div>
+
+    <!-- AUTOPILOT -->
+    <div class="pane" id="pane-autopilot">
+      <div class="card">
+        <div class="row">
+          <div class="sectionTitle">Recomendaciones (sin ejecutar nada)</div>
+          <div class="small mut">Fuente: <span class="mono">snapshot.raw.autopilot</span> (fallback: meta_autopilot.json)</div>
+        </div>
+        <div class="hr"></div>
+        <pre id="autopilotPre">—</pre>
+      </div>
+    </div>
+
+    <!-- POLICY -->
+    <div class="pane" id="pane-policy">
+      <div class="card">
+        <div class="row">
+          <div class="sectionTitle">Rails de cumplimiento</div>
+          <div class="small mut">Fuente: <span class="mono">snapshot.raw.policy</span> (fallback: meta_policy_check.json)</div>
+        </div>
+        <div class="hr"></div>
+        <pre id="policyPre">—</pre>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="pane" id="pane-history">
+      <div class="card">
+        <div class="row">
+          <div class="sectionTitle">History</div>
+          <div class="small mut">Fuente: <span class="mono">meta_publish_runs_index.json</span></div>
+        </div>
+        <div class="hr"></div>
+        <pre id="historyPre">—</pre>
+      </div>
+    </div>
+
+    <!-- RAW JSON -->
+    <div class="pane" id="pane-raw">
+      <div class="card">
+        <div class="row">
+          <div class="sectionTitle">Raw JSON</div>
+          <div class="small mut">Para auditoría / debugging</div>
+        </div>
+        <div class="hr"></div>
+        <div class="row">
+          <select id="rawSelect" class="btn" style="appearance:none">
+            <option value="/data/run/control_tower_snapshot.json">control_tower_snapshot.json</option>
+            <option value="/data/run/meta_publish_preflight.json">meta_publish_preflight.json</option>
+            <option value="/data/run/meta_publish_run.json">meta_publish_run.json</option>
+            <option value="/data/run/meta_publish_report.json">meta_publish_report.json</option>
+            <option value="/data/run/meta_autopilot.json">meta_autopilot.json</option>
+            <option value="/data/run/meta_policy_check.json">meta_policy_check.json</option>
+            <option value="/data/run/meta_publish_runs_index.json">meta_publish_runs_index.json</option>
+          </select>
+          <button id="btnLoadRaw">Load</button>
+          <span class="small mut" id="rawHint">—</span>
+        </div>
+        <div class="hr"></div>
+        <pre id="rawPre">—</pre>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  // ----------------------------
+  // Paths (SSOT first)
+  // ----------------------------
+  const PATHS = {
+    snapshot:  "/data/run/control_tower_snapshot.json",
+    preflight: "/data/run/meta_publish_preflight.json",
+    run:       "/data/run/meta_publish_run.json",
+    report:    "/data/run/meta_publish_report.json",
+    autopilot: "/data/run/meta_autopilot.json",
+    policy:    "/data/run/meta_policy_check.json",
+    index:     "/data/run/meta_publish_runs_index.json",
+    indexNd:   "/data/run/meta_publish_runs_index.ndjson",
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function nowTick(){ return Date.now(); }
+  function toAbs(p){
+    // asegura que /data/... funcione aunque abras con file:// (spoiler: no debería)
+    try { return new URL(p, window.location.origin).toString(); }
+    catch { return p; }
+  }
+
+  async function fetchJSON(path){
+    const url = `${toAbs(path)}?t=${nowTick()}`;
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return await res.json();
+  }
+
+  async function fetchText(path){
+    const url = `${toAbs(path)}?t=${nowTick()}`;
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return await res.text();
+  }
+
+  function safeStr(x, fallback="—"){
+    if(x === null || x === undefined) return fallback;
+    if(typeof x === "string" && x.trim() === "") return fallback;
+    return String(x);
+  }
+
+  function statusClass(s){
+    const v = (s || "").toString().toUpperCase();
+    if(v.includes("GREEN") || v === "OK") return "ok";
+    if(v.includes("WARN") || v.includes("YELLOW")) return "warn";
+    if(v.includes("FAIL") || v.includes("RED") || v.includes("ERROR")) return "bad";
+    return "";
+  }
+
+  function setText(id, val){ $(id).textContent = val; }
+
+  function pretty(obj){
+    try { return JSON.stringify(obj, null, 2); }
+    catch { return String(obj); }
+  }
+
+  async function loadSnapshot(){
+    try{
+      return await fetchJSON(PATHS.snapshot);
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadFallback(){
+    // fallback mínimo para que no muera todo si no hay snapshot
+    const out = { kpis:{}, raw:{} };
+    try{
+      const [run, rep, pol, auto, idx] = await Promise.allSettled([
+        fetchJSON(PATHS.run),
+        fetchJSON(PATHS.report),
+        fetchJSON(PATHS.policy),
+        fetchJSON(PATHS.autopilot),
+        fetchJSON(PATHS.index),
+      ]);
+
+      const runObj  = run.status==="fulfilled" ? run.value : null;
+      const repObj  = rep.status==="fulfilled" ? rep.value : null;
+      const polObj  = pol.status==="fulfilled" ? pol.value : null;
+      const autoObj = auto.status==="fulfilled" ? auto.value : null;
+      const idxObj  = idx.status==="fulfilled" ? idx.value : null;
+
+      const counts = runObj?.counts || {};
+      const files  = runObj?.files || {};
+
+      out.kpis.mode            = runObj?.mode ?? repObj?.mode ?? "—";
+      out.kpis.policy_status   = polObj?.status ?? polObj?.result ?? "—";
+      out.kpis.autopilot_health= autoObj?.status ?? autoObj?.health?.status ?? "—";
+      out.kpis.runs_count      = idxObj?.count ?? (Array.isArray(idxObj) ? idxObj.length : (idxObj?.runs?.length ?? idxObj?.items?.length ?? 0));
+      out.kpis.rows            = counts.results ?? counts.rows ?? repObj?.exec?.rows ?? repObj?.rows ?? "—";
+      out.kpis.errors          = counts.errors ?? repObj?.exec?.errors ?? repObj?.errors ?? "—";
+      out.kpis.files_count     = files.count ?? runObj?.files_count ?? "—";
+      out.kpis.missing_count   = files.missing ?? runObj?.files_missing ?? "—";
+      out.kpis.fp12            = runObj?.run_fingerprint_12 ?? runObj?.preflight_fp12 ?? "—";
+      out.kpis.sha12           = files.overall_sha12 ?? runObj?.overall_sha12 ?? "—";
+
+      out.raw.run = runObj; out.raw.report = repObj; out.raw.policy = polObj; out.raw.autopilot = autoObj; out.raw.index = idxObj;
+      out.ts = new Date().toISOString();
+      return out;
+    }catch(e){
+      return out;
+    }
+  }
+
+  function renderOverview(ct){
+    const k = ct?.kpis || {};
+    const det = ct?.determinism || {};
+
+    const mode = safeStr(k.mode);
+    const policy = safeStr(k.policy_status);
+    const ap = safeStr(k.autopilot_health);
+    const runs = safeStr(k.runs_count, "0");
+    const rows = safeStr(k.rows);
+    const errs = safeStr(k.errors);
+    const fp12 = safeStr(k.fp12);
+    const sha12 = safeStr(k.sha12);
+    const filesCount = safeStr(k.files_count);
+    const miss = safeStr(k.missing_count);
+
+    // header chip
+    setText("chipMode", mode.toLowerCase().includes("sim") ? "SIM / Offline" : safeStr(mode));
+    $("dotMode").style.background = mode.toLowerCase().includes("sim") ? "var(--ok)" : "var(--warn)";
+
+    // KPI cards
+    setText("kPolicy", policy);
+    $("kPolicy").className = `kpiValue ${statusClass(policy)}`;
+    setText("kPolicySub", "OK = rails verdes (según snapshot)");
+
+    setText("kAutopilot", ap);
+    $("kAutopilot").className = `kpiValue ${statusClass(ap)}`;
+    setText("kAutopilotSub", "Recomendaciones, sin ejecutar");
+
+    setText("kRuns", runs);
+
+    const health = (String(errs) === "0") ? "GREEN" : (String(errs) === "—" ? "—" : "WARN");
+    setText("kHealth", health);
+    $("kHealth").className = `kpiValue ${statusClass(health)}`;
+    setText("kHealthSub", String(errs)==="0" ? "Cero broncas." : "Revisar errores.");
+
+    // Determinism / stability
+    const stableLabel = safeStr(det.status ?? det.label ?? "STABLE");
+    setText("kStable", stableLabel);
+    $("kStable").className = `kpiValue ${statusClass(stableLabel)}`;
+
+    setText("kFP12", fp12);
+    setText("kSHA12", sha12);
+    setText("kFilesLine", `Files: ${filesCount} | Missing: ${miss}`);
+
+    // Radar metrics
+    const fpChanges = safeStr(det.fp12_changes_last_n ?? det.fp12_changes ?? 0, "0");
+    const stableRuns = safeStr(det.stable_runs_last_n ?? det.stable_runs ?? 0, "0");
+    setText("kFpChanges", fpChanges);
+    setText("kStableRuns", stableRuns);
+
+    setText("kRows", rows);
+    setText("kErrs", errs);
+    setText("kRows2", rows);
+    setText("kErrs2", errs);
+
+    // created/reused: si existen dentro de snapshot, genial; si no, que no invente.
+    const created = safeStr(k.created ?? ct?.kpis?.created ?? "—");
+    const reused  = safeStr(k.reused ?? ct?.kpis?.reused ?? "—");
+    setText("kCreated", created);
+    setText("kReused", reused);
+
+    const notes = safeStr(det.notes ?? ct?.determinism?.notes ?? "FP12 no se mueve en la ventana: bien.");
+    setText("kRadarNotes", notes);
+
+    // pill stable
+    setText("pillStable", stableLabel.toUpperCase().includes("STABLE") ? "STABLE" : stableLabel);
+    setText("pillTS", `TS: ${safeStr(ct?.ts)}`);
+
+    setText("kMode", mode.toUpperCase());
+    setText("kHighlights", (mode.toLowerCase().includes("sim") ? "SIM activo: cero riesgo. Health GREEN." : "Modo: " + mode));
+  }
+
+  function renderTrends(ct){
+    const t = ct?.trends ?? null;
+    setText("trendsPre", t ? pretty(t) : "— (snapshot.trends vacío)");
+  }
+
+  function renderAutopilot(ct, fallbackAuto){
+    const a = ct?.raw?.autopilot ?? fallbackAuto ?? null;
+    setText("autopilotPre", a ? pretty(a) : "— (sin datos)");
+  }
+
+  function renderPolicy(ct, fallbackPol){
+    const p = ct?.raw?.policy ?? fallbackPol ?? null;
+    setText("policyPre", p ? pretty(p) : "— (sin datos)");
+  }
+
+  function renderHistory(idx){
+    setText("historyPre", idx ? pretty(idx) : "— (sin index)");
+  }
+
+  async function loadAll(){
+    // SSOT first
+    let ct = await loadSnapshot();
+    let fallback = null;
+
+    if(!ct){
+      fallback = await loadFallback();
+      ct = fallback;
+      // avisa suave
+      setText("rawHint", "Snapshot no cargó; usando fallback legacy.");
+    } else {
+      setText("rawHint", "Snapshot OK (SSOT).");
+    }
+
+    renderOverview(ct);
+    renderTrends(ct);
+
+    // para autopilot/policy/history, intenta usar snapshot.raw; si no, fallback fetch
+    let autoObj = ct?.raw?.autopilot ?? null;
+    let polObj  = ct?.raw?.policy ?? null;
+    let idxObj  = ct?.raw?.index ?? null;
+
+    if(!autoObj){
+      try{ autoObj = await fetchJSON(PATHS.autopilot); } catch(e){ autoObj = null; }
+    }
+    if(!polObj){
+      try{ polObj = await fetchJSON(PATHS.policy); } catch(e){ polObj = null; }
+    }
+    if(!idxObj){
+      try{ idxObj = await fetchJSON(PATHS.index); } catch(e){ idxObj = null; }
+    }
+
+    renderAutopilot(ct, autoObj);
+    renderPolicy(ct, polObj);
+    renderHistory(idxObj);
+  }
+
+  // ----------------------------
+  // Tabs
+  // ----------------------------
+  function setTab(name){
+    document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab===name));
+    document.querySelectorAll(".pane").forEach(p => p.classList.remove("active"));
+    const pane = $("pane-"+name);
+    if(pane) pane.classList.add("active");
+  }
+
+  document.querySelectorAll(".tab").forEach(t=>{
+    t.addEventListener("click", ()=> setTab(t.dataset.tab));
+  });
+
+  // ----------------------------
+  // Raw loader
+  // ----------------------------
+  $("btnLoadRaw").addEventListener("click", async ()=>{
+    const sel = $("rawSelect").value;
+    try{
+      const txt = await fetchText(sel);
+      setText("rawPre", txt);
+      setText("rawHint", `Loaded: ${sel}`);
+    }catch(e){
+      setText("rawPre", `ERROR: ${e.message}`);
+      setText("rawHint", `Fail: ${sel}`);
+    }
+  });
+
+  // ----------------------------
+  // Actions
+  // ----------------------------
+  async function copyToClipboard(text){
+    try{ await navigator.clipboard.writeText(text); }
+    catch(e){
+      // fallback: selection trick
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  }
+
+  $("btnRefresh").addEventListener("click", loadAll);
+  $("btnCopySim").addEventListener("click", ()=> copyToClipboard("powershell -ExecutionPolicy Bypass -File .\\\\scripts\\\\ct_ops.ps1 -Sim"));
+  $("btnCopyPolicy").addEventListener("click", ()=> copyToClipboard("Get-Content .\\\\data\\\\run\\\\meta_policy_check.json -Raw"));
+  $("btnCopyServe").addEventListener("click", ()=> copyToClipboard("powershell -ExecutionPolicy Bypass -File .\\\\scripts\\\\ct_ops.ps1 -Serve -Open"));
+
+  // Auto refresh
+  let autoTimer = null;
+  $("chkAuto").addEventListener("change", (e)=>{
+    if(e.target.checked){
+      autoTimer = setInterval(loadAll, 2500);
+    } else {
+      clearInterval(autoTimer); autoTimer=null;
+    }
+  });
+
+  // Boot
+  loadAll().catch(err=>{
+    console.error(err);
+    setText("rawHint", "Error cargando datos. Revisa consola.");
+  });
+</script>
+</body>
+</html>
+
