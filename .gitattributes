@@ -34,3 +34,5 @@
 *.mp4           binary
 *.zip           binary
 *.pdf           binary
+/.gitattributes text eol=lf
+/.gitignore     text eol=lf
