@@ -1,41 +1,36 @@
-# ACERO: diffs limpios, reproducibles, sin ruido de EOL
-* text=auto eol=lf
+# =========================
+# Canonical line endings
+# =========================
+*               text=auto
 
-# Windows scripts: ok con CRLF para que no chillen editores/herramientas
-*.ps1 text eol=crlf
-*.bat text eol=crlf
-*.cmd text eol=crlf
+# Code: prefer LF
+*.py            text eol=lf
+*.json          text eol=lf
+*.ndjson        text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.toml          text eol=lf
+*.ini           text eol=lf
+*.md            text eol=lf
+*.txt           text eol=lf
+*.csv           text eol=lf
 
-# Datos / configs
-*.ndjson text eol=lf
-*.json text eol=lf
-*.yml  text eol=lf
-*.yaml text eol=lf
-*.toml text eol=lf
+# PowerShell / Windows scripts: CRLF in working tree (no more warnings)
+*.ps1           text eol=crlf
+*.psm1          text eol=crlf
+*.psd1          text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
 
-# Binarios
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.webp binary
-* text=auto
+# Shell scripts: LF
+*.sh            text eol=lf
 
-# LF para código/config
-*.py   text eol=lf
-*.md   text eol=lf
-*.json text eol=lf
-*.toml text eol=lf
-*.ini  text eol=lf
-*.yml  text eol=lf
-*.yaml text eol=lf
-*.html text eol=lf
-
-# PowerShell: CRLF (para que no se ponga mamón Windows/PS)
-*.ps1 text eol=crlf
-
-# Binaries
-*.mp4 binary
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.webp binary
+# Binary assets
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.webp          binary
+*.gif           binary
+*.mp4           binary
+*.zip           binary
+*.pdf           binary
