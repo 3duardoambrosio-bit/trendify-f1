@@ -15,7 +15,7 @@ class Artifact:
 
 
 def artifact_from_file(path: Path, *, base_dir: Path) -> Artifact:
-    rp = str(path.resolve().relative_to(base_dir.resolve()))
+    rp = path.resolve().relative_to(base_dir.resolve()).as_posix()
     return Artifact(relpath=rp, sha256=file_sha256(path), bytes=path.stat().st_size)
 
 
@@ -46,5 +46,4 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
 
 def read_manifest(path: Path) -> dict[str, Any]:
     import json
-
     return json.loads(path.read_text(encoding="utf-8"))

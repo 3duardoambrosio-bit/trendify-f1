@@ -104,7 +104,11 @@ def update_manifest_hashes(kit_dir: Path, manifest: dict) -> dict:
             "sha256": sha256_bytes(b),
         })
     manifest["artifacts"] = new_artifacts
-    manifest["self_hash"] = compute_self_hash(manifest)
+
+    # self_hash should ignore itself
+    tmp = dict(manifest)
+    tmp.pop("self_hash", None)
+    manifest["self_hash"] = compute_self_hash(tmp)
     return manifest
 
 def build_release_zip(kit_dir: Path, out_zip: Path) -> dict:
@@ -130,6 +134,7 @@ def validate_wavekit_zip(zip_path: Path) -> dict:
             raise AssertionError(f"MISSING in wavekit zip: {sorted(miss)}")
 
         m = json.loads(z.read("manifest.json").decode("utf-8"))
+
         # Validate artifact hashes vs zip contents
         for a in m.get("artifacts", []):
             rel = posix_rel(a.get("relpath", ""))
@@ -180,6 +185,8 @@ def main():
         if p.suffix.lower() in TEXT_EXTS or p.name == "manifest.json":
             changed.append(normalize_text_file(p))
 
+    normalized_files = sum(1 for x in changed if x["changed"])
+
     # 2) Force POSIX relpaths in manifest + rebuild hashes + self_hash
     manifest = load_manifest(manifest_path)
     pid = manifest.get("product_id", "wavekit")
@@ -206,15 +213,30 @@ def main():
     # 7) Validate the release zip
     val = validate_wavekit_zip(out_zip)
 
+    # Human output
     print("PASS: harden_wavekit OK")
     print(f"- kit_dir: {kit_dir}")
     print(f"- product_id: {pid}")
     print(f"- out_zip: {out_zip}")
     print(f"- sha256: {built['sha256']}")
     print(f"- sidecar: {side}")
-    print(f"- normalized_files: {sum(1 for x in changed if x['changed'])} changed (of {len(changed)})")
-    print(f"- bundle_rebuilt: {bund['rebuilt']}")
+    print(f"- normalized_files: {normalized_files} changed (of {len(changed)})")
+    print(f"- bundle_rebuilt: {bund.get('rebuilt', False)}")
     print(f"- validate: {val}")
+
+    # Machine-readable output for gates
+    summary = {
+        "kit_dir": str(kit_dir),
+        "product_id": str(pid),
+        "out_zip": str(out_zip),
+        "sha256": str(built["sha256"]),
+        "sidecar": str(side),
+        "normalized_files": int(normalized_files),
+        "normalized_total": int(len(changed)),
+        "bundle_rebuilt": bool(bund.get("rebuilt", False)),
+        "validate": val,
+    }
+    print("HARDEN_SUMMARY_JSON=" + json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
 
 if __name__ == "__main__":
     main()

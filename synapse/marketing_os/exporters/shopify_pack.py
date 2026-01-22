@@ -21,7 +21,8 @@ def write_shopify_products_csv(
     status: str = "draft",
 ) -> Path:
     """
-    Writes a minimal Shopify products CSV (UTF-8-SIG to play nice with Excel on Windows).
+    Writes a minimal Shopify products CSV (UTF-8, NO BOM, LF line endings).
+    (Designed for automation + deterministic artifacts.)
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "shopify_products.csv"
@@ -40,8 +41,8 @@ def write_shopify_products_csv(
         "Status",
     ]
 
-    with out.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
+    with out.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         w.writeheader()
         w.writerow(
             {
