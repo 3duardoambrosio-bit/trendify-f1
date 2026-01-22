@@ -121,34 +121,49 @@ def _minimal_product(product_id: str) -> dict[str, Any]:
     return {"product_id": product_id, "title": product_id, "description": "", "handle": product_id}
 
 
-def _generate_creatives_raw(product: dict[str, Any]) -> list[dict[str, Any]]:
-    title = str(product.get("title") or product.get("name") or product.get("product_name") or "Producto")
-    benefit = str(product.get("benefit") or product.get("hook") or "mejor valor")
+def _pick_title(product: dict[str, Any], fallback: str) -> str:
+    return str(product.get("title") or product.get("name") or product.get("product_name") or fallback).strip() or fallback
 
+
+def _pick_desc(product: dict[str, Any]) -> str:
+    return str(product.get("description") or product.get("desc") or "").strip()
+
+
+def _pick_benefit(product: dict[str, Any]) -> str:
+    return str(product.get("benefit") or product.get("hook") or product.get("usp") or "mejor valor").strip()
+
+
+def _generate_creatives_raw(product: dict[str, Any]) -> list[dict[str, Any]]:
+    title = _pick_title(product, "Producto")
+    benefit = _pick_benefit(product)
+
+    # Copy angles: directo, social proof, urgencia, outcome
     templates = [
-        "{title} que sí cumple: {benefit}.",
-        "Si lo pruebas, no regresas: {title}.",
-        "Upgrade inmediato: {title}. {benefit}.",
-        "{title} para la raza que quiere resultados, no promesas.",
-        "Tu día a día, pero en modo PRO: {title}.",
-        "{title}: porque lo barato sale caro, y esto sale bueno.",
-        "Lo necesitas, aunque no lo sabías: {title}.",
-        "Menos excusas, más resultados: {title}.",
-        "La diferencia se nota en días: {title}.",
-        "Hazlo fácil: {title} y listo.",
-        "{title} + {benefit} = combo ganador.",
-        "Deja de batallar: {title}.",
+        ("Directo", "{title} que sí cumple: {benefit}."),
+        ("Upgrade", "Upgrade inmediato: {title}. {benefit}."),
+        ("Outcome", "Resultados que se notan: {title}."),
+        ("Social", "La gente que sabe, elige {title}."),
+        ("Fricción", "Menos batallar, más avanzar: {title}."),
+        ("Valor", "Lo barato sale caro. Mejor: {title}."),
+        ("Descubrimiento", "Lo necesitas, aunque no lo sabías: {title}."),
+        ("Disciplina", "Menos excusas, más acción: {title}."),
+        ("Tiempo", "Tu día a día, pero en modo PRO: {title}."),
+        ("CTA", "Pruébalo hoy: {title}."),
+        ("Hook", "{title} + {benefit} = combo ganador."),
+        ("Simple", "Hazlo fácil: {title} y listo."),
     ]
 
     out: list[dict[str, Any]] = []
-    for i, t in enumerate(templates, start=1):
+    for i, (angle, t) in enumerate(templates, start=1):
         txt = t.format(title=title, benefit=benefit).strip()
         out.append(
             {
                 "creative_id": f"c{i}",
+                "angle": angle,
                 "primary_text": txt,
                 "headline": f"{title} | {benefit}".strip(),
                 "description": f"Oferta limitada para {title}".strip(),
+                "cta": "Shop Now",
             }
         )
     return out
@@ -225,7 +240,7 @@ def run(
 
     _write_ndjson(paths.creatives_ndjson, creatives)
 
-    title = str(product.get("title") or product.get("name") or product.get("product_name") or product_id)
+    title = _pick_title(product, product_id)
     q = score_creatives(creatives, title=title)
     q_payload = {"score": q.score, "metrics": q.metrics, "dedup_dropped": dres.dropped}
     _write_json(paths.quality_json, q_payload)
@@ -235,7 +250,7 @@ def run(
         paths.shopify_dir,
         product={
             "title": title,
-            "description": product.get("description") or product.get("desc") or "",
+            "description": _pick_desc(product),
             "handle": product.get("handle") or title or product_id,
         },
         tags=["synapse", "wavekit"],
