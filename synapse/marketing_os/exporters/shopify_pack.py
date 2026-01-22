@@ -1,15 +1,37 @@
 from __future__ import annotations
 
 import csv
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
 
 def _as_handle(s: str) -> str:
-    s2 = "".join([c.lower() if c.isalnum() else "-" for c in s.strip()])
-    while "--" in s2:
-        s2 = s2.replace("--", "-")
-    return s2.strip("-") or "product"
+    """
+    Shopify handle:
+    - ASCII lowercase
+    - [a-z0-9-]
+    - no accents
+    - no double hyphens
+    """
+    s = (s or "").strip()
+    if not s:
+        return "product"
+
+    # Strip accents -> ASCII
+    s = unicodedata.normalize("NFKD", s)
+    s = s.encode("ascii", "ignore").decode("ascii")
+
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = re.sub(r"-{2,}", "-", s).strip("-")
+
+    # Shopify handle practical limit (keep it sane)
+    if len(s) > 200:
+        s = s[:200].rstrip("-")
+
+    return s or "product"
 
 
 def write_shopify_products_csv(
@@ -21,8 +43,9 @@ def write_shopify_products_csv(
     status: str = "draft",
 ) -> Path:
     """
-    Writes a minimal Shopify products CSV (UTF-8, NO BOM, LF line endings).
-    (Designed for automation + deterministic artifacts.)
+    Writes a minimal Shopify products CSV:
+    - UTF-8 (NO BOM)
+    - LF only
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "shopify_products.csv"
@@ -41,7 +64,8 @@ def write_shopify_products_csv(
         "Status",
     ]
 
-    with out.open("w", encoding="utf-8", newline="") as f:
+    # Force LF + UTF-8 no BOM
+    with out.open("w", encoding="utf-8", newline="\n") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         w.writeheader()
         w.writerow(
@@ -54,4 +78,5 @@ def write_shopify_products_csv(
                 "Status": status,
             }
         )
+
     return out
