@@ -172,3 +172,6 @@ data/run/*.log
 data/run/*.pid
 data/run/pytest_*.log
 data/run/control_tower_snapshot_*.json
+_extracted/
+_extracted/
+exports/
