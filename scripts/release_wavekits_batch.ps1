@@ -36,14 +36,18 @@ function Test-GitCleanGuard {
 
 function Get-ProductIdsFromCsv([string]$CsvPath) {
   if (-not (Test-Path $CsvPath)) { Stop-Release ("Missing canonical CSV: {0}" -f $CsvPath) }
+
   $ids = @()
   $rows = Import-Csv $CsvPath
   foreach ($r in $rows) {
     $prodId = ($r.product_id).ToString().Trim()
     if ($prodId) { $ids += $prodId }
   }
+
   if (-not $ids -or $ids.Count -eq 0) { Stop-Release "No product_id rows found in canonical CSV." }
-  return $ids
+
+  # IMPORTANT: force array output even for single element
+  return @($ids)
 }
 
 Write-Host "============================================================"
@@ -81,7 +85,9 @@ python scripts\build_canonical_from_dropi.py --shortlist $ShortlistCsv --dump $D
 if ($LASTEXITCODE -ne 0) { Stop-Release "build_canonical_from_dropi failed." }
 if (-not (Test-Path $CanonicalOut)) { Stop-Release ("canonical not produced: {0}" -f $CanonicalOut) }
 
-$ids = Get-ProductIdsFromCsv $CanonicalOut
+# IMPORTANT: force array (prevents foreach over string chars under StrictMode)
+$ids = @(Get-ProductIdsFromCsv $CanonicalOut)
+
 Write-Host ""
 Write-Host ("==> batch wavekits: {0} products" -f $ids.Count)
 
