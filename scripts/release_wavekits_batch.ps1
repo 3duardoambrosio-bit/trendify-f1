@@ -3,10 +3,12 @@ $ErrorActionPreference = "Stop"
 
 # =========================
 # WAVEKIT BATCH RELEASE (NO API/TOKENS)
+# Dropi selection happens automatically from dump evidence:
+#   dump.json -> shortlist.csv -> canonical_products.csv -> wavekits
 # =========================
-$ShortlistCsv = "data\launch\shortlist_dropi_f1.csv"
-$DumpJson     = "data\evidence\launch_candidates_dropi_dump_f1_v2.json"
-$OutRoot      = "exports"
+
+$DumpJson = "data\evidence\launch_candidates_dropi_dump_f1_v2.json"
+$OutRoot  = "exports"
 
 function Stop-Release([string]$Message) { throw $Message }
 
@@ -17,14 +19,12 @@ function Test-GitCleanGuard {
   $lines = @()
   if ($s) { $lines = $s -split "`n" | ForEach-Object { $_.TrimEnd() } }
 
-  # Ignore generated outputs
+  # If .gitignore is doing its job, exports won't show. Still keep a safety net.
   $bad = $lines | Where-Object {
     $_ -and
-    ($_ -notmatch "^\?\?\s+exports[/\\]releases[/\\]") -and
-    ($_ -notmatch "^\?\?\s+exports[/\\]wave_kit_.*\.(zip|sha256)$") -and
-    ($_ -notmatch "^\?\?\s+exports[/\\]_batch[/\\]") -and
-    ($_ -notmatch "^\?\?\s+exports[/\\](seed|p\d+)[/\\]") -and
-    ($_ -notmatch "^\?\?\s+exports[/\\]wave_kit_.*\.sha256$")
+    ($_ -notmatch "^\?\?\s+exports[/\\]") -and
+    ($_ -notmatch "^\?\?\s+_extracted[/\\]") -and
+    ($_ -notmatch "^\?\?\s+\.env$")
   }
 
   if ($bad -and $bad.Count -gt 0) {
@@ -34,7 +34,7 @@ function Test-GitCleanGuard {
   }
 }
 
-function Get-ProductIdsFromCsv([string]$CsvPath) {
+function Get-ProductIdsFromCanonical([string]$CsvPath) {
   if (-not (Test-Path $CsvPath)) { Stop-Release ("Missing canonical CSV: {0}" -f $CsvPath) }
 
   $ids = @()
@@ -46,7 +46,7 @@ function Get-ProductIdsFromCsv([string]$CsvPath) {
 
   if (-not $ids -or $ids.Count -eq 0) { Stop-Release "No product_id rows found in canonical CSV." }
 
-  # IMPORTANT: force array output even for single element
+  # Force array output even for single element (StrictMode safe)
   return @($ids)
 }
 
@@ -54,7 +54,6 @@ Write-Host "============================================================"
 Write-Host "WAVEKIT BATCH RELEASE (NO API/TOKENS)"
 Write-Host "============================================================"
 Write-Host ("Repo: {0}" -f (Get-Location))
-Write-Host ("Shortlist: {0}" -f $ShortlistCsv)
 Write-Host ("Dump: {0}" -f $DumpJson)
 Write-Host ("OutRoot: {0}" -f $OutRoot)
 Write-Host ""
@@ -71,22 +70,32 @@ Write-Host "==> doctor"
 python -m synapse.infra.doctor
 if ($LASTEXITCODE -ne 0) { Stop-Release "doctor failed." }
 
+if (-not (Test-Path $DumpJson)) {
+  Stop-Release ("Missing dump JSON evidence: {0}" -f $DumpJson)
+}
+
+# Batch id = current git sha
 $sha = (git rev-parse --short=12 HEAD).Trim()
 $batchDir = "exports\releases\_batch\$sha"
 New-Item -ItemType Directory -Force $batchDir | Out-Null
 
+# Everything generated stays inside exports (ignored)
+$ShortlistCsv = Join-Path $batchDir "shortlist.csv"
 $CanonicalOut = Join-Path $batchDir "canonical_products.csv"
 
 Write-Host ""
-Write-Host "==> build canonical (from Dropi evidence)"
-Write-Host ("CanonicalOut: {0}" -f $CanonicalOut)
+Write-Host "==> autopick shortlist (from Dropi dump)"
+python scripts\dropi_autopick.py --dump $DumpJson --out $ShortlistCsv --n 20
+if ($LASTEXITCODE -ne 0) { Stop-Release "dropi_autopick failed." }
+if (-not (Test-Path $ShortlistCsv)) { Stop-Release ("shortlist not produced: {0}" -f $ShortlistCsv) }
 
+Write-Host ""
+Write-Host "==> build canonical (from Dropi evidence)"
 python scripts\build_canonical_from_dropi.py --shortlist $ShortlistCsv --dump $DumpJson --out $CanonicalOut
 if ($LASTEXITCODE -ne 0) { Stop-Release "build_canonical_from_dropi failed." }
 if (-not (Test-Path $CanonicalOut)) { Stop-Release ("canonical not produced: {0}" -f $CanonicalOut) }
 
-# IMPORTANT: force array (prevents foreach over string chars under StrictMode)
-$ids = @(Get-ProductIdsFromCsv $CanonicalOut)
+$ids = @(Get-ProductIdsFromCanonical $CanonicalOut)
 
 Write-Host ""
 Write-Host ("==> batch wavekits: {0} products" -f $ids.Count)
@@ -129,11 +138,14 @@ foreach ($prodId in $ids) {
   $meta = @{
     git_sha       = $sha
     product_id    = $prodId
+    dump_json     = $DumpJson
+    shortlist_csv = $ShortlistCsv
     canonical_csv = $CanonicalOut
     out_root      = $OutRoot
     harden        = $summary
     ts_utc        = (Get-Date).ToUniversalTime().ToString("o")
   }
+
   $metaPath = Join-Path $rel "release_meta.json"
   ($meta | ConvertTo-Json -Depth 8) | Out-File -FilePath $metaPath -Encoding utf8
 
@@ -158,4 +170,5 @@ Write-Host ("BATCH_INDEX: {0}" -f $indexPath)
 Write-Host "COPY THIS (NOT A COMMAND):"
 Write-Host ("GIT_SHA:     {0}" -f $sha)
 Write-Host ("INDEX_JSON:  {0}" -f $indexPath)
+Write-Host ("SHORTLIST:   {0}" -f $ShortlistCsv)
 Write-Host ("CANONICAL:   {0}" -f $CanonicalOut)
