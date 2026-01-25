@@ -98,7 +98,7 @@ if (-not (Test-Path $ShortlistCsv)) { Stop-Release ("shortlist not produced: {0}
 
 Write-Host ""
 Write-Host "==> build canonical (from Dropi evidence)"
-python scripts\build_canonical_from_dropi.py --shortlist $ShortlistCsv --dump $DumpJson --out $CanonicalOut
+python scripts\build_canonical_from_dropi_v2.py --shortlist $ShortlistCsv --dump $DumpJson --out $CanonicalOut
 if ($LASTEXITCODE -ne 0) { Stop-Release "build_canonical_from_dropi failed." }
 if (-not (Test-Path $CanonicalOut)) { Stop-Release ("canonical not produced: {0}" -f $CanonicalOut) }
 
