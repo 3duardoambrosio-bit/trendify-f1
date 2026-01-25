@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 # =========================
 # WAVEKIT BATCH RELEASE (NO API/TOKENS)
 # Dropi selection happens automatically from dump evidence:
-#   dump.json -> shortlist.csv -> canonical_products.csv -> wavekits
+#   dump.json -> shortlist.csv -> canonical_products.csv -> wavekits -> enrich_shopify -> harden -> release
 # =========================
 
 $DumpJson = "data\evidence\launch_candidates_dropi_dump_f1_v2.json"
@@ -48,6 +48,13 @@ function Get-ProductIdsFromCanonical([string]$CsvPath) {
 
   # Force array output even for single element (StrictMode safe)
   return @($ids)
+}
+
+function Assert-ShopifyBodyNonEmpty([string]$ShopifyCsvPath) {
+  if (-not (Test-Path $ShopifyCsvPath)) { Stop-Release ("Missing Shopify CSV: {0}" -f $ShopifyCsvPath) }
+
+  python -c "import csv,sys; p=sys.argv[1]; r=list(csv.DictReader(open(p,encoding='utf-8',newline=''))); assert r, 'NO_ROWS'; b=(r[0].get('Body (HTML)') or '').strip(); assert b, 'EMPTY_BODY_HTML'; print('shopify_body: OK (len=%d)'%len(b))" $ShopifyCsvPath
+  if ($LASTEXITCODE -ne 0) { Stop-Release ("Shopify Body (HTML) still empty after enrich: {0}" -f $ShopifyCsvPath) }
 }
 
 Write-Host "============================================================"
@@ -106,12 +113,22 @@ foreach ($prodId in $ids) {
   Write-Host ""
   Write-Host ("--- PRODUCT {0} ---" -f $prodId)
 
+  $kitDir = Join-Path $OutRoot $prodId
+  $shopCsv = Join-Path $kitDir "shopify\shopify_products.csv"
+
   Write-Host "==> wave --apply"
   python -m synapse.cli wave --product-id $prodId --apply --out-root $OutRoot --canonical-csv $CanonicalOut
   if ($LASTEXITCODE -ne 0) { Stop-Release ("wave failed for product_id={0}" -f $prodId) }
 
+  Write-Host "==> enrich shopify csv"
+  python scripts\enrich_shopify_csv.py --kit-dir $kitDir --canonical-csv $CanonicalOut
+  if ($LASTEXITCODE -ne 0) { Stop-Release ("enrich_shopify_csv failed for product_id={0}" -f $prodId) }
+
+  Write-Host "==> assert shopify body non-empty"
+  Assert-ShopifyBodyNonEmpty $shopCsv
+
   Write-Host "==> harden_wavekit (STRICT)"
-  $hardenOut = & python scripts\harden_wavekit.py (Join-Path $OutRoot $prodId)
+  $hardenOut = & python scripts\harden_wavekit.py $kitDir
   $hardenOut | ForEach-Object { Write-Host $_ }
 
   $hit = $hardenOut | Where-Object { $_ -like "HARDEN_SUMMARY_JSON=*" } | Select-Object -Last 1
