@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 
+SEED_FALLBACK_PRICE = "29.99"
+SEED_FALLBACK_COMPARE_AT = "49.99"
+SEED_FALLBACK_TAG = "seed_placeholder_price"
+
+
 def _to_list(x: Any) -> list[str]:
     if x is None:
         return []
@@ -16,7 +21,6 @@ def _to_list(x: Any) -> list[str]:
     s = str(x).strip()
     if not s:
         return []
-    # try JSON list
     if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
         try:
             obj = json.loads(s)
@@ -24,7 +28,6 @@ def _to_list(x: Any) -> list[str]:
                 return [str(v).strip() for v in obj if str(v).strip()]
         except Exception:
             pass
-    # comma / pipe separated
     parts = re.split(r"[,\|]\s*", s)
     return [p.strip() for p in parts if p.strip()]
 
@@ -38,6 +41,20 @@ def _pick_row(canonical_csv: Path, product_id: str) -> dict[str, str]:
             if (row.get("product_id") or "").strip() == product_id:
                 return {k: (v or "").strip() for k, v in row.items()}
     return {}
+
+
+def _merge_tags(existing: str, add: list[str]) -> str:
+    raw = [x.strip() for x in (existing or "").split(",") if x.strip()]
+    seen = {x.lower() for x in raw}
+    out = raw[:]
+    for t in add:
+        tt = (t or "").strip()
+        if not tt:
+            continue
+        if tt.lower() not in seen:
+            seen.add(tt.lower())
+            out.append(tt)
+    return ", ".join(out)
 
 
 def _write_csv_utf8_lf(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -70,8 +87,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # images (first image for Shopify import)
     img = (
-        row.get("image_src")
-        or row.get("image_url")
+        row.get("image_url")
+        or row.get("image_src")
         or row.get("image")
         or row.get("thumbnail")
         or ""
@@ -80,15 +97,23 @@ def main(argv: list[str] | None = None) -> int:
         imgs = _to_list(row.get("images") or row.get("image_urls") or "")
         img = imgs[0] if imgs else ""
 
-    # pricing (optional)
+    # pricing
     price = row.get("price") or row.get("sale_price") or ""
     compare_at = row.get("compare_at_price") or row.get("original_price") or row.get("msrp") or ""
 
-    # SEO (optional but nice)
+    # seed-only fallback (keeps real products clean)
+    used_seed_price = False
+    if product_id == "seed" and (not price or price.strip() == ""):
+        price = SEED_FALLBACK_PRICE
+        if not compare_at:
+            compare_at = SEED_FALLBACK_COMPARE_AT
+        used_seed_price = True
+        tags = _merge_tags(tags, [SEED_FALLBACK_TAG])
+
+    # SEO
     seo_title = row.get("seo_title") or title
     seo_desc = row.get("seo_description") or (row.get("description") or row.get("body") or "")
 
-    # Shopify classic import schema (safe subset)
     fieldnames = [
         "Handle",
         "Title",
@@ -123,7 +148,6 @@ def main(argv: list[str] | None = None) -> int:
     base = {
         "Handle": handle,
         "Title": title,
-        # Leave Body empty here; enrich_shopify_csv.py will fill it deterministically
         "Body (HTML)": "",
         "Vendor": (row.get("vendor") or "").strip() or args.vendor,
         "Type": (row.get("type") or row.get("category") or "").strip(),
@@ -134,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         "Variant SKU": row.get("sku") or "",
         "Variant Grams": row.get("grams") or "",
         "Variant Inventory Tracker": "",
-        "Variant Inventory Qty": row.get("stock") or row.get("inventory") or "",
+        "Variant Inventory Qty": row.get("inventory_qty") or row.get("stock") or row.get("inventory") or "",
         "Variant Inventory Policy": "deny",
         "Variant Fulfillment Service": "manual",
         "Variant Price": price,
@@ -157,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"- product_id: {product_id}")
     print(f"- has_image: {bool(img)}")
     print(f"- has_price: {bool(price)}")
+    print(f"- seed_price_fallback: {used_seed_price}")
     return 0
 
 
