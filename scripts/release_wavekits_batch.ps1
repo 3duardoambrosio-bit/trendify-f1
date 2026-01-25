@@ -120,7 +120,11 @@ foreach ($prodId in $ids) {
   python -m synapse.cli wave --product-id $prodId --apply --out-root $OutRoot --canonical-csv $CanonicalOut
   if ($LASTEXITCODE -ne 0) { Stop-Release ("wave failed for product_id={0}" -f $prodId) }
 
-  Write-Host "==> enrich shopify csv"
+  Write-Host "==> export shopify csv (v2 schema)"
+python scripts\shopify_export_from_canonical.py --kit-dir $kitDir --canonical-csv $CanonicalOut
+if ($LASTEXITCODE -ne 0) { Stop-Release ("shopify_export_from_canonical failed for product_id={0}" -f $prodId) }
+
+Write-Host "==> enrich shopify csv"
   python scripts\enrich_shopify_csv.py --kit-dir $kitDir --canonical-csv $CanonicalOut
   if ($LASTEXITCODE -ne 0) { Stop-Release ("enrich_shopify_csv failed for product_id={0}" -f $prodId) }
 
