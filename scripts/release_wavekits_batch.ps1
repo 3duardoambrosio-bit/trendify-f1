@@ -3,8 +3,7 @@ $ErrorActionPreference = "Stop"
 
 # =========================
 # WAVEKIT BATCH RELEASE (NO API/TOKENS)
-# Dropi selection happens automatically from dump evidence:
-#   dump.json -> shortlist.csv -> canonical_products.csv -> QUALITY GATE -> wavekits -> shopify export v2 -> enrich -> harden -> release
+# dump.json -> shortlist.csv -> canonical_products.csv -> QUALITY GATE -> wavekits -> shopify export v2 -> enrich -> harden -> release
 # =========================
 
 $DumpJson = "data\evidence\launch_candidates_dropi_dump_f1_v2.json"
@@ -19,7 +18,6 @@ function Test-GitCleanGuard {
   $lines = @()
   if ($s) { $lines = $s -split "`n" | ForEach-Object { $_.TrimEnd() } }
 
-  # If .gitignore is doing its job, exports won't show. Still keep a safety net.
   $bad = $lines | Where-Object {
     $_ -and
     ($_ -notmatch "^\?\?\s+exports[/\\]") -and
@@ -46,7 +44,6 @@ function Get-ProductIdsFromCanonical([string]$CsvPath) {
 
   if (-not $ids -or $ids.Count -eq 0) { Stop-Release "No product_id rows found in canonical CSV." }
 
-  # Force array output even for single element (StrictMode safe)
   return @($ids)
 }
 
@@ -81,14 +78,14 @@ if (-not (Test-Path $DumpJson)) {
   Stop-Release ("Missing dump JSON evidence: {0}" -f $DumpJson)
 }
 
-# Batch id = current git sha
 $sha = (git rev-parse --short=12 HEAD).Trim()
 $batchDir = "exports\releases\_batch\$sha"
 New-Item -ItemType Directory -Force $batchDir | Out-Null
 
-# Everything generated stays inside exports (ignored)
 $ShortlistCsv = Join-Path $batchDir "shortlist.csv"
 $CanonicalOut = Join-Path $batchDir "canonical_products.csv"
+# IMPORTANT: builder v2 writes THIS report name (no ".csv" in filename)
+$canonReport  = Join-Path $batchDir "canonical_products.report.json"
 
 Write-Host ""
 Write-Host "==> autopick shortlist (from Dropi dump)"
@@ -106,10 +103,8 @@ $ids = @(Get-ProductIdsFromCanonical $CanonicalOut)
 
 Write-Host ""
 Write-Host "==> canonical quality gate"
-$canonReport = ($CanonicalOut + ".report.json")
 if (-not (Test-Path $canonReport)) { Stop-Release ("Missing canonical report: {0}" -f $canonReport) }
 
-# allow-seed ONLY when the ONLY product is seed
 if ($ids.Count -eq 1 -and $ids[0] -eq "seed") {
   python scripts\canonical_quality_gate.py --report $canonReport --allow-seed
 } else {
@@ -170,15 +165,15 @@ foreach ($prodId in $ids) {
   Copy-Item $zipPath, $shaPath $rel -Force
 
   $meta = @{
-    git_sha       = $sha
-    product_id    = $prodId
-    dump_json     = $DumpJson
-    shortlist_csv = $ShortlistCsv
-    canonical_csv = $CanonicalOut
+    git_sha          = $sha
+    product_id       = $prodId
+    dump_json        = $DumpJson
+    shortlist_csv    = $ShortlistCsv
+    canonical_csv    = $CanonicalOut
     canonical_report = $canonReport
-    out_root      = $OutRoot
-    harden        = $summary
-    ts_utc        = (Get-Date).ToUniversalTime().ToString("o")
+    out_root         = $OutRoot
+    harden           = $summary
+    ts_utc           = (Get-Date).ToUniversalTime().ToString("o")
   }
 
   $metaPath = Join-Path $rel "release_meta.json"
@@ -207,3 +202,4 @@ Write-Host ("GIT_SHA:     {0}" -f $sha)
 Write-Host ("INDEX_JSON:  {0}" -f $indexPath)
 Write-Host ("SHORTLIST:   {0}" -f $ShortlistCsv)
 Write-Host ("CANONICAL:   {0}" -f $CanonicalOut)
+Write-Host ("CANON_RPT:   {0}" -f $canonReport)
