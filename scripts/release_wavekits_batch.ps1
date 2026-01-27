@@ -1,3 +1,8 @@
+param(
+  [string]$DumpJson = "data\evidence\launch_candidates_dropi_dump_f1_v3.json",
+  [string]$OutRoot  = "exports"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -6,9 +11,6 @@ $ErrorActionPreference = "Stop"
 # dump.json -> shortlist.csv -> canonical_products.csv -> QUALITY GATE -> wavekits -> shopify export v2 -> enrich -> harden -> release
 # =========================
 
-$DumpJson = "data\evidence\launch_candidates_dropi_dump_f1_v2.json"
-$OutRoot  = "exports"
-
 function Stop-Release([string]$Message) { throw $Message }
 
 function Test-GitCleanGuard {
@@ -16,16 +18,18 @@ function Test-GitCleanGuard {
   if ($LASTEXITCODE -ne 0) { Stop-Release "GIT not available / not a repo." }
 
   $lines = @()
-  if ($s) { $lines = $s -split "`n" | ForEach-Object { $_.TrimEnd() } }
+  if ($s) { $lines = @($s -split "`n" | ForEach-Object { $_.TrimEnd() }) }
 
-  $bad = $lines | Where-Object {
+  # Force array ALWAYS (StrictMode-safe)
+  $bad = @($lines | Where-Object {
     $_ -and
     ($_ -notmatch "^\?\?\s+exports[/\\]") -and
     ($_ -notmatch "^\?\?\s+_extracted[/\\]") -and
+    ($_ -notmatch "^\?\?\s+_extracted_proof[/\\]") -and
     ($_ -notmatch "^\?\?\s+\.env$")
-  }
+  })
 
-  if ($bad -and $bad.Count -gt 0) {
+  if ($bad.Count -gt 0) {
     Write-Host "DIRTY_TREE (non-generated changes):"
     $bad | ForEach-Object { Write-Host $_ }
     Stop-Release "Refusing to release from a dirty working tree (non-generated). Commit or restore changes."
@@ -43,7 +47,6 @@ function Get-ProductIdsFromCanonical([string]$CsvPath) {
   }
 
   if (-not $ids -or $ids.Count -eq 0) { Stop-Release "No product_id rows found in canonical CSV." }
-
   return @($ids)
 }
 
