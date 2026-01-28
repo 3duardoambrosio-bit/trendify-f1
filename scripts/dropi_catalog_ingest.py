@@ -2,14 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 dropi_catalog_ingest.py
-- Ingiere un CSV de catálogo (Dropi u otro) con headers variables.
-- Auto-detecta encoding/delimitador.
-- Auto-mapea columnas a un schema canónico:
-  product_id, title, description, price, compare_at_price, image_url, tags
-- Genera un dump v3 con candidates[] + source{} completo y score.
-
-Uso:
-  python scripts/dropi_catalog_ingest.py --catalog data\\evidence\\dropi_catalog_export_REAL.csv --out data\\evidence\\launch_candidates_dropi_catalog_v3.json --limit 5000
+CSV real -> dump v3 (candidates[] con source{} completo + score).
+Robusto: detecta encoding/delimitador, auto-mapea headers, parsea precio, extrae 1er image_url.
 """
 
 from __future__ import annotations
@@ -61,7 +55,7 @@ def _now_iso() -> str:
 
 def _norm_header(h: str) -> str:
     h = (h or "").strip().lower()
-    h = h.replace("\ufeff", "")  # BOM
+    h = h.replace("\ufeff", "")
     h = re.sub(r"[^\w]+", "_", h, flags=re.UNICODE)
     h = re.sub(r"_+", "_", h).strip("_")
     return h
@@ -97,9 +91,7 @@ def detect_delimiter(sample: str) -> str:
 def _clean_text(x: Optional[str]) -> str:
     if x is None:
         return ""
-    s = str(x)
-    s = s.replace("\r\n", "\n").strip()
-    return s
+    return str(x).replace("\r\n", "\n").strip()
 
 
 def _parse_price(raw: Optional[str]) -> Optional[float]:
@@ -123,9 +115,7 @@ def _parse_price(raw: Optional[str]) -> Optional[float]:
 
     try:
         v = float(s)
-        if v <= 0:
-            return None
-        return v
+        return v if v > 0 else None
     except Exception:
         return None
 
@@ -249,9 +239,7 @@ class CanonRow:
 def canonize_row(row: Dict[str, str], header_map: Dict[str, Optional[str]], row_idx: int) -> CanonRow:
     def getv(k: str) -> str:
         h = header_map.get(k)
-        if not h:
-            return ""
-        return _clean_text(row.get(h))
+        return _clean_text(row.get(h)) if h else ""
 
     pid = getv("product_id")
     title = getv("title")
@@ -270,77 +258,66 @@ def canonize_row(row: Dict[str, str], header_map: Dict[str, Optional[str]], row_
         pid = f"{slug}-{row_idx}"
 
     if not desc:
-        base = title
-        if tags:
-            base += f". Tags: {', '.join(tags[:8])}"
+        base = title + (f". Tags: {', '.join(tags[:8])}" if tags else "")
         desc = base + ". Producto de catálogo Dropi."
 
-    return CanonRow(
-        product_id=pid,
-        title=title,
-        description=desc,
-        price=price,
-        compare_at_price=cap,
-        image_url=img,
-        tags=tags,
-    )
+    return CanonRow(pid, title, desc, price, cap, img, tags)
 
 
 def score_row(c: CanonRow, price_min: float, price_max: float) -> float:
-    score = 0.0
+    s = 0.0
     if c.price is not None:
-        score += 2.0
+        s += 2.0
         if price_min <= c.price <= price_max:
-            score += 1.0
+            s += 1.0
     if c.image_url:
-        score += 2.0
+        s += 2.0
     if c.description and len(c.description) >= 60:
-        score += 1.0
+        s += 1.0
     if c.tags:
-        score += 0.5
+        s += 0.5
     if c.compare_at_price is not None and c.price is not None and c.compare_at_price > c.price:
-        score += 0.5
-    return float(score)
+        s += 0.5
+    return float(s)
 
 
 def read_catalog_rows(path: str, encoding: str, delimiter: Optional[str], limit: int) -> Tuple[List[Dict[str, str]], List[str], str]:
     with open(path, "r", encoding=encoding, newline="") as f:
         sample = f.read(16384)
         f.seek(0)
-        delim = delimiter or detect_delimiter(sample)
-        reader = csv.DictReader(f, delimiter=delim)
+        used = delimiter or detect_delimiter(sample)
+        reader = csv.DictReader(f, delimiter=used)
         headers = reader.fieldnames or []
-        rows = []
+        rows: List[Dict[str, str]] = []
         for r in reader:
             rows.append(r)
             if limit > 0 and len(rows) >= limit:
                 break
-        return rows, headers, delim
+        return rows, headers, used
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--catalog", required=True, help="Path al CSV real de catálogo Dropi")
-    ap.add_argument("--out", required=True, help="Path al dump v3 de salida (JSON)")
-    ap.add_argument("--limit", type=int, default=5000, help="Máximo de filas a leer (0 = sin límite)")
-    ap.add_argument("--encoding", default="", help="Encoding forzado (si no, autodetect)")
-    ap.add_argument("--delimiter", default="", help="Delimitador forzado (, ; \\t |). Si no, autodetect.")
-    ap.add_argument("--price-min", type=float, default=12.0, help="Precio mínimo para boost de score")
-    ap.add_argument("--price-max", type=float, default=70.0, help="Precio máximo para boost de score")
-    ap.add_argument("--no-require-price", action="store_true", help="Permitir filas sin price parseable")
-    ap.add_argument("--no-require-image", action="store_true", help="Permitir filas sin image_url")
+    ap.add_argument("--catalog", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--limit", type=int, default=5000)
+    ap.add_argument("--encoding", default="")
+    ap.add_argument("--delimiter", default="")
+    ap.add_argument("--price-min", type=float, default=12.0)
+    ap.add_argument("--price-max", type=float, default=70.0)
+    ap.add_argument("--no-require-price", action="store_true")
+    ap.add_argument("--no-require-image", action="store_true")
     args = ap.parse_args()
 
-    require_price = not bool(args.no_require_price)
-    require_image = not bool(args.no_require_image)
+    require_price = not args.no_require_price
+    require_image = not args.no_require_image
 
     enc = args.encoding.strip() or detect_encoding(args.catalog)
     delim = args.delimiter.strip() or None
-    limit = int(args.limit)
 
-    rows, headers, used_delim = read_catalog_rows(args.catalog, enc, delim, limit)
+    rows, headers, used_delim = read_catalog_rows(args.catalog, enc, delim, int(args.limit))
     if not headers:
-        raise SystemExit("ERROR: CSV sin headers (fieldnames vacíos). Export mal o delimitador/encoding incorrecto.")
+        raise SystemExit("ERROR: CSV sin headers (fieldnames vacíos). Revisa export/delimitador/encoding.")
 
     header_map = pick_header_map(headers)
 
@@ -351,15 +328,15 @@ def main() -> int:
     print(f"- rows_read: {len(rows)}")
     print(f"- require_price: {require_price}")
     print(f"- require_image: {require_image}")
-    print("- MAPPING (canon_key -> header):")
+    print("- MAPPING:")
     for k in CANON_KEYS:
         print(f"  {k}: {header_map.get(k)}")
 
     kept = 0
     skipped_price = 0
     skipped_image = 0
+    seen = set()
     candidates = []
-    seen_ids = set()
 
     for idx, row in enumerate(rows, start=1):
         c = canonize_row(row, header_map, idx)
@@ -372,49 +349,39 @@ def main() -> int:
             continue
 
         pid = c.product_id
-        if pid in seen_ids:
+        if pid in seen:
             pid = f"{pid}-{idx}"
-            c = CanonRow(
-                product_id=pid,
-                title=c.title,
-                description=c.description,
-                price=c.price,
-                compare_at_price=c.compare_at_price,
-                image_url=c.image_url,
-                tags=c.tags,
-            )
-        seen_ids.add(pid)
+            c = CanonRow(pid, c.title, c.description, c.price, c.compare_at_price, c.image_url, c.tags)
+        seen.add(pid)
 
         sc = score_row(c, args.price_min, args.price_max)
 
-        candidates.append(
-            {
+        candidates.append({
+            "product_id": c.product_id,
+            "title": c.title,
+            "score": sc,
+            "source": {
                 "product_id": c.product_id,
                 "title": c.title,
-                "score": sc,
-                "source": {
-                    "product_id": c.product_id,
-                    "title": c.title,
-                    "description": c.description,
-                    "price": c.price,
-                    "compare_at_price": c.compare_at_price,
-                    "image_url": c.image_url,
-                    "tags": c.tags,
-                },
+                "description": c.description,
+                "price": c.price,
+                "compare_at_price": c.compare_at_price,
+                "image_url": c.image_url,
+                "tags": c.tags,
             }
-        )
+        })
         kept += 1
 
     candidates.sort(key=lambda x: (-float(x.get("score", 0.0)), str(x.get("product_id", ""))))
 
-    dump = {
+    out = {
         "schema_version": "dropi_dump_v3",
         "generated_at": _now_iso(),
         "catalog_ingest": {
             "catalog_path": args.catalog,
             "encoding": enc,
             "delimiter": used_delim,
-            "limit": limit,
+            "limit": int(args.limit),
             "require_price": require_price,
             "require_image": require_image,
             "skipped_price": skipped_price,
@@ -427,10 +394,10 @@ def main() -> int:
     }
 
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(dump, f, ensure_ascii=False, indent=2)
+        json.dump(out, f, ensure_ascii=False, indent=2)
 
     print("- SUMMARY:")
-    print(f"  kept={kept}  skipped_price={skipped_price}  skipped_image={skipped_image}")
+    print(f"  kept={kept} skipped_price={skipped_price} skipped_image={skipped_image}")
     print(f"- out: {args.out}")
     if kept == 0:
         print("WARNING: kept=0 (normalmente: price no parsea o image_url viene vacío/no mapeado).")
