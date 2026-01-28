@@ -4,6 +4,9 @@
 dropi_catalog_ingest.py
 CSV real -> dump v3 (candidates[] con source{} completo + score).
 Robusto: detecta encoding/delimitador, auto-mapea headers, parsea precio, extrae 1er image_url.
+
+Uso:
+  python scripts/dropi_catalog_ingest.py --catalog data\\evidence\\dropi_catalog_export_REAL.csv --out data\\evidence\\launch_candidates_dropi_catalog_v3.json --limit 5000
 """
 
 from __future__ import annotations
@@ -16,50 +19,26 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-
 CANON_KEYS = ["product_id", "title", "description", "price", "compare_at_price", "image_url", "tags"]
 
 SYNONYMS: Dict[str, List[str]] = {
-    "product_id": [
-        "product_id", "productid", "id", "producto_id", "producto", "product", "sku", "product_sku",
-        "variant_sku", "codigo", "código", "codigo_producto", "codigo_de_producto", "code", "item_id"
-    ],
-    "title": [
-        "title", "name", "product_name", "nombre", "nombre_producto", "producto", "titulo", "título",
-        "product_title"
-    ],
-    "description": [
-        "description", "desc", "body", "body_html", "descripcion", "descripción", "detalle", "details",
-        "long_description", "short_description", "product_description"
-    ],
-    "price": [
-        "price", "precio", "sale_price", "precio_venta", "unit_price", "price_mxn", "mxn_price", "amount"
-    ],
-    "compare_at_price": [
-        "compare_at_price", "compareatprice", "old_price", "precio_lista", "precio_regular",
-        "precio_original", "precio_normal", "regular_price", "list_price"
-    ],
-    "image_url": [
-        "image_url", "image", "img", "imagen", "imagen_url", "url_imagen", "foto", "photo",
-        "thumbnail", "main_image", "featured_image", "images", "imagenes"
-    ],
-    "tags": [
-        "tags", "etiquetas", "categories", "category", "categoria", "categoría", "collections", "collection"
-    ],
+    "product_id": ["product_id","productid","id","sku","product_sku","variant_sku","item_id","codigo","código","code","producto_id"],
+    "title": ["title","name","product_name","nombre","nombre_producto","titulo","título","product_title"],
+    "description": ["description","desc","body","body_html","descripcion","descripción","detalle","details","long_description","short_description"],
+    "price": ["price","precio","sale_price","precio_venta","unit_price","amount","price_mxn","mxn_price"],
+    "compare_at_price": ["compare_at_price","compareatprice","old_price","precio_lista","precio_regular","regular_price","list_price"],
+    "image_url": ["image_url","image","img","imagen","imagen_url","url_imagen","photo","thumbnail","main_image","featured_image","images","imagenes"],
+    "tags": ["tags","etiquetas","categories","category","categoria","categoría","collections","collection"],
 }
-
 
 def _now_iso() -> str:
     return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
-
 def _norm_header(h: str) -> str:
-    h = (h or "").strip().lower()
-    h = h.replace("\ufeff", "")
+    h = (h or "").strip().lower().replace("\ufeff","")
     h = re.sub(r"[^\w]+", "_", h, flags=re.UNICODE)
     h = re.sub(r"_+", "_", h).strip("_")
     return h
-
 
 def _try_decode(path: str, enc: str) -> bool:
     try:
@@ -69,30 +48,25 @@ def _try_decode(path: str, enc: str) -> bool:
     except Exception:
         return False
 
-
 def detect_encoding(path: str) -> str:
-    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+    for enc in ("utf-8-sig","utf-8","cp1252","latin-1"):
         if _try_decode(path, enc):
             return enc
     return "utf-8-sig"
 
-
 def detect_delimiter(sample: str) -> str:
     try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=[",", ";", "\t", "|"])
+        dialect = csv.Sniffer().sniff(sample, delimiters=[",",";","\t","|"])
         return dialect.delimiter
     except Exception:
-        candidates = [",", ";", "\t", "|"]
-        counts = [(d, sample.count(d)) for d in candidates]
-        counts.sort(key=lambda x: x[1], reverse=True)
-        return counts[0][0] if counts and counts[0][1] > 0 else ","
-
+        ds = [",",";","\t","|"]
+        best = max(ds, key=lambda d: sample.count(d))
+        return best if sample.count(best) > 0 else ","
 
 def _clean_text(x: Optional[str]) -> str:
     if x is None:
         return ""
-    return str(x).replace("\r\n", "\n").strip()
-
+    return str(x).replace("\r\n","\n").strip()
 
 def _parse_price(raw: Optional[str]) -> Optional[float]:
     if raw is None:
@@ -103,7 +77,6 @@ def _parse_price(raw: Optional[str]) -> Optional[float]:
     s = re.sub(r"[^\d,.\-]", "", s)
     if not s or s in ("-", ".", ","):
         return None
-
     if "," in s and "." in s:
         if s.rfind(",") > s.rfind("."):
             s = s.replace(".", "")
@@ -112,13 +85,11 @@ def _parse_price(raw: Optional[str]) -> Optional[float]:
             s = s.replace(",", "")
     elif "," in s and "." not in s:
         s = s.replace(",", ".")
-
     try:
         v = float(s)
         return v if v > 0 else None
     except Exception:
         return None
-
 
 def _extract_first_url(raw: str) -> str:
     s = _clean_text(raw)
@@ -131,36 +102,12 @@ def _extract_first_url(raw: str) -> str:
                 return _clean_text(arr[0])
         except Exception:
             pass
-    for sep in ("|", ";", ",", "\n"):
+    for sep in ("|","; ",",","\n"):
         if sep in s:
             parts = [p.strip() for p in s.split(sep) if p.strip()]
             if parts:
                 return parts[0]
     return s.strip()
-
-
-def _split_tags(raw: str) -> List[str]:
-    s = _clean_text(raw)
-    if not s:
-        return []
-    if s.startswith("[") and s.endswith("]"):
-        try:
-            arr = json.loads(s)
-            if isinstance(arr, list):
-                out = []
-                for x in arr:
-                    t = _clean_text(x)
-                    if t:
-                        out.append(t)
-                return _dedupe_preserve(out)
-        except Exception:
-            pass
-    for sep in ("|", ";", ","):
-        if sep in s:
-            toks = [t.strip() for t in s.split(sep) if t.strip()]
-            return _dedupe_preserve(toks)
-    return [s]
-
 
 def _dedupe_preserve(xs: List[str]) -> List[str]:
     seen = set()
@@ -173,6 +120,21 @@ def _dedupe_preserve(xs: List[str]) -> List[str]:
         out.append(x.strip())
     return out
 
+def _split_tags(raw: str) -> List[str]:
+    s = _clean_text(raw)
+    if not s:
+        return []
+    if s.startswith("[") and s.endswith("]"):
+        try:
+            arr = json.loads(s)
+            if isinstance(arr, list):
+                return _dedupe_preserve([_clean_text(x) for x in arr if _clean_text(x)])
+        except Exception:
+            pass
+    for sep in ("|","; ",","):
+        if sep in s:
+            return _dedupe_preserve([t.strip() for t in s.split(sep) if t.strip()])
+    return [s]
 
 def pick_header_map(headers: List[str]) -> Dict[str, Optional[str]]:
     norm_to_orig = {_norm_header(h): h for h in headers}
@@ -181,49 +143,43 @@ def pick_header_map(headers: List[str]) -> Dict[str, Optional[str]]:
     mapping: Dict[str, Optional[str]] = {k: None for k in CANON_KEYS}
     for canon_key, syns in SYNONYMS.items():
         for syn in syns:
-            syn_n = _norm_header(syn)
-            if syn_n in norm_to_orig:
-                mapping[canon_key] = norm_to_orig[syn_n]
+            sn = _norm_header(syn)
+            if sn in norm_to_orig:
+                mapping[canon_key] = norm_to_orig[sn]
                 break
 
+    # fallbacks
     if mapping["title"] is None:
         for nh in norm_headers:
             if "name" in nh or "nombre" in nh or "titulo" in nh or "title" in nh:
-                mapping["title"] = norm_to_orig[nh]
-                break
+                mapping["title"] = norm_to_orig[nh]; break
 
     if mapping["product_id"] is None:
         for nh in norm_headers:
-            if nh in ("id", "sku") or nh.endswith("_id") or "product_id" in nh:
-                mapping["product_id"] = norm_to_orig[nh]
-                break
+            if nh in ("id","sku") or nh.endswith("_id") or "product_id" in nh:
+                mapping["product_id"] = norm_to_orig[nh]; break
 
     if mapping["image_url"] is None:
         for nh in norm_headers:
             if "image" in nh or "img" in nh or "imagen" in nh or ("url" in nh and ("img" in nh or "image" in nh or "imagen" in nh)):
-                mapping["image_url"] = norm_to_orig[nh]
-                break
+                mapping["image_url"] = norm_to_orig[nh]; break
 
     if mapping["price"] is None:
         for nh in norm_headers:
             if "price" in nh or "precio" in nh:
-                mapping["price"] = norm_to_orig[nh]
-                break
+                mapping["price"] = norm_to_orig[nh]; break
 
     if mapping["description"] is None:
         for nh in norm_headers:
             if "desc" in nh or "description" in nh or "descripcion" in nh or "detalle" in nh:
-                mapping["description"] = norm_to_orig[nh]
-                break
+                mapping["description"] = norm_to_orig[nh]; break
 
     if mapping["tags"] is None:
         for nh in norm_headers:
             if "tag" in nh or "etiquet" in nh or "categor" in nh or "collection" in nh:
-                mapping["tags"] = norm_to_orig[nh]
-                break
+                mapping["tags"] = norm_to_orig[nh]; break
 
     return mapping
-
 
 @dataclass
 class CanonRow:
@@ -235,34 +191,29 @@ class CanonRow:
     image_url: str
     tags: List[str]
 
-
-def canonize_row(row: Dict[str, str], header_map: Dict[str, Optional[str]], row_idx: int) -> CanonRow:
+def canonize_row(row: Dict[str, str], hm: Dict[str, Optional[str]], idx: int) -> CanonRow:
     def getv(k: str) -> str:
-        h = header_map.get(k)
+        h = hm.get(k)
         return _clean_text(row.get(h)) if h else ""
 
     pid = getv("product_id")
-    title = getv("title")
+    title = getv("title") or f"Dropi Product {idx}"
     desc = getv("description")
     price = _parse_price(getv("price"))
     cap = _parse_price(getv("compare_at_price"))
     img = _extract_first_url(getv("image_url"))
     tags = _split_tags(getv("tags"))
 
-    if not title:
-        title = f"Dropi Product {row_idx}"
-
     if not pid:
-        slug = re.sub(r"[^\w]+", "-", title.strip().lower(), flags=re.UNICODE).strip("-")
+        slug = re.sub(r"[^\w]+","-",title.strip().lower(),flags=re.UNICODE).strip("-")
         slug = slug[:40] if slug else "dropi"
-        pid = f"{slug}-{row_idx}"
+        pid = f"{slug}-{idx}"
 
     if not desc:
         base = title + (f". Tags: {', '.join(tags[:8])}" if tags else "")
         desc = base + ". Producto de catálogo Dropi."
 
     return CanonRow(pid, title, desc, price, cap, img, tags)
-
 
 def score_row(c: CanonRow, price_min: float, price_max: float) -> float:
     s = 0.0
@@ -280,21 +231,19 @@ def score_row(c: CanonRow, price_min: float, price_max: float) -> float:
         s += 0.5
     return float(s)
 
-
-def read_catalog_rows(path: str, encoding: str, delimiter: Optional[str], limit: int) -> Tuple[List[Dict[str, str]], List[str], str]:
-    with open(path, "r", encoding=encoding, newline="") as f:
+def read_catalog_rows(path: str, enc: str, delimiter: Optional[str], limit: int) -> Tuple[List[Dict[str,str]], List[str], str]:
+    with open(path, "r", encoding=enc, newline="") as f:
         sample = f.read(16384)
         f.seek(0)
         used = delimiter or detect_delimiter(sample)
         reader = csv.DictReader(f, delimiter=used)
         headers = reader.fieldnames or []
-        rows: List[Dict[str, str]] = []
+        rows: List[Dict[str,str]] = []
         for r in reader:
             rows.append(r)
             if limit > 0 and len(rows) >= limit:
                 break
         return rows, headers, used
-
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -319,7 +268,7 @@ def main() -> int:
     if not headers:
         raise SystemExit("ERROR: CSV sin headers (fieldnames vacíos). Revisa export/delimitador/encoding.")
 
-    header_map = pick_header_map(headers)
+    hm = pick_header_map(headers)
 
     print("dropi_catalog_ingest: OK")
     print(f"- catalog: {args.catalog}")
@@ -330,32 +279,25 @@ def main() -> int:
     print(f"- require_image: {require_image}")
     print("- MAPPING:")
     for k in CANON_KEYS:
-        print(f"  {k}: {header_map.get(k)}")
+        print(f"  {k}: {hm.get(k)}")
 
-    kept = 0
-    skipped_price = 0
-    skipped_image = 0
-    seen = set()
-    candidates = []
+    kept=0; skipped_price=0; skipped_image=0
+    seen=set(); candidates=[]
 
-    for idx, row in enumerate(rows, start=1):
-        c = canonize_row(row, header_map, idx)
-
+    for i, r in enumerate(rows, start=1):
+        c = canonize_row(r, hm, i)
         if require_price and c.price is None:
-            skipped_price += 1
-            continue
+            skipped_price += 1; continue
         if require_image and not c.image_url:
-            skipped_image += 1
-            continue
+            skipped_image += 1; continue
 
         pid = c.product_id
         if pid in seen:
-            pid = f"{pid}-{idx}"
+            pid = f"{pid}-{i}"
             c = CanonRow(pid, c.title, c.description, c.price, c.compare_at_price, c.image_url, c.tags)
         seen.add(pid)
 
         sc = score_row(c, args.price_min, args.price_max)
-
         candidates.append({
             "product_id": c.product_id,
             "title": c.title,
@@ -368,11 +310,11 @@ def main() -> int:
                 "compare_at_price": c.compare_at_price,
                 "image_url": c.image_url,
                 "tags": c.tags,
-            }
+            },
         })
         kept += 1
 
-    candidates.sort(key=lambda x: (-float(x.get("score", 0.0)), str(x.get("product_id", ""))))
+    candidates.sort(key=lambda x: (-float(x.get("score", 0.0)), str(x.get("product_id",""))))
 
     out = {
         "schema_version": "dropi_dump_v3",
@@ -388,7 +330,7 @@ def main() -> int:
             "skipped_image": skipped_image,
             "rows_read": len(rows),
             "kept": kept,
-            "mapping": header_map,
+            "mapping": hm,
         },
         "candidates": candidates,
     }
@@ -403,7 +345,6 @@ def main() -> int:
         print("WARNING: kept=0 (normalmente: price no parsea o image_url viene vacío/no mapeado).")
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
