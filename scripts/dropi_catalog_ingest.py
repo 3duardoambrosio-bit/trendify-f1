@@ -1,11 +1,15 @@
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-dropi_enrich_dump_with_catalog.py
-- Enriquecer dump (v2 items[] o v3 candidates[]) usando un catálogo CSV.
-- Auto-detect encoding/delimiter.
-- Auto-mapea headers del CSV a schema canónico.
-- Output: dump v3 con candidates[].source dict completo.
+dropi_catalog_ingest.py
+- Ingiere un CSV de catálogo (Dropi u otro) con headers variables.
+- Auto-detecta encoding/delimitador.
+- Auto-mapea columnas a un schema canónico:
+  product_id, title, description, price, compare_at_price, image_url, tags
+- Genera un dump v3 con candidates[] + source{} completo y score.
+
+Uso:
+  python scripts/dropi_catalog_ingest.py --catalog data\\evidence\\dropi_catalog_export_REAL.csv --out data\\evidence\\launch_candidates_dropi_catalog_v3.json --limit 5000
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import csv
 import datetime as _dt
 import json
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 
@@ -56,7 +61,7 @@ def _now_iso() -> str:
 
 def _norm_header(h: str) -> str:
     h = (h or "").strip().lower()
-    h = h.replace("\ufeff", "")
+    h = h.replace("\ufeff", "")  # BOM
     h = re.sub(r"[^\w]+", "_", h, flags=re.UNICODE)
     h = re.sub(r"_+", "_", h).strip("_")
     return h
@@ -92,7 +97,9 @@ def detect_delimiter(sample: str) -> str:
 def _clean_text(x: Optional[str]) -> str:
     if x is None:
         return ""
-    return str(x).replace("\r\n", "\n").strip()
+    s = str(x)
+    s = s.replace("\r\n", "\n").strip()
+    return s
 
 
 def _parse_price(raw: Optional[str]) -> Optional[float]:
@@ -228,200 +235,206 @@ def pick_header_map(headers: List[str]) -> Dict[str, Optional[str]]:
     return mapping
 
 
-def read_catalog_index(path: str, encoding: str, delimiter: Optional[str]) -> Tuple[Dict[str, dict], Dict[str, dict], Dict[str, Optional[str]], str]:
+@dataclass
+class CanonRow:
+    product_id: str
+    title: str
+    description: str
+    price: Optional[float]
+    compare_at_price: Optional[float]
+    image_url: str
+    tags: List[str]
+
+
+def canonize_row(row: Dict[str, str], header_map: Dict[str, Optional[str]], row_idx: int) -> CanonRow:
+    def getv(k: str) -> str:
+        h = header_map.get(k)
+        if not h:
+            return ""
+        return _clean_text(row.get(h))
+
+    pid = getv("product_id")
+    title = getv("title")
+    desc = getv("description")
+    price = _parse_price(getv("price"))
+    cap = _parse_price(getv("compare_at_price"))
+    img = _extract_first_url(getv("image_url"))
+    tags = _split_tags(getv("tags"))
+
+    if not title:
+        title = f"Dropi Product {row_idx}"
+
+    if not pid:
+        slug = re.sub(r"[^\w]+", "-", title.strip().lower(), flags=re.UNICODE).strip("-")
+        slug = slug[:40] if slug else "dropi"
+        pid = f"{slug}-{row_idx}"
+
+    if not desc:
+        base = title
+        if tags:
+            base += f". Tags: {', '.join(tags[:8])}"
+        desc = base + ". Producto de catálogo Dropi."
+
+    return CanonRow(
+        product_id=pid,
+        title=title,
+        description=desc,
+        price=price,
+        compare_at_price=cap,
+        image_url=img,
+        tags=tags,
+    )
+
+
+def score_row(c: CanonRow, price_min: float, price_max: float) -> float:
+    score = 0.0
+    if c.price is not None:
+        score += 2.0
+        if price_min <= c.price <= price_max:
+            score += 1.0
+    if c.image_url:
+        score += 2.0
+    if c.description and len(c.description) >= 60:
+        score += 1.0
+    if c.tags:
+        score += 0.5
+    if c.compare_at_price is not None and c.price is not None and c.compare_at_price > c.price:
+        score += 0.5
+    return float(score)
+
+
+def read_catalog_rows(path: str, encoding: str, delimiter: Optional[str], limit: int) -> Tuple[List[Dict[str, str]], List[str], str]:
     with open(path, "r", encoding=encoding, newline="") as f:
         sample = f.read(16384)
         f.seek(0)
-        used_delim = delimiter or detect_delimiter(sample)
-        reader = csv.DictReader(f, delimiter=used_delim)
+        delim = delimiter or detect_delimiter(sample)
+        reader = csv.DictReader(f, delimiter=delim)
         headers = reader.fieldnames or []
-        if not headers:
-            raise SystemExit("ERROR: catálogo CSV sin headers (fieldnames vacíos).")
-
-        header_map = pick_header_map(headers)
-
-        by_id: Dict[str, dict] = {}
-        by_title: Dict[str, dict] = {}
-
-        for i, row in enumerate(reader, start=1):
-            pid_h = header_map.get("product_id")
-            title_h = header_map.get("title")
-            desc_h = header_map.get("description")
-            price_h = header_map.get("price")
-            cap_h = header_map.get("compare_at_price")
-            img_h = header_map.get("image_url")
-            tags_h = header_map.get("tags")
-
-            pid = _clean_text(row.get(pid_h)) if pid_h else ""
-            title = _clean_text(row.get(title_h)) if title_h else ""
-            desc = _clean_text(row.get(desc_h)) if desc_h else ""
-            price = _parse_price(row.get(price_h)) if price_h else None
-            cap = _parse_price(row.get(cap_h)) if cap_h else None
-            img = _extract_first_url(row.get(img_h) if img_h else "")
-            tags = _split_tags(row.get(tags_h) if tags_h else "")
-
-            if not title:
-                title = f"Dropi Product {i}"
-
-            if not pid:
-                slug = re.sub(r"[^\w]+", "-", title.strip().lower(), flags=re.UNICODE).strip("-")
-                slug = slug[:40] if slug else "dropi"
-                pid = f"{slug}-{i}"
-
-            if not desc:
-                base = title
-                if tags:
-                    base += f". Tags: {', '.join(tags[:8])}"
-                desc = base + ". Producto de catálogo Dropi."
-
-            record = {
-                "product_id": pid,
-                "title": title,
-                "description": desc,
-                "price": price,
-                "compare_at_price": cap,
-                "image_url": img,
-                "tags": tags,
-            }
-
-            if pid and pid not in by_id:
-                by_id[pid] = record
-            tkey = title.strip().lower()
-            if tkey and tkey not in by_title:
-                by_title[tkey] = record
-
-        return by_id, by_title, header_map, used_delim
-
-
-def load_dump(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def dump_candidates_list(d: dict) -> Tuple[List[dict], str]:
-    if isinstance(d, dict) and "candidates" in d and isinstance(d["candidates"], list):
-        return d["candidates"], "candidates"
-    if isinstance(d, dict) and "items" in d and isinstance(d["items"], list):
-        return d["items"], "items"
-    raise SystemExit("ERROR: dump JSON no tiene 'candidates' ni 'items' como lista.")
+        rows = []
+        for r in reader:
+            rows.append(r)
+            if limit > 0 and len(rows) >= limit:
+                break
+        return rows, headers, delim
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dump", required=True)
-    ap.add_argument("--catalog", required=True)
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--encoding", default="")
-    ap.add_argument("--delimiter", default="")
+    ap.add_argument("--catalog", required=True, help="Path al CSV real de catálogo Dropi")
+    ap.add_argument("--out", required=True, help="Path al dump v3 de salida (JSON)")
+    ap.add_argument("--limit", type=int, default=5000, help="Máximo de filas a leer (0 = sin límite)")
+    ap.add_argument("--encoding", default="", help="Encoding forzado (si no, autodetect)")
+    ap.add_argument("--delimiter", default="", help="Delimitador forzado (, ; \\t |). Si no, autodetect.")
+    ap.add_argument("--price-min", type=float, default=12.0, help="Precio mínimo para boost de score")
+    ap.add_argument("--price-max", type=float, default=70.0, help="Precio máximo para boost de score")
+    ap.add_argument("--no-require-price", action="store_true", help="Permitir filas sin price parseable")
+    ap.add_argument("--no-require-image", action="store_true", help="Permitir filas sin image_url")
     args = ap.parse_args()
+
+    require_price = not bool(args.no_require_price)
+    require_image = not bool(args.no_require_image)
 
     enc = args.encoding.strip() or detect_encoding(args.catalog)
     delim = args.delimiter.strip() or None
+    limit = int(args.limit)
 
-    catalog_by_id, catalog_by_title, header_map, used_delim = read_catalog_index(args.catalog, enc, delim)
-    d = load_dump(args.dump)
-    items, items_key = dump_candidates_list(d)
+    rows, headers, used_delim = read_catalog_rows(args.catalog, enc, delim, limit)
+    if not headers:
+        raise SystemExit("ERROR: CSV sin headers (fieldnames vacíos). Export mal o delimitador/encoding incorrecto.")
 
-    enriched = []
-    matched_id = 0
-    matched_title = 0
-    missing_both = 0
+    header_map = pick_header_map(headers)
 
-    for idx, item in enumerate(items, start=1):
-        if not isinstance(item, dict):
+    print("dropi_catalog_ingest: OK")
+    print(f"- catalog: {args.catalog}")
+    print(f"- encoding: {enc}")
+    print(f"- delimiter: {repr(used_delim)}")
+    print(f"- rows_read: {len(rows)}")
+    print(f"- require_price: {require_price}")
+    print(f"- require_image: {require_image}")
+    print("- MAPPING (canon_key -> header):")
+    for k in CANON_KEYS:
+        print(f"  {k}: {header_map.get(k)}")
+
+    kept = 0
+    skipped_price = 0
+    skipped_image = 0
+    candidates = []
+    seen_ids = set()
+
+    for idx, row in enumerate(rows, start=1):
+        c = canonize_row(row, header_map, idx)
+
+        if require_price and c.price is None:
+            skipped_price += 1
+            continue
+        if require_image and not c.image_url:
+            skipped_image += 1
             continue
 
-        pid = _clean_text(item.get("product_id"))
-        title = _clean_text(item.get("title"))
+        pid = c.product_id
+        if pid in seen_ids:
+            pid = f"{pid}-{idx}"
+            c = CanonRow(
+                product_id=pid,
+                title=c.title,
+                description=c.description,
+                price=c.price,
+                compare_at_price=c.compare_at_price,
+                image_url=c.image_url,
+                tags=c.tags,
+            )
+        seen_ids.add(pid)
 
-        src = item.get("source")
-        if not isinstance(src, dict):
-            src = {}
+        sc = score_row(c, args.price_min, args.price_max)
 
-        if not pid:
-            pid = _clean_text(src.get("product_id"))
-        if not title:
-            title = _clean_text(src.get("title"))
+        candidates.append(
+            {
+                "product_id": c.product_id,
+                "title": c.title,
+                "score": sc,
+                "source": {
+                    "product_id": c.product_id,
+                    "title": c.title,
+                    "description": c.description,
+                    "price": c.price,
+                    "compare_at_price": c.compare_at_price,
+                    "image_url": c.image_url,
+                    "tags": c.tags,
+                },
+            }
+        )
+        kept += 1
 
-        rec = None
-        if pid and pid in catalog_by_id:
-            rec = catalog_by_id[pid]
-            matched_id += 1
-        else:
-            tkey = title.strip().lower() if title else ""
-            if tkey and tkey in catalog_by_title:
-                rec = catalog_by_title[tkey]
-                matched_title += 1
+    candidates.sort(key=lambda x: (-float(x.get("score", 0.0)), str(x.get("product_id", ""))))
 
-        if rec is None:
-            missing_both += 1
-            if not pid:
-                pid = f"unknown-{idx}"
-            if not title:
-                title = f"Unknown Product {idx}"
-            if not src.get("description"):
-                src["description"] = f"{title}. Producto sin match en catálogo."
-            src.setdefault("product_id", pid)
-            src.setdefault("title", title)
-            item_out = dict(item)
-            item_out["product_id"] = pid
-            item_out["title"] = title
-            item_out["source"] = src
-            item_out.setdefault("score", float(item_out.get("score", 0.0) or 0.0))
-            enriched.append(item_out)
-            continue
-
-        src_out = dict(src)
-        for k in CANON_KEYS:
-            v = rec.get(k)
-            if k == "tags":
-                existing = src_out.get("tags")
-                existing_list = existing if isinstance(existing, list) else []
-                merged = existing_list + (v or [])
-                src_out["tags"] = list(dict.fromkeys([str(x) for x in merged if str(x).strip()]))
-                continue
-
-            if k in ("price", "compare_at_price"):
-                if src_out.get(k) is None and v is not None:
-                    src_out[k] = v
-                continue
-
-            if not _clean_text(src_out.get(k)):
-                if v is not None:
-                    src_out[k] = v
-
-        item_out = dict(item)
-        item_out["product_id"] = rec.get("product_id") or pid or item_out.get("product_id") or f"unknown-{idx}"
-        item_out["title"] = rec.get("title") or title or item_out.get("title") or f"Unknown Product {idx}"
-        item_out["source"] = src_out
-        item_out.setdefault("score", float(item_out.get("score", 0.0) or 0.0))
-        enriched.append(item_out)
-
-    out = dict(d)
-    out.pop("items", None)
-    out.pop("candidates", None)
-    out["schema_version"] = "dropi_dump_v3"
-    out["generated_at"] = _now_iso()
-    out["enriched_from_catalog"] = {
-        "catalog_path": args.catalog,
-        "encoding": enc,
-        "delimiter": used_delim,
-        "mapping": header_map,
-        "matched_by_id": matched_id,
-        "matched_by_title": matched_title,
-        "unmatched": missing_both,
-        "input_key": items_key,
-        "input_count": len(items),
-        "output_count": len(enriched),
+    dump = {
+        "schema_version": "dropi_dump_v3",
+        "generated_at": _now_iso(),
+        "catalog_ingest": {
+            "catalog_path": args.catalog,
+            "encoding": enc,
+            "delimiter": used_delim,
+            "limit": limit,
+            "require_price": require_price,
+            "require_image": require_image,
+            "skipped_price": skipped_price,
+            "skipped_image": skipped_image,
+            "rows_read": len(rows),
+            "kept": kept,
+            "mapping": header_map,
+        },
+        "candidates": candidates,
     }
-    out["candidates"] = enriched
 
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=2)
+        json.dump(dump, f, ensure_ascii=False, indent=2)
 
-    print("dropi_enrich_dump_with_catalog: OK")
+    print("- SUMMARY:")
+    print(f"  kept={kept}  skipped_price={skipped_price}  skipped_image={skipped_image}")
     print(f"- out: {args.out}")
-    print(f"- matched_by_id: {matched_id}  matched_by_title: {matched_title}  unmatched: {missing_both}")
+    if kept == 0:
+        print("WARNING: kept=0 (normalmente: price no parsea o image_url viene vacío/no mapeado).")
+
     return 0
 
 
