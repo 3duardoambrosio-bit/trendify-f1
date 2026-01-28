@@ -1,6 +1,5 @@
 ﻿import csv
 import json
-import re
 from pathlib import Path
 import argparse
 
@@ -24,6 +23,7 @@ ALLOWED_STATUS = {"active", "draft", "archived"}
 ALLOWED_BOOL = {"TRUE", "FALSE"}
 
 def _is_url(s: str) -> bool:
+    s = (s or "").strip()
     return s.startswith("http://") or s.startswith("https://")
 
 def _to_float(s: str):
@@ -39,6 +39,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("csv_path", help="Ruta al CSV tipo Shopify")
     ap.add_argument("--min-rows", type=int, default=1)
+    ap.add_argument("--mode", choices=["demo", "prod"], default="demo",
+                    help="demo: permite placeholders/demo_ como warning | prod: los vuelve error")
+    ap.add_argument("--fail-on-warn", action="store_true",
+                    help="Si se activa, warnings también hacen fallar el gate (útil en CI).")
     args = ap.parse_args()
 
     p = Path(args.csv_path)
@@ -52,10 +56,11 @@ def main():
     stats = {
         "rows": 0,
         "unique_handles": 0,
-        "has_demo_handles": 0,
+        "demo_handles": 0,
         "placeholder_images": 0,
         "price_ok": 0,
         "price_bad": 0,
+        "mode": args.mode,
     }
 
     handles = set()
@@ -84,7 +89,8 @@ def main():
                     errors.append({"type": "dup_handle", "line": i, "handle": handle})
                 handles.add(handle)
                 if handle.startswith("demo_"):
-                    stats["has_demo_handles"] += 1
+                    stats["demo_handles"] += 1
+                    warns.append({"type": "demo_handle", "line": i, "handle": handle})
             else:
                 errors.append({"type": "empty_handle", "line": i})
 
@@ -123,27 +129,46 @@ def main():
     if stats["rows"] < args.min_rows:
         errors.append({"type": "too_few_rows", "rows": stats["rows"], "min_rows": args.min_rows})
 
-    # “Modo demo” no es error, pero sí lo reportamos
-    if stats["has_demo_handles"] == stats["rows"] and stats["rows"] > 0:
-        warns.append({"type": "demo_mode_detected", "note": "Todos los handles parecen demo_. Esto valida pipeline, no mercado real."})
+    # Promote-to-error rules in PROD mode
+    if args.mode == "prod":
+        if stats["demo_handles"] > 0:
+            errors.append({
+                "type": "demo_handles_not_allowed",
+                "count": stats["demo_handles"],
+                "note": "En prod no se permiten handles demo_."
+            })
+        if stats["placeholder_images"] > 0:
+            errors.append({
+                "type": "placeholder_images_not_allowed",
+                "count": stats["placeholder_images"],
+                "note": "En prod no se permiten images via.placeholder.com."
+            })
+
+    # Optional: fail-on-warn (CI paranoia mode)
+    fail_on_warn = bool(args.fail_on_warn)
 
     report = {
         "csv": str(p),
         "stats": stats,
         "errors_count": len(errors),
         "warnings_count": len(warns),
-        "errors": errors[:200],   # cap
-        "warnings": warns[:200],  # cap
-        "pass": len(errors) == 0,
+        "errors": errors[:200],
+        "warnings": warns[:200],
+        "pass": (len(errors) == 0) and (not fail_on_warn or len(warns) == 0),
+        "fail_on_warn": fail_on_warn,
     }
 
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
     print("CONTRACT_GATE_REPORT:", report_path)
+    print("MODE:", args.mode, "FAIL_ON_WARN:", fail_on_warn)
     print("ROWS:", stats["rows"], "UNIQUE_HANDLES:", stats["unique_handles"])
     print("ERRORS:", len(errors), "WARNINGS:", len(warns))
 
     if len(errors) > 0:
         raise SystemExit(2)
+    if fail_on_warn and len(warns) > 0:
+        raise SystemExit(3)
 
 if __name__ == "__main__":
     main()
