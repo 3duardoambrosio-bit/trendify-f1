@@ -85,6 +85,24 @@ $sha = (git rev-parse --short=12 HEAD).Trim()
 $batchDir = "exports\releases\_batch\$sha"
 New-Item -ItemType Directory -Force $batchDir | Out-Null
 
+# -------------------------------------------------------------
+# NEW: sanitize dump evidence into batchDir (no side effects)
+# -------------------------------------------------------------
+Write-Host ""
+Write-Host "==> sanitize dump evidence (block placeholder images)"
+$DumpSanitized = Join-Path $batchDir "dump_sanitized.json"
+python scripts\sanitize_evidence_images.py $DumpJson --output $DumpSanitized --replace-with null
+if ($LASTEXITCODE -ne 0) { Stop-Release "sanitize_evidence_images failed." }
+
+$SanitizeReport = ($DumpSanitized + ".sanitize_report.json")
+if (-not (Test-Path $DumpSanitized)) { Stop-Release ("sanitize did not produce: {0}" -f $DumpSanitized) }
+
+Write-Host ("- dump_sanitized: {0}" -f $DumpSanitized)
+if (Test-Path $SanitizeReport) { Write-Host ("- sanitize_report: {0}" -f $SanitizeReport) }
+
+# Use sanitized dump from here onward
+$DumpJsonUsed = $DumpSanitized
+
 $ShortlistCsv = Join-Path $batchDir "shortlist.csv"
 $CanonicalOut = Join-Path $batchDir "canonical_products.csv"
 # IMPORTANT: builder v2 writes THIS report name (no ".csv" in filename)
@@ -92,13 +110,13 @@ $canonReport  = Join-Path $batchDir "canonical_products.report.json"
 
 Write-Host ""
 Write-Host "==> autopick shortlist (from Dropi dump)"
-python scripts\dropi_autopick.py --dump $DumpJson --out $ShortlistCsv --n 20
+python scripts\dropi_autopick.py --dump $DumpJsonUsed --out $ShortlistCsv --n 20
 if ($LASTEXITCODE -ne 0) { Stop-Release "dropi_autopick failed." }
 if (-not (Test-Path $ShortlistCsv)) { Stop-Release ("shortlist not produced: {0}" -f $ShortlistCsv) }
 
 Write-Host ""
 Write-Host "==> build canonical (from Dropi evidence) [v2]"
-python scripts\build_canonical_from_dropi_v2.py --shortlist $ShortlistCsv --dump $DumpJson --out $CanonicalOut
+python scripts\build_canonical_from_dropi_v2.py --shortlist $ShortlistCsv --dump $DumpJsonUsed --out $CanonicalOut
 if ($LASTEXITCODE -ne 0) { Stop-Release "build_canonical_from_dropi_v2 failed." }
 if (-not (Test-Path $CanonicalOut)) { Stop-Release ("canonical not produced: {0}" -f $CanonicalOut) }
 
@@ -168,15 +186,17 @@ foreach ($prodId in $ids) {
   Copy-Item $zipPath, $shaPath $rel -Force
 
   $meta = @{
-    git_sha          = $sha
-    product_id       = $prodId
-    dump_json        = $DumpJson
-    shortlist_csv    = $ShortlistCsv
-    canonical_csv    = $CanonicalOut
-    canonical_report = $canonReport
-    out_root         = $OutRoot
-    harden           = $summary
-    ts_utc           = (Get-Date).ToUniversalTime().ToString("o")
+    git_sha           = $sha
+    product_id        = $prodId
+    dump_json_input   = $DumpJson
+    dump_json_used    = $DumpJsonUsed
+    sanitize_report   = $SanitizeReport
+    shortlist_csv     = $ShortlistCsv
+    canonical_csv     = $CanonicalOut
+    canonical_report  = $canonReport
+    out_root          = $OutRoot
+    harden            = $summary
+    ts_utc            = (Get-Date).ToUniversalTime().ToString("o")
   }
 
   $metaPath = Join-Path $rel "release_meta.json"
@@ -206,3 +226,5 @@ Write-Host ("INDEX_JSON:  {0}" -f $indexPath)
 Write-Host ("SHORTLIST:   {0}" -f $ShortlistCsv)
 Write-Host ("CANONICAL:   {0}" -f $CanonicalOut)
 Write-Host ("CANON_RPT:   {0}" -f $canonReport)
+Write-Host ("DUMP_USED:   {0}" -f $DumpJsonUsed)
+if (Test-Path $SanitizeReport) { Write-Host ("SAN_RPT:     {0}" -f $SanitizeReport) }
