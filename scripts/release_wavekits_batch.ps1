@@ -1,26 +1,31 @@
 param(
   [string]$DumpJson = "data\evidence\launch_candidates_dropi_dump_f1_v3.json",
-  [string]$OutRoot  = "exports"
+  [string]$OutRoot  = "exports",
+  [ValidateSet("prod","bootstrap")]
+  [string]$Mode = "prod",
+  [int]$N = 20,
+  [switch]$AllowDirty,
+  [switch]$SkipPytest,
+  [switch]$SkipDoctor
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# =========================
-# WAVEKIT BATCH RELEASE (NO API/TOKENS)
-# dump.json -> shortlist.csv -> canonical_products.csv -> QUALITY GATE -> wavekits -> shopify export v2 -> enrich -> harden -> release
-# =========================
-
 function Stop-Release([string]$Message) { throw $Message }
 
 function Test-GitCleanGuard {
+  if ($AllowDirty) {
+    Write-Host "DIRTY_TREE: allowed (AllowDirty ON)"
+    return
+  }
+
   $s = (git status --porcelain) 2>$null
   if ($LASTEXITCODE -ne 0) { Stop-Release "GIT not available / not a repo." }
 
   $lines = @()
   if ($s) { $lines = @($s -split "`n" | ForEach-Object { $_.TrimEnd() }) }
 
-  # Force array ALWAYS (StrictMode-safe)
   $bad = @($lines | Where-Object {
     $_ -and
     ($_ -notmatch "^\?\?\s+exports[/\\]") -and
@@ -32,7 +37,7 @@ function Test-GitCleanGuard {
   if ($bad.Count -gt 0) {
     Write-Host "DIRTY_TREE (non-generated changes):"
     $bad | ForEach-Object { Write-Host $_ }
-    Stop-Release "Refusing to release from a dirty working tree (non-generated). Commit or restore changes."
+    Stop-Release "Refusing to release from a dirty working tree (non-generated). Commit or restore changes. (Or pass -AllowDirty)"
   }
 }
 
@@ -60,22 +65,35 @@ function Assert-ShopifyBodyNonEmpty([string]$ShopifyCsvPath) {
 Write-Host "============================================================"
 Write-Host "WAVEKIT BATCH RELEASE (NO API/TOKENS)"
 Write-Host "============================================================"
-Write-Host ("Repo: {0}" -f (Get-Location))
-Write-Host ("Dump: {0}" -f $DumpJson)
-Write-Host ("OutRoot: {0}" -f $OutRoot)
+Write-Host ("Repo:   {0}" -f (Get-Location))
+Write-Host ("Dump:   {0}" -f $DumpJson)
+Write-Host ("OutRoot:{0}" -f $OutRoot)
+Write-Host ("Mode:   {0}" -f $Mode)
+Write-Host ("N:      {0}" -f $N)
 Write-Host ""
 
 Write-Host "==> git clean guard"
 Test-GitCleanGuard
 
-Write-Host "==> pytest"
-pytest -q
-if ($LASTEXITCODE -ne 0) { Stop-Release "pytest failed." }
+if (-not $SkipPytest) {
+  Write-Host "==> pytest"
+  pytest -q
+  if ($LASTEXITCODE -ne 0) { Stop-Release "pytest failed." }
+  Write-Host ""
+} else {
+  Write-Host "==> pytest: SKIP"
+  Write-Host ""
+}
 
-Write-Host ""
-Write-Host "==> doctor"
-python -m synapse.infra.doctor
-if ($LASTEXITCODE -ne 0) { Stop-Release "doctor failed." }
+if (-not $SkipDoctor) {
+  Write-Host "==> doctor"
+  python -m synapse.infra.doctor
+  if ($LASTEXITCODE -ne 0) { Stop-Release "doctor failed." }
+  Write-Host ""
+} else {
+  Write-Host "==> doctor: SKIP"
+  Write-Host ""
+}
 
 if (-not (Test-Path $DumpJson)) {
   Stop-Release ("Missing dump JSON evidence: {0}" -f $DumpJson)
@@ -85,55 +103,71 @@ $sha = (git rev-parse --short=12 HEAD).Trim()
 $batchDir = "exports\releases\_batch\$sha"
 New-Item -ItemType Directory -Force $batchDir | Out-Null
 
-# -------------------------------------------------------------
-# NEW: sanitize dump evidence into batchDir (no side effects)
-# -------------------------------------------------------------
-Write-Host ""
-Write-Host "==> sanitize dump evidence (block placeholder images)"
-$DumpSanitized = Join-Path $batchDir "dump_sanitized.json"
-python scripts\sanitize_evidence_images.py $DumpJson --output $DumpSanitized --replace-with null
-if ($LASTEXITCODE -ne 0) { Stop-Release "sanitize_evidence_images failed." }
+# Always work from a stable copy for reproducibility
+$DumpJsonUsed = Join-Path $batchDir "dump_used.json"
+Copy-Item $DumpJson $DumpJsonUsed -Force
 
-$SanitizeReport = ($DumpSanitized + ".sanitize_report.json")
-if (-not (Test-Path $DumpSanitized)) { Stop-Release ("sanitize did not produce: {0}" -f $DumpSanitized) }
+# PROD: sanitize placeholder images (no side effects)
+$SanitizeReport = ""
+if ($Mode -eq "prod") {
+  Write-Host "==> sanitize dump evidence (copy -> in-place sanitize)"
+  python scripts\sanitize_evidence_images.py $DumpJsonUsed --in-place --replace-with null
+  if ($LASTEXITCODE -ne 0) { Stop-Release "sanitize_evidence_images failed." }
 
-Write-Host ("- dump_sanitized: {0}" -f $DumpSanitized)
-if (Test-Path $SanitizeReport) { Write-Host ("- sanitize_report: {0}" -f $SanitizeReport) }
-
-# Use sanitized dump from here onward
-$DumpJsonUsed = $DumpSanitized
+  $SanitizeReport = ($DumpJsonUsed + ".sanitize_report.json")
+  if (Test-Path $SanitizeReport) { Write-Host ("- sanitize_report: {0}" -f $SanitizeReport) }
+  Write-Host ""
+} else {
+  Write-Host "==> bootstrap mode: skipping sanitize (keeps whatever evidence you have)"
+  Write-Host ""
+}
 
 $ShortlistCsv = Join-Path $batchDir "shortlist.csv"
 $CanonicalOut = Join-Path $batchDir "canonical_products.csv"
-# IMPORTANT: builder v2 writes THIS report name (no ".csv" in filename)
 $canonReport  = Join-Path $batchDir "canonical_products.report.json"
+$ImageBacklog = Join-Path $batchDir "image_backlog.csv"
 
-Write-Host ""
 Write-Host "==> autopick shortlist (from Dropi dump)"
-python scripts\dropi_autopick.py --dump $DumpJsonUsed --out $ShortlistCsv --n 20
+python scripts\dropi_autopick.py --dump $DumpJsonUsed --out $ShortlistCsv --n $N
 if ($LASTEXITCODE -ne 0) { Stop-Release "dropi_autopick failed." }
 if (-not (Test-Path $ShortlistCsv)) { Stop-Release ("shortlist not produced: {0}" -f $ShortlistCsv) }
-
 Write-Host ""
-Write-Host "==> build canonical (from Dropi evidence) [v2]"
-python scripts\build_canonical_from_dropi_v2.py --shortlist $ShortlistCsv --dump $DumpJsonUsed --out $CanonicalOut
-if ($LASTEXITCODE -ne 0) { Stop-Release "build_canonical_from_dropi_v2 failed." }
+
+Write-Host "==> build canonical (from Dropi evidence) [v3]"
+python scripts\build_canonical_from_dropi_v3.py --shortlist $ShortlistCsv --dump $DumpJsonUsed --out $CanonicalOut --mode $Mode
+if ($LASTEXITCODE -ne 0) { Stop-Release "build_canonical_from_dropi_v3 failed." }
 if (-not (Test-Path $CanonicalOut)) { Stop-Release ("canonical not produced: {0}" -f $CanonicalOut) }
+Write-Host ""
 
 $ids = @(Get-ProductIdsFromCanonical $CanonicalOut)
 
-Write-Host ""
 Write-Host "==> canonical quality gate"
 if (-not (Test-Path $canonReport)) { Stop-Release ("Missing canonical report: {0}" -f $canonReport) }
 
-if ($ids.Count -eq 1 -and $ids[0] -eq "seed") {
-  python scripts\canonical_quality_gate.py --report $canonReport --allow-seed
+if ($Mode -eq "bootstrap") {
+  # bootstrap: soft fail (continues)
+  if ($ids.Count -eq 1 -and $ids[0] -eq "seed") {
+    python scripts\canonical_quality_gate.py --report $canonReport --allow-seed --mode bootstrap --soft-fail
+  } else {
+    python scripts\canonical_quality_gate.py --report $canonReport --mode bootstrap --soft-fail
+  }
 } else {
-  python scripts\canonical_quality_gate.py --report $canonReport
+  # prod: strict
+  if ($ids.Count -eq 1 -and $ids[0] -eq "seed") {
+    python scripts\canonical_quality_gate.py --report $canonReport --allow-seed --mode prod
+  } else {
+    python scripts\canonical_quality_gate.py --report $canonReport --mode prod
+  }
+  if ($LASTEXITCODE -ne 0) { Stop-Release "canonical quality gate failed." }
 }
-if ($LASTEXITCODE -ne 0) { Stop-Release "canonical quality gate failed (evidence too thin)." }
-
 Write-Host ""
+
+Write-Host "==> image backlog (missing images list)"
+python scripts\image_backlog_from_canon_report.py --report $canonReport --out $ImageBacklog
+if ($LASTEXITCODE -ne 0) { Write-Host "WARN: image backlog failed (non-fatal)." }
+Write-Host ("- image_backlog: {0}" -f $ImageBacklog)
+Write-Host ""
+
 Write-Host ("==> batch wavekits: {0} products" -f $ids.Count)
 
 $index = @()
@@ -194,9 +228,13 @@ foreach ($prodId in $ids) {
     shortlist_csv     = $ShortlistCsv
     canonical_csv     = $CanonicalOut
     canonical_report  = $canonReport
+    image_backlog     = $ImageBacklog
     out_root          = $OutRoot
     harden            = $summary
     ts_utc            = (Get-Date).ToUniversalTime().ToString("o")
+    mode              = $Mode
+    allow_dirty       = [bool]$AllowDirty
+    n                 = $N
   }
 
   $metaPath = Join-Path $rel "release_meta.json"
@@ -220,6 +258,7 @@ Write-Host "BATCH RELEASE DONE"
 Write-Host "============================================================"
 Write-Host ("BATCH_DIR:   {0}" -f $batchDir)
 Write-Host ("BATCH_INDEX: {0}" -f $indexPath)
+Write-Host ("IMAGE_BACKLOG: {0}" -f $ImageBacklog)
 Write-Host "COPY THIS (NOT A COMMAND):"
 Write-Host ("GIT_SHA:     {0}" -f $sha)
 Write-Host ("INDEX_JSON:  {0}" -f $indexPath)
@@ -227,4 +266,4 @@ Write-Host ("SHORTLIST:   {0}" -f $ShortlistCsv)
 Write-Host ("CANONICAL:   {0}" -f $CanonicalOut)
 Write-Host ("CANON_RPT:   {0}" -f $canonReport)
 Write-Host ("DUMP_USED:   {0}" -f $DumpJsonUsed)
-if (Test-Path $SanitizeReport) { Write-Host ("SAN_RPT:     {0}" -f $SanitizeReport) }
+if ($SanitizeReport -and (Test-Path $SanitizeReport)) { Write-Host ("SAN_RPT:     {0}" -f $SanitizeReport) }
