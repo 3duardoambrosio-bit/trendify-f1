@@ -29,17 +29,16 @@ def load_report(path: str) -> Dict[str, Any]:
 def extract_metrics(rep: Dict[str, Any]) -> Tuple[int, float, float, float, Dict[str, Any]]:
     """
     Soporta:
-    - Schema LEGACY:
+    - LEGACY:
         stats.total_ids, stats.with_price, stats.with_image, stats.with_desc
         fill_rates.with_price, fill_rates.with_image, fill_rates.with_desc
-    - Schema NUEVO:
+    - NUEVO:
         counts.total_rows|total_ids, counts.filled_price|with_price, counts.filled_image|with_image, counts.filled_desc|with_desc
         rates.price|with_price, rates.image|with_image, rates.desc|with_desc
         canonical_csv
     Devuelve:
       total, price_rate, image_rate, desc_rate, counts_normalized
     """
-    # --- LEGACY ---
     if isinstance(rep.get("stats"), dict) and isinstance(rep.get("fill_rates"), dict):
         stats = rep.get("stats") or {}
         fr = rep.get("fill_rates") or {}
@@ -56,18 +55,15 @@ def extract_metrics(rep: Dict[str, Any]) -> Tuple[int, float, float, float, Dict
         }
         return total, pr, ir, dr, counts
 
-    # --- NEW ---
     counts_in = rep.get("counts") if isinstance(rep.get("counts"), dict) else {}
     rates_in = rep.get("rates") if isinstance(rep.get("rates"), dict) else {}
 
     total = _i(counts_in.get("total_rows"), default=_i(counts_in.get("total_ids"), default=_i(rep.get("rows"), 0)))
 
-    # rates: prefer new keys
     pr = rates_in.get("price", None)
     ir = rates_in.get("image", None)
     dr = rates_in.get("desc", None)
 
-    # allow alt keys (some older reports used with_* naming)
     if pr is None: pr = rates_in.get("with_price", 0.0)
     if ir is None: ir = rates_in.get("with_image", 0.0)
     if dr is None: dr = rates_in.get("with_desc", 0.0)
@@ -92,6 +88,13 @@ def main() -> int:
     ap.add_argument("--min-desc",  type=float, default=0.6)
     ap.add_argument("--allow-seed", action="store_true",
                     help="Permite pasar cuando total==1 (seed-only), aunque rates sean 0.0")
+
+    # NUEVO: compat con runner
+    ap.add_argument("--mode", choices=["prod", "bootstrap"], default="prod",
+                    help="prod = estricto; bootstrap = normalmente se acompaña de --soft-fail")
+    ap.add_argument("--soft-fail", action="store_true",
+                    help="Si falla el gate, no rompe el pipeline (returncode 0) pero imprime WARN")
+
     args = ap.parse_args()
 
     if not os.path.exists(args.report):
@@ -103,14 +106,11 @@ def main() -> int:
 
     canonical_csv = rep.get("canonical_csv") or rep.get("canonical") or rep.get("canonical_path") or ""
 
-    # Seed exception: contract = si total==1 y allow_seed => OK sí o sí.
     if args.allow_seed and total == 1:
         print("canonical_quality_gate: OK (seed exception)")
+        print(f"- mode: {args.mode}")
         print("- source: canonical_csv")
-        if canonical_csv:
-            print(f"- canonical_csv: {canonical_csv}")
-        else:
-            print(f"- canonical_csv: (unknown; report={args.report})")
+        print(f"- canonical_csv: {canonical_csv or f'(unknown; report={args.report})'}")
         print(f"- total_ids: {total}")
         print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
         print(f"- counts: {counts}")
@@ -127,12 +127,11 @@ def main() -> int:
         problems.append(f"desc_rate={desc_rate} < {args.min_desc}")
 
     if problems:
-        print("canonical_quality_gate: FAIL")
+        tag = "WARN (soft-fail)" if args.soft_fail else "FAIL"
+        print(f"canonical_quality_gate: {tag}")
+        print(f"- mode: {args.mode}")
         print("- source: canonical_csv")
-        if canonical_csv:
-            print(f"- canonical_csv: {canonical_csv}")
-        else:
-            print(f"- canonical_csv: (unknown; report={args.report})")
+        print(f"- canonical_csv: {canonical_csv or f'(unknown; report={args.report})'}")
         print(f"- total_ids: {total}")
         print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
         print(f"- counts: {counts}")
@@ -141,14 +140,12 @@ def main() -> int:
         print("Meaning:")
         print("Your canonical evidence is missing core catalog fields (price/image/description) at acceptable rates.")
         print("Fix input evidence (API/full export) or run bootstrap mode until evidence is richer.")
-        return EXIT_FAIL
+        return 0 if args.soft_fail else EXIT_FAIL
 
     print("canonical_quality_gate: OK")
+    print(f"- mode: {args.mode}")
     print("- source: canonical_csv")
-    if canonical_csv:
-        print(f"- canonical_csv: {canonical_csv}")
-    else:
-        print(f"- canonical_csv: (unknown; report={args.report})")
+    print(f"- canonical_csv: {canonical_csv or f'(unknown; report={args.report})'}")
     print(f"- total_ids: {total}")
     print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
     print(f"- counts: {counts}")

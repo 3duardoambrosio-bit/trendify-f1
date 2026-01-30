@@ -1,4 +1,4 @@
-﻿import argparse, csv, os, re, sys
+﻿import argparse, csv, json, os, re, sys
 
 PLACEHOLDER_RE = re.compile(r"(via\.placeholder\.com|dummyimage\.com|placehold\.it|picsum\.photos)", re.I)
 
@@ -7,18 +7,35 @@ def is_placeholder(url: str) -> bool:
         return False
     return bool(PLACEHOLDER_RE.search(url.strip()))
 
+def load_json(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--canonical-csv", required=True)
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--canonical-csv", help="Ruta directa al canonical_products.csv")
+    g.add_argument("--report", help="Ruta al canonical_products.report.json (se extrae canonical_csv)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--max", type=int, default=0, help="0 = sin límite")
     args = ap.parse_args()
 
-    if not os.path.exists(args.canonical_csv):
-        print(f"Missing canonical CSV: {args.canonical_csv}", file=sys.stderr)
+    canonical_csv = args.canonical_csv
+    if args.report:
+        if not os.path.exists(args.report):
+            print(f"Missing report: {args.report}", file=sys.stderr)
+            return 2
+        rep = load_json(args.report)
+        canonical_csv = rep.get("canonical_csv") or rep.get("canonical") or rep.get("canonical_path") or ""
+        if not canonical_csv:
+            print("Report does not include canonical_csv", file=sys.stderr)
+            return 2
+
+    if not canonical_csv or not os.path.exists(canonical_csv):
+        print(f"Missing canonical CSV: {canonical_csv}", file=sys.stderr)
         return 2
 
-    rows = list(csv.DictReader(open(args.canonical_csv, encoding="utf-8", newline="")))
+    rows = list(csv.DictReader(open(canonical_csv, encoding="utf-8", newline="")))
     out_rows = []
     missing = 0
     placeholder = 0
@@ -54,6 +71,7 @@ def main():
         w.writerows(out_rows)
 
     print("image_backlog: OK")
+    print(f"- canonical_csv:  {canonical_csv}")
     print(f"- canonical_rows: {len(rows)}")
     print(f"- backlog_rows:   {len(out_rows)}")
     print(f"- missing_image:  {missing}")
