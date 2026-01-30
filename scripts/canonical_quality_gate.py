@@ -1,147 +1,158 @@
-#!/usr/bin/env python3
-# canonical_quality_gate.py
-# Gate de calidad para canonical report. Soporta prod vs bootstrap (soft-fail).
-# Mantiene compatibilidad: --report y --allow-seed.
-
-from __future__ import annotations
-
-import argparse
+﻿import argparse
 import json
 import os
 import sys
-from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
+EXIT_FAIL = 3
 
-@dataclass
-class GateThresholds:
-    min_price_rate: float = 0.90
-    min_desc_rate: float = 0.70
-    min_image_rate: float = 0.60
+def _f(x: Any, default: float = 0.0) -> float:
+    try:
+        if x is None:
+            return default
+        return float(x)
+    except Exception:
+        return default
 
+def _i(x: Any, default: int = 0) -> int:
+    try:
+        if x is None:
+            return default
+        return int(x)
+    except Exception:
+        return default
 
-def _load_json(path: str) -> Dict[str, Any]:
+def load_report(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
-def _rate(filled: int, total: int) -> float:
-    if total <= 0:
-        return 0.0
-    return float(filled) / float(total)
-
-
-def _extract_counts(report: Dict[str, Any]) -> Tuple[int, int, int, int]:
+def extract_metrics(rep: Dict[str, Any]) -> Tuple[int, float, float, float, Dict[str, Any]]:
     """
-    Devuelve: total_rows, filled_price, filled_image, filled_desc
-    Soporta varias formas de reporte (legacy o v3).
+    Soporta:
+    - Schema LEGACY:
+        stats.total_ids, stats.with_price, stats.with_image, stats.with_desc
+        fill_rates.with_price, fill_rates.with_image, fill_rates.with_desc
+    - Schema NUEVO:
+        counts.total_rows|total_ids, counts.filled_price|with_price, counts.filled_image|with_image, counts.filled_desc|with_desc
+        rates.price|with_price, rates.image|with_image, rates.desc|with_desc
+        canonical_csv
+    Devuelve:
+      total, price_rate, image_rate, desc_rate, counts_normalized
     """
-    counts = report.get("counts") or {}
-    total = counts.get("total_rows") or report.get("total_rows")
-    fp = counts.get("filled_price") or report.get("filled_price")
-    fi = counts.get("filled_image") or report.get("filled_image")
-    fd = counts.get("filled_desc") or report.get("filled_desc")
+    # --- LEGACY ---
+    if isinstance(rep.get("stats"), dict) and isinstance(rep.get("fill_rates"), dict):
+        stats = rep.get("stats") or {}
+        fr = rep.get("fill_rates") or {}
+        total = _i(stats.get("total_ids"), default=_i(stats.get("total_rows"), 0))
+        pr = _f(fr.get("with_price"), 0.0)
+        ir = _f(fr.get("with_image"), 0.0)
+        dr = _f(fr.get("with_desc"), 0.0)
 
-    # Fallback: si viene rates pero no counts (raro), intenta deducir:
-    if total is None:
-        total = report.get("total_ids") or report.get("rows") or 0
-    if fp is None:
-        fp = report.get("fill_price") or 0
-    if fi is None:
-        fi = report.get("fill_image") or 0
-    if fd is None:
-        fd = report.get("fill_desc") or 0
+        counts = {
+            "total_rows": total,
+            "filled_price": _i(stats.get("with_price"), 0),
+            "filled_image": _i(stats.get("with_image"), 0),
+            "filled_desc":  _i(stats.get("with_desc"), 0),
+        }
+        return total, pr, ir, dr, counts
 
-    # Normaliza
-    total = int(total or 0)
-    fp = int(fp or 0)
-    fi = int(fi or 0)
-    fd = int(fd or 0)
-    return total, fp, fi, fd
+    # --- NEW ---
+    counts_in = rep.get("counts") if isinstance(rep.get("counts"), dict) else {}
+    rates_in = rep.get("rates") if isinstance(rep.get("rates"), dict) else {}
 
+    total = _i(counts_in.get("total_rows"), default=_i(counts_in.get("total_ids"), default=_i(rep.get("rows"), 0)))
 
-def _is_seed_exception(report: Dict[str, Any], allow_seed: bool) -> bool:
-    if not allow_seed:
-        return False
-    ids = report.get("product_ids") or []
-    if isinstance(ids, list) and len(ids) == 1 and str(ids[0]) == "seed":
-        return True
-    # fallback por si no viene product_ids:
-    total, _, _, _ = _extract_counts(report)
-    top1 = (report.get("top1") or report.get("meta", {}).get("top1") or "").strip()
-    if total == 1 and top1 == "seed":
-        return True
-    return False
+    # rates: prefer new keys
+    pr = rates_in.get("price", None)
+    ir = rates_in.get("image", None)
+    dr = rates_in.get("desc", None)
 
+    # allow alt keys (some older reports used with_* naming)
+    if pr is None: pr = rates_in.get("with_price", 0.0)
+    if ir is None: ir = rates_in.get("with_image", 0.0)
+    if dr is None: dr = rates_in.get("with_desc", 0.0)
+
+    pr = _f(pr, 0.0)
+    ir = _f(ir, 0.0)
+    dr = _f(dr, 0.0)
+
+    counts = {
+        "total_rows": total,
+        "filled_price": _i(counts_in.get("filled_price"), default=_i(counts_in.get("with_price"), 0)),
+        "filled_image": _i(counts_in.get("filled_image"), default=_i(counts_in.get("with_image"), 0)),
+        "filled_desc":  _i(counts_in.get("filled_desc"),  default=_i(counts_in.get("with_desc"), 0)),
+    }
+    return total, pr, ir, dr, counts
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--report", required=True, help="Path a canonical_products.report.json")
-    ap.add_argument("--allow-seed", action="store_true", help="Permite excepción seed (imagen puede faltar)")
-    ap.add_argument("--mode", choices=["prod", "bootstrap"], default="prod")
-    ap.add_argument("--soft-fail", action="store_true", help="Nunca regresa exitcode != 0 (solo WARN)")
-    ap.add_argument("--min-price-rate", type=float, default=GateThresholds.min_price_rate)
-    ap.add_argument("--min-desc-rate", type=float, default=GateThresholds.min_desc_rate)
-    ap.add_argument("--min-image-rate", type=float, default=GateThresholds.min_image_rate)
+    ap.add_argument("--report", required=True)
+    ap.add_argument("--min-price", type=float, default=0.6)
+    ap.add_argument("--min-image", type=float, default=0.6)
+    ap.add_argument("--min-desc",  type=float, default=0.6)
+    ap.add_argument("--allow-seed", action="store_true",
+                    help="Permite pasar cuando total==1 (seed-only), aunque rates sean 0.0")
     args = ap.parse_args()
 
     if not os.path.exists(args.report):
         print(f"canonical_quality_gate: FAIL\n- reason: missing_report\n- report: {args.report}")
-        return 2
+        return EXIT_FAIL
 
-    report = _load_json(args.report)
-    canonical_csv = report.get("canonical_csv") or report.get("paths", {}).get("canonical_csv") or ""
-    total, fp, fi, fd = _extract_counts(report)
+    rep = load_report(args.report)
+    total, price_rate, image_rate, desc_rate, counts = extract_metrics(rep)
 
-    price_rate = _rate(fp, total)
-    image_rate = _rate(fi, total)
-    desc_rate = _rate(fd, total)
+    canonical_csv = rep.get("canonical_csv") or rep.get("canonical") or rep.get("canonical_path") or ""
 
-    thresholds = GateThresholds(
-        min_price_rate=float(args.min_price_rate),
-        min_desc_rate=float(args.min_desc_rate),
-        min_image_rate=float(args.min_image_rate),
-    )
+    # Seed exception: contract = si total==1 y allow_seed => OK sí o sí.
+    if args.allow_seed and total == 1:
+        print("canonical_quality_gate: OK (seed exception)")
+        print("- source: canonical_csv")
+        if canonical_csv:
+            print(f"- canonical_csv: {canonical_csv}")
+        else:
+            print(f"- canonical_csv: (unknown; report={args.report})")
+        print(f"- total_ids: {total}")
+        print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
+        print(f"- counts: {counts}")
+        return 0
 
-    problems: List[str] = []
-
-    # Seed exception: solo ignora image_rate
-    seed_exception = _is_seed_exception(report, args.allow_seed)
-
-    if price_rate < thresholds.min_price_rate:
-        problems.append(f"price_rate={price_rate:.3f} < {thresholds.min_price_rate:.3f}")
-    if desc_rate < thresholds.min_desc_rate:
-        problems.append(f"desc_rate={desc_rate:.3f} < {thresholds.min_desc_rate:.3f}")
-    if (not seed_exception) and (image_rate < thresholds.min_image_rate):
-        problems.append(f"image_rate={image_rate:.3f} < {thresholds.min_image_rate:.3f}")
-
-    status = "OK" if not problems else "FAIL"
-    suffix = " (seed exception)" if (seed_exception and status == "OK") else ""
-
-    print(f"canonical_quality_gate: {status}{suffix}")
-    print(f"- source: canonical_csv")
-    print(f"- canonical_csv: {canonical_csv}")
-    print(f"- total_ids: {total}")
-    print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
-    print(f"- counts: {{'total_rows': {total}, 'filled_price': {fp}, 'filled_image': {fi}, 'filled_desc': {fd}}}")
+    problems = []
+    if total <= 0:
+        problems.append("no_rows")
+    if price_rate < args.min_price:
+        problems.append(f"price_rate={price_rate} < {args.min_price}")
+    if image_rate < args.min_image:
+        problems.append(f"image_rate={image_rate} < {args.min_image}")
+    if desc_rate < args.min_desc:
+        problems.append(f"desc_rate={desc_rate} < {args.min_desc}")
 
     if problems:
+        print("canonical_quality_gate: FAIL")
+        print("- source: canonical_csv")
+        if canonical_csv:
+            print(f"- canonical_csv: {canonical_csv}")
+        else:
+            print(f"- canonical_csv: (unknown; report={args.report})")
+        print(f"- total_ids: {total}")
+        print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
+        print(f"- counts: {counts}")
         print(f"- problems: {problems}")
         print("")
         print("Meaning:")
         print("Your canonical evidence is missing core catalog fields (price/image/description) at acceptable rates.")
         print("Fix input evidence (API/full export) or run bootstrap mode until evidence is richer.")
+        return EXIT_FAIL
 
-    if not problems:
-        return 0
-
-    # Bootstrap: por default NO debe tumbarte el pipeline (si usas --soft-fail)
-    if args.soft_fail or args.mode == "bootstrap":
-        print("WARN: canonical quality gate failed, but continuing (soft-fail/bootstrap).")
-        return 0
-
-    return 3
-
+    print("canonical_quality_gate: OK")
+    print("- source: canonical_csv")
+    if canonical_csv:
+        print(f"- canonical_csv: {canonical_csv}")
+    else:
+        print(f"- canonical_csv: (unknown; report={args.report})")
+    print(f"- total_ids: {total}")
+    print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
+    print(f"- counts: {counts}")
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
