@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from infra.bitacora_auto import BitacoraAuto
-from ops.capital_shield import CapitalShield
+from ops.capital_shield_v2 import CapitalShieldV2
 from synapse import product_evaluator
 
 
@@ -167,7 +167,7 @@ def summarize_catalog(items: List[CatalogItemResult]) -> CatalogSummary:
 def _evaluate_catalog_core(
     products: Iterable[Dict[str, Any]],
     total_test_budget: float,
-    capital_shield: Optional[CapitalShield] = None,
+    capital_shield: Optional[CapitalShieldV2] = None,
     bitacora: Optional[BitacoraAuto] = None,
 ) -> List[CatalogItemResult]:
     """
@@ -240,7 +240,7 @@ def evaluate_catalog(
     total_test_budget: float = 0.0,
     bitacora: Optional[BitacoraAuto] = None,
     catalog_path: Optional[Path] = None,
-    capital_shield: Optional[CapitalShield] = None,
+    capital_shield: Optional[CapitalShieldV2] = None,
 ) -> Tuple[List[CatalogItemResult], CatalogSummary]:
     """
     Función pública de evaluación de catálogo.

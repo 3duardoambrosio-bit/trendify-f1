@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os, json, hashlib
+import os, json, hashlib, threading, time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,13 +36,27 @@ class LedgerV2:
     - checksum integrity
     - query básico
     """
-    def __init__(self, base_dir: Path, *, max_bytes: int = 10 * 1024 * 1024, batch_size: int = 10) -> None:
+    def __init__(self, base_dir: Path, *, max_bytes: int = 10 * 1024 * 1024, batch_size: int = 10, flush_interval_s: float = 1.0) -> None:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.max_bytes = int(max_bytes)
         self.batch_size = int(batch_size)
         self._buf: List[LedgerEventV2] = []
+        self._lock = threading.Lock()
         self._current_path: Optional[Path] = None
+        # Periodic flush thread
+        self._flush_interval = flush_interval_s
+        self._closed = False
+        self._flush_thread = threading.Thread(target=self._periodic_flush, daemon=True)
+        self._flush_thread.start()
+
+    def _periodic_flush(self) -> None:
+        """Background thread: flush buffer every flush_interval_s seconds."""
+        while not self._closed:
+            time.sleep(self._flush_interval)
+            with self._lock:
+                if self._buf:
+                    self._flush_unlocked()
 
     def _pick_current_file(self) -> Path:
         if self._current_path and self._current_path.exists():
@@ -84,6 +98,7 @@ class LedgerV2:
         entity_id: str,
         payload: Dict[str, Any],
         trace_id: str,
+        critical: bool = False,
     ) -> LedgerEventV2:
         ev = self._make_event(
             event_type=event_type,
@@ -92,12 +107,14 @@ class LedgerV2:
             payload=payload or {},
             trace_id=str(trace_id),
         )
-        self._buf.append(ev)
-        if len(self._buf) >= self.batch_size:
-            self.flush()
+        with self._lock:
+            self._buf.append(ev)
+            if critical or len(self._buf) >= self.batch_size:
+                self._flush_unlocked()
         return ev
 
-    def flush(self) -> None:
+    def _flush_unlocked(self) -> None:
+        """Flush buffer to disk. Caller must hold self._lock."""
         if not self._buf:
             return
         path = self._pick_current_file()
@@ -110,6 +127,10 @@ class LedgerV2:
             os.fsync(f.fileno())
 
         self._buf.clear()
+
+    def flush(self) -> None:
+        with self._lock:
+            self._flush_unlocked()
 
     def query(
         self,
@@ -151,4 +172,5 @@ class LedgerV2:
         return {"total": total, "corrupted": corrupted, "ok": (len(corrupted) == 0)}
 
     def close(self) -> None:
+        self._closed = True
         self.flush()

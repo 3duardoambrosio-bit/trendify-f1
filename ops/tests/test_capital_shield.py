@@ -1,4 +1,4 @@
-from ops.capital_shield import CapitalShield
+from ops.capital_shield_v1_DEPRECATED import CapitalShield
 
 
 def test_allows_spend_under_daily_cap():

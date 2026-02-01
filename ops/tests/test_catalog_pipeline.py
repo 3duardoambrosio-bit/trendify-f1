@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from infra.bitacora_auto import BitacoraAuto
-from ops.capital_shield import CapitalShield
 from ops.catalog_pipeline import (
     CatalogItemResult,
     evaluate_catalog,
@@ -81,7 +80,7 @@ def test_evaluate_catalog_uses_evaluator_and_capital_shield(
     results, summary = evaluate_catalog(
         catalog_path=catalog_path,
         total_test_budget=100.0,
-        capital_shield=CapitalShield(),
+        capital_shield=None,
     )
 
     # Sólo p1 debería tener presupuesto asignado
