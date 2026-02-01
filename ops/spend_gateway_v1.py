@@ -6,6 +6,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import json
 import datetime
+import logging
+
+from ops.safety_middleware import check_safety_before_spend
+from synapse.safety.killswitch import KillSwitch
+from synapse.safety.circuit import CircuitBreaker
+from infra.idempotency_manager import IdempotencyManager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -46,10 +54,22 @@ class SpendGateway:
     - Vault v1: request_spend(req) (usa req.budget)
     """
 
-    def __init__(self, *, vault: Any, ledger: Optional[Any] = None, caps: Optional[ProductCaps] = None):
+    def __init__(
+        self,
+        *,
+        vault: Any,
+        ledger: Optional[Any] = None,
+        caps: Optional[ProductCaps] = None,
+        killswitch: Optional[KillSwitch] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None,
+        idempotency_manager: Optional[IdempotencyManager] = None,
+    ):
         self.vault = vault
         self.ledger = ledger
         self.caps = caps or ProductCaps()
+        self._killswitch = killswitch
+        self._circuit_breaker = circuit_breaker
+        self._idempotency = idempotency_manager
         self._learn_total_by_product: Dict[str, Decimal] = {}
         self._learn_day1_by_product: Dict[str, Decimal] = {}
 
@@ -124,7 +144,7 @@ class SpendGateway:
                     return v.strip()
         return "OK" if allowed else "DENIED"
 
-    def request(self, req: Any) -> SpendGatewayDecision:
+    def request(self, req: Any, *, idempotency_key: Optional[str] = None) -> SpendGatewayDecision:
         # Vault v1 usa req.budget
         budget_obj = self._get(req, ("budget", "budget_type", "pool", "bucket", "type"), default="operational")
         pool = self._pool_from_budget(budget_obj)
@@ -137,6 +157,39 @@ class SpendGateway:
         day = int(self._get(req, ("day",), default=1))
         req_id = self._get(req, ("request_id", "rid", "id", "ref"), default="")
 
+        # --- Idempotency check (P0-003) ---
+        idem_key = idempotency_key
+        if idem_key is None:
+            # Auto-generate from request attributes
+            idem_key = f"spend_{pool}_{product_id}_{req_id}_{amount}_{day}"
+        if self._idempotency is not None and self._idempotency.is_processed(idem_key):
+            cached = self._idempotency.get_result(idem_key)
+            if cached is not None:
+                logger.info("idempotency hit for key=%s", idem_key)
+                return cached
+
+        # --- Safety checks (P0-005) ---
+        safety_result = check_safety_before_spend(
+            operation_id=str(req_id) or idem_key,
+            amount=amount,
+            killswitch=self._killswitch,
+            circuit_breaker=self._circuit_breaker,
+        )
+        if safety_result.is_err():
+            reason = safety_result.error
+            payload = {
+                "reason": reason,
+                "request_id": str(req_id),
+                "product_id": str(product_id),
+                "amount": str(amount),
+                "day": day,
+            }
+            self._log_event("SPEND_BLOCKED_SAFETY", payload)
+            decision = SpendGatewayDecision(False, reason, amount, pool, product_id, day, {})
+            if self._idempotency is not None:
+                self._idempotency.store_result(idem_key, decision)
+            return decision
+
         # RESERVE SIEMPRE bloqueado
         if pool == "reserve":
             payload = {
@@ -147,7 +200,10 @@ class SpendGateway:
                 "day": day,
             }
             self._log_event("SPEND_DENIED", payload)
-            return SpendGatewayDecision(False, "RESERVE_PROTECTED", amount, pool, product_id, day, {})
+            decision = SpendGatewayDecision(False, "RESERVE_PROTECTED", amount, pool, product_id, day, {})
+            if self._idempotency is not None:
+                self._idempotency.store_result(idem_key, decision)
+            return decision
 
         # Caps learning
         if pool == "learning":
@@ -166,7 +222,10 @@ class SpendGateway:
                         "so_far": str(day1_so_far),
                     }
                     self._log_event("SPEND_DENIED", payload)
-                    return SpendGatewayDecision(False, "CAP_LEARNING_DAY1", amount, pool, product_id, day, {"cap": str(self.caps.max_day1_learning), "so_far": str(day1_so_far)})
+                    decision = SpendGatewayDecision(False, "CAP_LEARNING_DAY1", amount, pool, product_id, day, {"cap": str(self.caps.max_day1_learning), "so_far": str(day1_so_far)})
+                    if self._idempotency is not None:
+                        self._idempotency.store_result(idem_key, decision)
+                    return decision
 
             if self.caps.max_total_learning is not None:
                 if total_so_far + amount > self.caps.max_total_learning:
@@ -180,7 +239,10 @@ class SpendGateway:
                         "so_far": str(total_so_far),
                     }
                     self._log_event("SPEND_DENIED", payload)
-                    return SpendGatewayDecision(False, "CAP_LEARNING_TOTAL", amount, pool, product_id, day, {"cap": str(self.caps.max_total_learning), "so_far": str(total_so_far)})
+                    decision = SpendGatewayDecision(False, "CAP_LEARNING_TOTAL", amount, pool, product_id, day, {"cap": str(self.caps.max_total_learning), "so_far": str(total_so_far)})
+                    if self._idempotency is not None:
+                        self._idempotency.store_result(idem_key, decision)
+                    return decision
 
         # Delegar al vault (v1: request_spend(req))
         dec = self.vault.request_spend(req)
@@ -203,7 +265,13 @@ class SpendGateway:
             if day == 1:
                 self._learn_day1_by_product[product_id] = self._learn_day1_by_product.get(product_id, Decimal("0")) + amount
 
-        return SpendGatewayDecision(allowed, str(reason), amount, pool, product_id, day, {})
+        decision = SpendGatewayDecision(allowed, str(reason), amount, pool, product_id, day, {})
+
+        # --- Store idempotency result (P0-003) ---
+        if self._idempotency is not None:
+            self._idempotency.store_result(idem_key, decision)
+
+        return decision
 
     # compat helper
     def request_spend(self, *, amount: Decimal, bucket: str):
