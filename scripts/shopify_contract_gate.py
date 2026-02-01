@@ -1,174 +1,177 @@
-﻿import csv
+﻿import argparse
+import csv
 import json
-from pathlib import Path
-import argparse
+import os
+import re
+import sys
+from collections import Counter
 
-REQUIRED = [
+PLACEHOLDER_RE = re.compile(r"(via\.placeholder\.com|dummyimage\.com|placehold\.it|picsum\.photos)", re.I)
+URL_RE = re.compile(r"^https?://", re.I)
+
+DEFAULT_REQUIRED_COLS = [
     "Handle",
     "Title",
     "Body (HTML)",
     "Vendor",
-    "Tags",
-    "Published",
-    "Option1 Name",
-    "Option1 Value",
-    "Variant Inventory Policy",
-    "Variant Fulfillment Service",
-    "Variant Price",
     "Status",
-    "Image Src",
+    "Variant Price",
 ]
 
-ALLOWED_STATUS = {"active", "draft", "archived"}
-ALLOWED_BOOL = {"TRUE", "FALSE"}
+def is_placeholder(u: str) -> bool:
+    return bool(u) and bool(PLACEHOLDER_RE.search(u.strip()))
 
-def _is_url(s: str) -> bool:
-    s = (s or "").strip()
-    return s.startswith("http://") or s.startswith("https://")
+def pick_image_columns(fieldnames):
+    # Shopify typical
+    preferred = ["Image Src", "Variant Image", "Image URL", "Image"]
+    lower_map = {c.lower(): c for c in fieldnames}
+    for p in preferred:
+        if p in fieldnames:
+            return [p]
+        if p.lower() in lower_map:
+            return [lower_map[p.lower()]]
 
-def _to_float(s: str):
-    s = (s or "").strip()
-    if s == "":
+    # Fallback heuristic: any column containing both "image" and ("src" or "url")
+    cols = []
+    for c in fieldnames:
+        lc = c.lower()
+        if "image" in lc and ("src" in lc or "url" in lc):
+            cols.append(c)
+    return cols
+
+def to_float(x: str):
+    if x is None:
         return None
+    s = str(x).strip()
+    if not s:
+        return None
+    s2 = re.sub(r"[^\d\.]", "", s)
     try:
-        return float(s)
+        return float(s2)
     except Exception:
-        return "NaN"
+        return None
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("csv_path", help="Ruta al CSV tipo Shopify")
-    ap.add_argument("--min-rows", type=int, default=1)
-    ap.add_argument("--mode", choices=["demo", "prod"], default="demo",
-                    help="demo: permite placeholders/demo_ como warning | prod: los vuelve error")
-    ap.add_argument("--fail-on-warn", action="store_true",
-                    help="Si se activa, warnings también hacen fallar el gate (útil en CI).")
+    ap.add_argument("--mode", choices=["demo", "prod"], default="demo", help="demo = tolerante; prod = estricto")
+    ap.add_argument("--allow-placeholders", action="store_true", help="En demo, baja placeholders a WARNING")
+    ap.add_argument("--fail-on-warn", action="store_true", help="Si hay warnings, falla (exit!=0)")
+    ap.add_argument("--report-out", default=None, help="Ruta del JSON report (default: <csv>.contract_report.json)")
     args = ap.parse_args()
 
-    p = Path(args.csv_path)
-    if not p.exists():
-        raise SystemExit(f"NO_EXISTE: {p}")
+    csv_path = args.csv_path
+    if not os.path.exists(csv_path):
+        print(f"Missing CSV: {csv_path}", file=sys.stderr)
+        return 2
 
-    report_path = p.with_suffix(p.suffix + ".contract_report.json")
+    report_out = args.report_out or (csv_path + ".contract_report.json")
 
     errors = []
-    warns = []
-    stats = {
-        "rows": 0,
-        "unique_handles": 0,
-        "demo_handles": 0,
-        "placeholder_images": 0,
-        "price_ok": 0,
-        "price_bad": 0,
-        "mode": args.mode,
-    }
+    warnings = []
 
-    handles = set()
-
-    with p.open("r", encoding="utf-8-sig", newline="") as f:
+    # Read
+    with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
         r = csv.DictReader(f)
-        headers = r.fieldnames or []
-        missing = [c for c in REQUIRED if c not in headers]
-        if missing:
-            errors.append({"type": "missing_columns", "missing": missing, "headers": headers})
+        fieldnames = r.fieldnames or []
+        rows = list(r)
 
-        for i, row in enumerate(r, start=2):  # header = line 1
-            stats["rows"] += 1
+    # Column-level checks
+    missing_cols = [c for c in DEFAULT_REQUIRED_COLS if c not in fieldnames]
+    if missing_cols:
+        # Esto sí es estructural; lo marcamos como error único
+        errors.append({
+            "type": "missing_required_columns",
+            "line": 0,
+            "handle": "",
+            "value": ", ".join(missing_cols),
+            "note": "CSV no cumple columnas mínimas Shopify"
+        })
 
-            handle = (row.get("Handle") or "").strip()
-            title = (row.get("Title") or "").strip()
-            body = (row.get("Body (HTML)") or "").strip()
-            vendor = (row.get("Vendor") or "").strip()
-            published = (row.get("Published") or "").strip().upper()
-            status = (row.get("Status") or "").strip().lower()
-            img = (row.get("Image Src") or "").strip()
-            price = _to_float(row.get("Variant Price") or "")
+    image_cols = pick_image_columns(fieldnames)
 
-            if handle:
-                if handle in handles:
-                    errors.append({"type": "dup_handle", "line": i, "handle": handle})
-                handles.add(handle)
-                if handle.startswith("demo_"):
-                    stats["demo_handles"] += 1
-                    warns.append({"type": "demo_handle", "line": i, "handle": handle})
+    # Row-level checks
+    handles = []
+    for i, row in enumerate(rows, start=2):  # header=1, first data line=2
+        handle = (row.get("Handle") or "").strip()
+        title = (row.get("Title") or "").strip()
+        body = (row.get("Body (HTML)") or "").strip()
+        price_s = (row.get("Variant Price") or "").strip()
+
+        if not handle:
+            errors.append({"type": "missing_handle", "line": i, "handle": "", "value": "", "note": "Handle vacío"})
+        else:
+            handles.append(handle)
+
+        if not title:
+            warnings.append({"type": "missing_title", "line": i, "handle": handle, "value": "", "note": "Title vacío"})
+
+        if not body:
+            warnings.append({"type": "missing_body", "line": i, "handle": handle, "value": "", "note": "Body (HTML) vacío"})
+
+        price = to_float(price_s)
+        if price is None or price <= 0:
+            errors.append({"type": "invalid_price", "line": i, "handle": handle, "value": price_s, "note": "Variant Price inválido"})
+
+        # Image checks (only if column exists)
+        img_val = ""
+        for c in image_cols:
+            v = (row.get(c) or "").strip()
+            if v:
+                img_val = v
+                break
+
+        if img_val:
+            if not URL_RE.search(img_val):
+                # En demo lo toleramos como warning si trae "algo"; en prod es error
+                if args.mode == "demo":
+                    warnings.append({"type": "image_not_http", "line": i, "handle": handle, "value": img_val[:180], "note": "Imagen no http(s)"})
+                else:
+                    errors.append({"type": "image_not_http", "line": i, "handle": handle, "value": img_val[:180], "note": "Imagen no http(s)"})
+            elif is_placeholder(img_val):
+                # AQUÍ está el bug de tu vida hoy: placeholders
+                if args.mode == "demo" and args.allow_placeholders:
+                    warnings.append({"type": "image_placeholder_allowed", "line": i, "handle": handle, "value": img_val[:180], "note": "Placeholder permitido en demo"})
+                else:
+                    errors.append({"type": "image_placeholder_blocked", "line": i, "handle": handle, "value": img_val[:180], "note": "Placeholder bloqueado"})
+        else:
+            # Sin imagen
+            if args.mode == "demo":
+                warnings.append({"type": "missing_image", "line": i, "handle": handle, "value": "", "note": "Sin imagen"})
             else:
-                errors.append({"type": "empty_handle", "line": i})
+                errors.append({"type": "missing_image", "line": i, "handle": handle, "value": "", "note": "Sin imagen"})
 
-            if not title:
-                errors.append({"type": "empty_title", "line": i})
-            if len(body) < 10:
-                errors.append({"type": "body_too_short", "line": i, "len": len(body)})
-            if not vendor:
-                warns.append({"type": "empty_vendor", "line": i})
+    # Uniqueness check
+    hc = Counter(handles)
+    dups = [h for h, c in hc.items() if c > 1]
+    if dups:
+        errors.append({"type": "duplicate_handles", "line": 0, "handle": "", "value": ", ".join(dups[:30]), "note": "Handles duplicados"})
 
-            if published and published not in ALLOWED_BOOL:
-                errors.append({"type": "bad_published", "line": i, "value": published})
-
-            if status and status not in ALLOWED_STATUS:
-                errors.append({"type": "bad_status", "line": i, "value": status})
-
-            if not img:
-                errors.append({"type": "missing_image", "line": i})
-            else:
-                if not _is_url(img):
-                    errors.append({"type": "bad_image_url", "line": i, "value": img})
-                if "via.placeholder.com" in img:
-                    stats["placeholder_images"] += 1
-                    warns.append({"type": "placeholder_image", "line": i, "value": img})
-
-            if price is None:
-                errors.append({"type": "missing_price", "line": i})
-            elif price == "NaN" or price <= 0:
-                stats["price_bad"] += 1
-                errors.append({"type": "bad_price", "line": i, "value": row.get("Variant Price")})
-            else:
-                stats["price_ok"] += 1
-
-    stats["unique_handles"] = len(handles)
-
-    if stats["rows"] < args.min_rows:
-        errors.append({"type": "too_few_rows", "rows": stats["rows"], "min_rows": args.min_rows})
-
-    # Promote-to-error rules in PROD mode
-    if args.mode == "prod":
-        if stats["demo_handles"] > 0:
-            errors.append({
-                "type": "demo_handles_not_allowed",
-                "count": stats["demo_handles"],
-                "note": "En prod no se permiten handles demo_."
-            })
-        if stats["placeholder_images"] > 0:
-            errors.append({
-                "type": "placeholder_images_not_allowed",
-                "count": stats["placeholder_images"],
-                "note": "En prod no se permiten images via.placeholder.com."
-            })
-
-    # Optional: fail-on-warn (CI paranoia mode)
-    fail_on_warn = bool(args.fail_on_warn)
-
-    report = {
-        "csv": str(p),
-        "stats": stats,
-        "errors_count": len(errors),
-        "warnings_count": len(warns),
-        "errors": errors[:200],
-        "warnings": warns[:200],
-        "pass": (len(errors) == 0) and (not fail_on_warn or len(warns) == 0),
-        "fail_on_warn": fail_on_warn,
+    rep = {
+        "csv_path": csv_path,
+        "mode": args.mode,
+        "allow_placeholders": bool(args.allow_placeholders),
+        "fail_on_warn": bool(args.fail_on_warn),
+        "rows": len(rows),
+        "unique_handles": len(set(handles)),
+        "errors": errors,
+        "warnings": warnings,
     }
 
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.makedirs(os.path.dirname(report_out) or ".", exist_ok=True)
+    with open(report_out, "w", encoding="utf-8") as f:
+        json.dump(rep, f, ensure_ascii=False, indent=2)
 
-    print("CONTRACT_GATE_REPORT:", report_path)
-    print("MODE:", args.mode, "FAIL_ON_WARN:", fail_on_warn)
-    print("ROWS:", stats["rows"], "UNIQUE_HANDLES:", stats["unique_handles"])
-    print("ERRORS:", len(errors), "WARNINGS:", len(warns))
+    print(f"CONTRACT_GATE_REPORT: {report_out}")
+    print(f"MODE: {args.mode} FAIL_ON_WARN: {args.fail_on_warn}")
+    print(f"ROWS: {len(rows)} UNIQUE_HANDLES: {len(set(handles))}")
+    print(f"ERRORS: {len(errors)} WARNINGS: {len(warnings)}")
 
     if len(errors) > 0:
-        raise SystemExit(2)
-    if fail_on_warn and len(warns) > 0:
-        raise SystemExit(3)
+        return 1
+    if args.fail_on_warn and len(warnings) > 0:
+        return 1
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

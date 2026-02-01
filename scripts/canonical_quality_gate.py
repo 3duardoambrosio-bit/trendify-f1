@@ -1,123 +1,117 @@
-﻿import argparse
-import json
-import os
-import sys
-from typing import Any, Dict, Tuple
+﻿import argparse, csv, json, os, re, sys
 
-EXIT_FAIL = 3
+EXIT_FAIL = 1
+PLACEHOLDER_RE = re.compile(r"(via\.placeholder\.com|dummyimage\.com|placehold\.it|picsum\.photos)", re.I)
 
-def _f(x: Any, default: float = 0.0) -> float:
-    try:
-        if x is None:
-            return default
-        return float(x)
-    except Exception:
-        return default
+PRICE_COLS = ["price","price_value","price_amount","price_mxn","sale_price","final_price","amount"]
+IMAGE_COLS = ["image_url","image","img","image_src","imageUrl","featured_image","main_image"]
+DESC_COLS  = ["description","desc","body_html","body","product_description","short_description"]
 
-def _i(x: Any, default: int = 0) -> int:
-    try:
-        if x is None:
-            return default
-        return int(x)
-    except Exception:
-        return default
+def is_placeholder(url: str) -> bool:
+    if not url:
+        return False
+    return bool(PLACEHOLDER_RE.search(str(url).strip()))
 
-def load_report(path: str) -> Dict[str, Any]:
+def load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def extract_metrics(rep: Dict[str, Any]) -> Tuple[int, float, float, float, Dict[str, Any]]:
-    """
-    Soporta:
-    - LEGACY:
-        stats.total_ids, stats.with_price, stats.with_image, stats.with_desc
-        fill_rates.with_price, fill_rates.with_image, fill_rates.with_desc
-    - NUEVO:
-        counts.total_rows|total_ids, counts.filled_price|with_price, counts.filled_image|with_image, counts.filled_desc|with_desc
-        rates.price|with_price, rates.image|with_image, rates.desc|with_desc
-        canonical_csv
-    Devuelve:
-      total, price_rate, image_rate, desc_rate, counts_normalized
-    """
-    if isinstance(rep.get("stats"), dict) and isinstance(rep.get("fill_rates"), dict):
-        stats = rep.get("stats") or {}
-        fr = rep.get("fill_rates") or {}
-        total = _i(stats.get("total_ids"), default=_i(stats.get("total_rows"), 0))
-        pr = _f(fr.get("with_price"), 0.0)
-        ir = _f(fr.get("with_image"), 0.0)
-        dr = _f(fr.get("with_desc"), 0.0)
+def pick_report_canonical(rep: dict) -> str:
+    for k in ("canonical_csv","canonical","canonical_path","canonical_products_csv","path"):
+        v = rep.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
 
-        counts = {
-            "total_rows": total,
-            "filled_price": _i(stats.get("with_price"), 0),
-            "filled_image": _i(stats.get("with_image"), 0),
-            "filled_desc":  _i(stats.get("with_desc"), 0),
-        }
-        return total, pr, ir, dr, counts
+def get_first_present(row: dict, keys: list[str]) -> str:
+    for k in keys:
+        v = row.get(k)
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            return s
+    return ""
 
-    counts_in = rep.get("counts") if isinstance(rep.get("counts"), dict) else {}
-    rates_in = rep.get("rates") if isinstance(rep.get("rates"), dict) else {}
+def is_price_ok(s: str) -> bool:
+    if not s:
+        return False
+    s2 = re.sub(r"[^\d\.]", "", s)
+    try:
+        return float(s2) > 0
+    except Exception:
+        return False
 
-    total = _i(counts_in.get("total_rows"), default=_i(counts_in.get("total_ids"), default=_i(rep.get("rows"), 0)))
+def is_image_ok(img: str, mode: str, allow_placeholders: bool) -> bool:
+    if not img:
+        return False
+    if img and img.strip().startswith("http") is False:
+        # si alguien mete rutas raras, igual lo cuenta como "hay algo" (bootstrap tolerante)
+        return True if mode == "bootstrap" else False
+    if is_placeholder(img):
+        return (mode == "bootstrap" and allow_placeholders)
+    return True
 
-    pr = rates_in.get("price", None)
-    ir = rates_in.get("image", None)
-    dr = rates_in.get("desc", None)
-
-    if pr is None: pr = rates_in.get("with_price", 0.0)
-    if ir is None: ir = rates_in.get("with_image", 0.0)
-    if dr is None: dr = rates_in.get("with_desc", 0.0)
-
-    pr = _f(pr, 0.0)
-    ir = _f(ir, 0.0)
-    dr = _f(dr, 0.0)
-
-    counts = {
-        "total_rows": total,
-        "filled_price": _i(counts_in.get("filled_price"), default=_i(counts_in.get("with_price"), 0)),
-        "filled_image": _i(counts_in.get("filled_image"), default=_i(counts_in.get("with_image"), 0)),
-        "filled_desc":  _i(counts_in.get("filled_desc"),  default=_i(counts_in.get("with_desc"), 0)),
-    }
-    return total, pr, ir, dr, counts
-
-def main() -> int:
+def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--report", required=True)
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--canonical-csv", help="Ruta directa al canonical_products.csv")
+    g.add_argument("--report", help="Ruta al canonical_products.report.json (se extrae canonical_csv)")
+
     ap.add_argument("--min-price", type=float, default=0.6)
     ap.add_argument("--min-image", type=float, default=0.6)
-    ap.add_argument("--min-desc",  type=float, default=0.6)
-    ap.add_argument("--allow-seed", action="store_true",
-                    help="Permite pasar cuando total==1 (seed-only), aunque rates sean 0.0")
-
-    # NUEVO: compat con runner
-    ap.add_argument("--mode", choices=["prod", "bootstrap"], default="prod",
-                    help="prod = estricto; bootstrap = normalmente se acompaña de --soft-fail")
-    ap.add_argument("--soft-fail", action="store_true",
-                    help="Si falla el gate, no rompe el pipeline (returncode 0) pero imprime WARN")
+    ap.add_argument("--min-desc", type=float, default=0.6)
+    ap.add_argument("--mode", choices=["prod","bootstrap"], default="prod")
+    ap.add_argument("--soft-fail", action="store_true")
+    ap.add_argument("--allow-placeholders", action="store_true", help="En bootstrap, cuenta placeholders como imágenes válidas")
 
     args = ap.parse_args()
 
-    if not os.path.exists(args.report):
-        print(f"canonical_quality_gate: FAIL\n- reason: missing_report\n- report: {args.report}")
-        return EXIT_FAIL
+    canonical_csv = args.canonical_csv
+    if args.report:
+        if not os.path.exists(args.report):
+            print(f"Missing report: {args.report}", file=sys.stderr)
+            return 2
+        rep = load_json(args.report)
+        canonical_csv = pick_report_canonical(rep)
+        if not canonical_csv:
+            print("Report does not include canonical_csv", file=sys.stderr)
+            return 2
 
-    rep = load_report(args.report)
-    total, price_rate, image_rate, desc_rate, counts = extract_metrics(rep)
+    if not canonical_csv or not os.path.exists(canonical_csv):
+        print(f"Missing canonical CSV: {canonical_csv}", file=sys.stderr)
+        return 2
 
-    canonical_csv = rep.get("canonical_csv") or rep.get("canonical") or rep.get("canonical_path") or ""
+    rows = list(csv.DictReader(open(canonical_csv, encoding="utf-8", newline="")))
+    total = len(rows)
+    counts = {"total_rows": total, "filled_price": 0, "filled_image": 0, "filled_desc": 0, "placeholders_counted": 0}
 
-    if args.allow_seed and total == 1:
-        print("canonical_quality_gate: OK (seed exception)")
-        print(f"- mode: {args.mode}")
-        print("- source: canonical_csv")
-        print(f"- canonical_csv: {canonical_csv or f'(unknown; report={args.report})'}")
-        print(f"- total_ids: {total}")
-        print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
-        print(f"- counts: {counts}")
-        return 0
+    for r in rows:
+        price = get_first_present(r, PRICE_COLS)
+        img   = get_first_present(r, IMAGE_COLS)
+        desc  = get_first_present(r, DESC_COLS)
+
+        if is_price_ok(price):
+            counts["filled_price"] += 1
+
+        ok_img = is_image_ok(img, mode=args.mode, allow_placeholders=args.allow_placeholders)
+        if ok_img:
+            counts["filled_image"] += 1
+            if is_placeholder(img) and args.mode == "bootstrap" and args.allow_placeholders:
+                counts["placeholders_counted"] += 1
+
+        if desc:
+            counts["filled_desc"] += 1
+
+    if total == 0:
+        price_rate = image_rate = desc_rate = 0.0
+    else:
+        price_rate = counts["filled_price"] / total
+        image_rate = counts["filled_image"] / total
+        desc_rate  = counts["filled_desc"]  / total
 
     problems = []
-    if total <= 0:
+    if total == 0:
         problems.append("no_rows")
     if price_rate < args.min_price:
         problems.append(f"price_rate={price_rate} < {args.min_price}")
@@ -130,20 +124,18 @@ def main() -> int:
         tag = "WARN (soft-fail)" if args.soft_fail else "FAIL"
         print(f"canonical_quality_gate: {tag}")
         print(f"- mode: {args.mode}")
+        print(f"- allow_placeholders: {args.allow_placeholders}")
         print("- source: canonical_csv")
         print(f"- canonical_csv: {canonical_csv or f'(unknown; report={args.report})'}")
         print(f"- total_ids: {total}")
         print(f"- rates: price={price_rate:.3f} image={image_rate:.3f} desc={desc_rate:.3f}")
         print(f"- counts: {counts}")
         print(f"- problems: {problems}")
-        print("")
-        print("Meaning:")
-        print("Your canonical evidence is missing core catalog fields (price/image/description) at acceptable rates.")
-        print("Fix input evidence (API/full export) or run bootstrap mode until evidence is richer.")
         return 0 if args.soft_fail else EXIT_FAIL
 
     print("canonical_quality_gate: OK")
     print(f"- mode: {args.mode}")
+    print(f"- allow_placeholders: {args.allow_placeholders}")
     print("- source: canonical_csv")
     print(f"- canonical_csv: {canonical_csv or f'(unknown; report={args.report})'}")
     print(f"- total_ids: {total}")
