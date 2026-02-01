@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal, Tuple
 
+logger = logging.getLogger(__name__)
 
-BudgetDecision = Literal["approved", "not_approved", "insufficient_budget"]
+BudgetDecision = Literal["approved", "not_approved", "insufficient_budget", "vault_error"]
 
 
 @dataclass(frozen=True)
@@ -97,10 +99,13 @@ class CapitalShieldV2:
         try:
             result = self._vault.request_spend(amount, btype)
         except Exception:
-            # Si el vault revienta por excepción, lo tratamos como rechazo
+            logger.exception(
+                "vault.request_spend raised for amount=%s budget_type=%s",
+                amount, btype,
+            )
             return CapitalDecision(
                 allocated=Decimal("0"),
-                reason="insufficient_budget",
+                reason="vault_error",
             )
 
         if self._is_success(result):
