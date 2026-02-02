@@ -51,3 +51,7 @@ _extracted_proof/
 
 # === Local audit runs (NO versionar) ===
 .audit_local/
+# === exports artifacts (no versionar) ===
+exports/releases/_batch/
+exports/releases/**/repo_snapshot/
+exports/demo_*/
