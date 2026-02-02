@@ -1,6 +1,0 @@
-﻿C:\Users\edu_a\OneDrive\Documentos\trendify-fase1\scripts\hygiene_sweep_fase3.py:81  def patch_utcnow(src: str) -> tuple[str, int]:
-C:\Users\edu_a\OneDrive\Documentos\trendify-fase1\scripts\hygiene_sweep_fase3.py:84  # Replace common datetime utcnow() call forms with now_utc()
-C:\Users\edu_a\OneDrive\Documentos\trendify-fase1\scripts\hygiene_sweep_fase3.py:116  def file_has_utcnow(path: Path) -> bool:
-C:\Users\edu_a\OneDrive\Documentos\trendify-fase1\scripts\hygiene_sweep_fase3.py:147  new_src, n2 = patch_utcnow(new_src)
-C:\Users\edu_a\OneDrive\Documentos\trendify-fase1\scripts\hygiene_sweep_fase3.py:165  if rel in UTC_FILES and file_has_utcnow(p):
-C:\Users\edu_a\OneDrive\Documentos\trendify-fase1\scripts\hygiene_sweep_fase3.py:184  print("REMAINING utcnow() in:")
