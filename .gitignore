@@ -1,180 +1,53 @@
-# Byte-compiled / optimized / DLL files
+﻿# === Python ===
 __pycache__/
 *.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDEs
-.vscode/
-.idea/
-
-# Logs
-*.log
-
-# Data files
-*.csv
-*.json
-*.db
-*.sqlite
-
-# Config files (except example)
-config/local.dev.yml
-data/bitacora/bitacora.jsonl
-
-# Python
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Local runtime outputs (NO versionar)
-data/ledger/
-data/backups/
-data/evidence/
-
-# CSVs reales (los tuyos), dejamos demos como plantillas
-data/catalog/candidates_real*.csv
-
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-data/ledger/
-data/backups/
-data/evidence/
-
-# CSVs reales (ruido); demos s� pueden vivir
-data/catalog/candidates_real*.csv
-
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-data/ledger/
-data/backups/
-data/evidence/
-
-# CSVs reales (ruido); demos s� pueden vivir
-data/catalog/candidates_real*.csv
-# --- SYNAPSE runtime artifacts ---
-data/ledger/events.ndjson
-**/__pycache__/
 *.pyo
-# Python
-__pycache__/
-*.pyc
+*.pyd
 .pytest_cache/
 .hypothesis/
+.mypy_cache/
+.ruff_cache/
 
-# Env & secrets
+# === Envs / secrets ===
 .env
 .env.*
-
-# Data sensible / no determinística
-data/
-
-# OS
-.DS_Store
-Thumbs.db
-# === LOCAL / SECRETS ===
-.env
+.venv/
+venv/
+env/
 _local_secrets/
+secrets/
 *.key
 *.pem
 
-# === PYTHON CACHE ===
-__pycache__/
-.pytest_cache/
-.hypothesis/
-
-# === DATA / OUTPUTS ===
-data/
-*.ndjson
-*.zip
+# === IDEs ===
+.vscode/
+.idea/
 
 # === OS ===
 .DS_Store
 Thumbs.db
-# --- SYNAPSE SECRETS (DO NOT COMMIT) ---
-.env
-.env.*
-.env.local
-!.env.template
 
-exports/secrets_*.env
-!exports/secrets_template.env
+# === Build / dist ===
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
 
-data/run/secrets_*.json
-data/run/secrets_*.txt
-# --- META PUBLISH LEDGER (local, avoid leaking IDs) ---
-data/ledger/meta_publish_map.json
-data/ledger/meta_publish_events.ndjson
-secrets/
+# === Runtime / data NO determinística ===
+data/ledger/
+data/backups/
+data/evidence/
+data/run/
+*.ndjson
+*.zip
+*.log
+*.pid
 
-data/run/*.log
-data/run/*.pid
-data/run/pytest_*.log
-data/run/control_tower_snapshot_*.json
+# === Extracted / outputs ===
 _extracted/
-_extracted/
-exports/
+_extracted2/
+_extracted_proof/
 
+# === Local audit runs (NO versionar) ===
 .audit_local/
-
