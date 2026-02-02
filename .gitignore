@@ -55,3 +55,10 @@ _extracted_proof/
 exports/releases/_batch/
 exports/releases/**/repo_snapshot/
 exports/demo_*/
+
+# exports release artifacts
+/exports/releases/
+
+# exports sha256 artifacts
+/exports/*.sha256
+/exports/**/*.sha256
