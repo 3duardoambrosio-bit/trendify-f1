@@ -38,6 +38,7 @@ wheels/
 data/ledger/
 data/backups/
 data/evidence/
+data/evidencia/
 data/run/
 *.ndjson
 *.zip
@@ -51,14 +52,9 @@ _extracted_proof/
 
 # === Local audit runs (NO versionar) ===
 .audit_local/
-# === exports artifacts (no versionar) ===
-exports/releases/_batch/
-exports/releases/**/repo_snapshot/
-exports/demo_*/
 
-# exports release artifacts
+# === exports (generated artifacts, NO versionar) ===
 /exports/releases/
-
-# exports sha256 artifacts
+/exports/demo_*/
 /exports/*.sha256
 /exports/**/*.sha256
