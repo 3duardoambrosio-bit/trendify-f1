@@ -172,12 +172,12 @@ class Ledger:
                             
                             if len(events) >= limit:
                                 break
-                        except:
+                        except Exception:
                             continue
                 
                 if len(events) >= limit:
                     break
-            except:
+            except Exception:
                 continue
         
         # Sort by timestamp descending
@@ -243,11 +243,11 @@ class Ledger:
                                 d = json.loads(line)
                                 if d.get("event_type") == event_type:
                                     count += 1
-                            except:
+                            except Exception:
                                 pass
                         else:
                             count += 1
-            except:
+            except Exception:
                 pass
         
         return count

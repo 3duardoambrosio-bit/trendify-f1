@@ -1,4 +1,6 @@
 from __future__ import annotations
+from infra.time_utils import now_utc
+
 
 from datetime import datetime, timezone
 
@@ -90,9 +92,9 @@ class BitacoraAuto:
                     try:
                         ts = datetime.fromisoformat(ts_raw)
                     except ValueError:
-                        ts = datetime.utcnow()
+                        ts = now_utc()
                 else:
-                    ts = datetime.utcnow()
+                    ts = now_utc()
 
                 entry_type = self._parse_entry_type(raw.get("entry_type"))
 
@@ -147,7 +149,7 @@ class BitacoraAuto:
 
         entry = BitacoraEntry(
             entry_id=str(uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             entry_type=self._parse_entry_type(entry_type),
             data=data or {},
             metadata=metadata or {},

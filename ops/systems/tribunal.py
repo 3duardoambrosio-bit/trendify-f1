@@ -1,4 +1,6 @@
 from __future__ import annotations
+from infra.time_utils import now_utc
+
 
 import json
 from dataclasses import dataclass
@@ -74,9 +76,9 @@ def load_exit_events(path: Path = BITACORA_PATH) -> List[ExitEvent]:
             ts = raw.get("timestamp")
 
             try:
-                timestamp = datetime.fromisoformat(ts) if ts else datetime.utcnow()
+                timestamp = datetime.fromisoformat(ts) if ts else now_utc()
             except Exception:
-                timestamp = datetime.utcnow()
+                timestamp = now_utc()
 
             events.append(
                 ExitEvent(

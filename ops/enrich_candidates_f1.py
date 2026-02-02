@@ -1,3 +1,5 @@
+from infra.time_utils import now_utc
+
 import json, math, pathlib, random
 from datetime import datetime
 
@@ -88,7 +90,7 @@ def main():
     out = {
         "isSuccess": True,
         "source": "launch_candidates_dropi_dump.json",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": now_utc().isoformat().replace("+00:00","Z"),
         "top": enriched,
         "meta": {
             "count": len(enriched),

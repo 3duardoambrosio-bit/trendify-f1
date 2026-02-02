@@ -1,4 +1,6 @@
 from __future__ import annotations
+from infra.time_utils import now_utc
+
 
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -111,7 +113,7 @@ class SpendGateway:
 
     def _log_event(self, event_type: str, payload: Dict[str, Any]) -> None:
         row = {
-            "ts": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "ts": datetime.now_utc().replace(microsecond=0).isoformat().replace("+00:00","Z"),
             "event_type": event_type,
             "payload": payload,
         }

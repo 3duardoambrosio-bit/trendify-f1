@@ -1,4 +1,6 @@
 # synapse/pulse/market_pulse.py
+from infra.time_utils import now_utc
+
 """
 Market Pulse — OLEADA 13
 =======================
@@ -97,7 +99,7 @@ class MarketPulseMemo:
 # ---------------------------
 
 def _now_iso() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.now_utc().replace(microsecond=0).isoformat().replace("+00:00","Z")
 
 
 def _sha256_json(obj: Any) -> str:

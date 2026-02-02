@@ -1,4 +1,6 @@
 from __future__ import annotations
+from infra.time_utils import now_utc
+
 
 import datetime
 import hashlib
@@ -44,7 +46,7 @@ EVIDENCE_KEYS = {
 
 
 def _utc_now_z() -> str:
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return datetime.now_utc().replace(microsecond=0).isoformat().replace("+00:00","Z")
 
 
 def parse_utm_content(utm: str | None) -> Dict[str, Any]:
