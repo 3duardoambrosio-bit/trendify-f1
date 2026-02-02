@@ -1,4 +1,6 @@
 from __future__ import annotations
+from infra.time_utils import now_utc
+
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from datetime import datetime
@@ -45,7 +47,7 @@ class AuditTrail:
         prev = self._last_hash()
         payload = {
             "event_type": event_type,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": now_utc().isoformat(),
             "actor": actor,
             "correlation_id": correlation_id,
             "data": data,

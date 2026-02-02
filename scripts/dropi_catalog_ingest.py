@@ -1,3 +1,5 @@
+from infra.time_utils import now_utc
+
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -49,7 +51,7 @@ URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def _now_iso() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.now_utc().replace(microsecond=0).isoformat().replace("+00:00","Z")
 
 
 def _norm_header(h: str) -> str:

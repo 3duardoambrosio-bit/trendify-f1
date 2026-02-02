@@ -35,7 +35,7 @@ def to_float(v):
     s = _num_re.sub("", s)
     try:
         return float(s)
-    except:
+    except Exception:
         return None
 
 def to_int(v):
@@ -44,7 +44,7 @@ def to_int(v):
         return 0
     try:
         return int(round(f))
-    except:
+    except Exception:
         return 0
 
 def extract_rows(raw):

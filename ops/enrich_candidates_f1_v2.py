@@ -1,3 +1,5 @@
+from infra.time_utils import now_utc
+
 import json, math, pathlib, hashlib
 from datetime import datetime
 
@@ -101,7 +103,7 @@ def normalize_prices(p):
         try:
             spv = float(sp); mv = float(p["margin"])
             cost = round(spv * (1.0 - mv))
-        except:
+        except Exception:
             pass
     return sp, cost
 
@@ -130,7 +132,7 @@ def enrich_item(p, idx, run_id):
         try:
             spv=float(sp); cv=float(cost)
             margin = (spv-cv)/spv if spv>0 else None
-        except:
+        except Exception:
             pass
 
     out = dict(p)
@@ -171,13 +173,13 @@ def main():
     if not isinstance(arr, list) or not arr:
         raise SystemExit("No candidates/top array found in JSON.")
 
-    run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    run_id = now_utc().strftime("%Y%m%d_%H%M%S")
     enriched = [enrich_item(p, i, run_id) for i,p in enumerate(arr)]
 
     out = {
         "isSuccess": True,
         "source": "launch_candidates_dropi_dump.json",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": now_utc().isoformat().replace("+00:00","Z"),
         "top": enriched,
         "meta": {
             "count": len(enriched),
@@ -195,7 +197,7 @@ def main():
     audit_path = pathlib.Path(r"data\ledger\decision_audit.ndjson")
     audit_event = {
         "type": "decision_batch",
-        "ts": datetime.utcnow().isoformat() + "Z",
+        "ts": now_utc().isoformat().replace("+00:00","Z"),
         "run_id": run_id,
         "source_file": str(inp),
         "out_file": str(outp),

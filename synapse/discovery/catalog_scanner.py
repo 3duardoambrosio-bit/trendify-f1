@@ -161,7 +161,7 @@ class CatalogScanner:
                 reader = csv.DictReader(f)
                 for row in reader:
                     products.append(row)
-        except:
+        except Exception:
             pass
         return products
     
@@ -197,7 +197,7 @@ class CatalogScanner:
                 rating = float(p.get("rating", 0))
                 reviews = int(p.get("reviews", 0))
                 sales = int(p.get("sales", 0))
-            except:
+            except Exception:
                 continue
             
             candidate = ProductCandidate(

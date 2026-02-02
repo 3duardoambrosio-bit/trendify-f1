@@ -1,3 +1,5 @@
+from infra.time_utils import now_utc
+
 from datetime import datetime
 
 import pytest
@@ -29,7 +31,7 @@ def _e(
         quality_score=quality,
         verdict=verdict,
         reason=reason,
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
     )
 
 

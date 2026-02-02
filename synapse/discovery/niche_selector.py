@@ -287,7 +287,7 @@ class NicheSelector:
             try:
                 data = json.loads(self.selection_file.read_text(encoding="utf-8"))
                 self._current_selection = NicheSelection(**data)
-            except:
+            except Exception:
                 self._current_selection = None
     
     def _save_selection(self):

@@ -1,4 +1,6 @@
 from __future__ import annotations
+from infra.time_utils import now_utc
+
 
 import hashlib
 import json
@@ -49,10 +51,10 @@ def _ndjson_write(path: str, rows: Iterable[Dict[str, Any]]) -> int:
     return n
 
 def _now_stamp() -> str:
-    return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return now_utc().strftime("%Y%m%dT%H%M%SZ")
 
 def _date_dir() -> str:
-    return datetime.utcnow().strftime("%Y%m%d")
+    return now_utc().strftime("%Y%m%d")
 
 @dataclass
 class FinderArgs:
