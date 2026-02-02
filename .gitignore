@@ -175,3 +175,6 @@ data/run/control_tower_snapshot_*.json
 _extracted/
 _extracted/
 exports/
+
+.audit_local/
+
