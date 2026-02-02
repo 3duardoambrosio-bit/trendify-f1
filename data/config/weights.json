@@ -1,0 +1,58 @@
+{
+  "angles": {
+    "dolor": {
+      "count": 8,
+      "hook_rate_3s_mean": 19.875,
+      "roas_mean": 1.2,
+      "spend": 17.0
+    }
+  },
+  "formats": {
+    "hands": {
+      "count": 8,
+      "hook_rate_3s_mean": 19.875,
+      "roas_mean": 1.2,
+      "spend": 17.0
+    }
+  },
+  "generated_at": "2026-01-13T15:16:15Z",
+  "hook_rate_3s_mean": 19.875,
+  "hooks": {
+    "h10": {
+      "count": 1,
+      "hook_rate_3s_mean": 19.0,
+      "roas_mean": 1.1,
+      "spend": 2.0
+    },
+    "h11": {
+      "count": 1,
+      "hook_rate_3s_mean": 23.0,
+      "roas_mean": 1.5,
+      "spend": 2.0
+    },
+    "h7": {
+      "count": 2,
+      "hook_rate_3s_mean": 18.5,
+      "roas_mean": 1.05,
+      "spend": 4.0
+    },
+    "h8": {
+      "count": 2,
+      "hook_rate_3s_mean": 20.0,
+      "roas_mean": 1.3,
+      "spend": 4.5
+    },
+    "h9": {
+      "count": 2,
+      "hook_rate_3s_mean": 20.0,
+      "roas_mean": 1.15,
+      "spend": 4.5
+    }
+  },
+  "marker": "LL_PATCH_2026-01-12_SYNTHETIC_GUARD_V4",
+  "records": 9,
+  "records_used": 8,
+  "roas_mean": 1.2,
+  "schema_version": "1.0.0",
+  "total_spend": 17.0
+}

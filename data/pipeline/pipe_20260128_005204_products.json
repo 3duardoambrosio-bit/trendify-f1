@@ -1,0 +1,41 @@
+[
+  {
+    "product_id": "3",
+    "title": "Audifonos TWS Earbuds",
+    "margin_score": 1.0,
+    "demand_score": 0.72,
+    "quality_score": 1.0,
+    "differentiation_score": 0.6428571428571428,
+    "risk_score": 0.75,
+    "total_score": 0.8514285714285714,
+    "rank": 1,
+    "margin_percent": 87.96992481203007,
+    "price": 399.0,
+    "strengths": [
+      "Alto margen (88%)",
+      "Buena demanda (200 reviews)",
+      "Alta calidad (4.5 estrellas)"
+    ],
+    "weaknesses": [],
+    "recommendation": "FUERTE CANDIDATO - Priorizar para marketing"
+  },
+  {
+    "product_id": "1",
+    "title": "Audifonos Bluetooth Pro",
+    "margin_score": 1.0,
+    "demand_score": 0.57,
+    "quality_score": 1.0,
+    "differentiation_score": 0.42857142857142855,
+    "risk_score": 0.75,
+    "total_score": 0.7817857142857143,
+    "rank": 2,
+    "margin_percent": 87.97996661101837,
+    "price": 599.0,
+    "strengths": [
+      "Alto margen (88%)",
+      "Alta calidad (4.7 estrellas)"
+    ],
+    "weaknesses": [],
+    "recommendation": "FUERTE CANDIDATO - Priorizar para marketing"
+  }
+]
