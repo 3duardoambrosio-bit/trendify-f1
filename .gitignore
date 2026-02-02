@@ -58,3 +58,7 @@ _extracted_proof/
 /exports/demo_*/
 /exports/*.sha256
 /exports/**/*.sha256
+# === exports (generated artifacts) ===
+/exports/**
+!/exports/
+!/exports/secrets_template.env
