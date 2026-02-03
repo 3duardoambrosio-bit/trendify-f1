@@ -1,11 +1,11 @@
 ﻿import pytest
-from ops.capital_shield_v1_DEPRECATED import CapitalShield
-
-
-
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:capital_shield v1 is deprecated, use capital_shield_v2:DeprecationWarning"
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message=r"^capital_shield v1 is deprecated, use capital_shield_v2$",
+    category=DeprecationWarning,
 )
+from ops.capital_shield_v1_DEPRECATED import CapitalShield
 def test_allows_spend_under_daily_cap():
     shield = CapitalShield()
 
@@ -52,4 +52,5 @@ def test_blocks_when_product_hard_cap_exceeded():
 
     assert d2.allowed is False
     assert d2.reason == "product_hard_cap_ratio_exceeded"
+
 
