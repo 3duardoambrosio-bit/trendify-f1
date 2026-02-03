@@ -1,3 +1,5 @@
+from config.thresholds import SCORING_WEIGHTS, SCORING_THRESHOLDS
+
 import json, math, pathlib, hashlib
 from datetime import datetime
 
@@ -39,7 +41,7 @@ def confidence_features(p):
     f_margin = 0.5
     if margin is not None:
         m = float(margin)
-        f_margin = 1.0 if m >= 0.60 else (0.7 if m >= 0.45 else 0.2)
+        f_margin = 1.0 if m >= SCORING_THRESHOLDS.min_overall_score else (0.7 if m >= 0.45 else 0.2)
     f_score = 1.0 if score >= 0.66 else (0.7 if score >= 0.58 else 0.3)
 
     # soft penalties
@@ -56,16 +58,16 @@ def confidence_features(p):
 
 def confidence_from_features(feat):
     # weighted, bounded; easy to tune later
-    base = 0.28
+    base = SCORING_WEIGHTS.margin_weight
     w = (
         base
-        + 0.22*feat["f_imgs"]
-        + 0.28*feat["f_margin"]
-        + 0.20*feat["f_score"]
+        + SCORING_WEIGHTS.demand_weight*feat["f_imgs"]
+        + SCORING_WEIGHTS.margin_weight*feat["f_margin"]
+        + SCORING_WEIGHTS.competition_weight*feat["f_score"]
         - 0.04*feat["pen_oem"]
         - 0.03*feat["pen_promo"]
     )
-    return clamp(w, 0.20, 0.92)
+    return clamp(w, SCORING_WEIGHTS.competition_weight, 0.92)
 
 def simulate_score_distribution(mean, conf, seed):
     # convert confidence to sigma
@@ -85,9 +87,9 @@ def simulate_score_distribution(mean, conf, seed):
 
 def recommend(score_p50, conf, risk):
     # policy simple pero seria: depende de confianza
-    if risk >= 0.75 and conf >= 0.65: return "AVOID"
-    if score_p50 >= 0.68 and conf >= 0.75: return "SCALE"
-    if score_p50 >= 0.60 and conf < 0.75:  return "TEST"
+    if risk >= SCORING_THRESHOLDS.min_confidence and conf >= SCORING_THRESHOLDS.min_margin_pct: return "AVOID"
+    if score_p50 >= SCORING_THRESHOLDS.min_demand_score and conf >= SCORING_THRESHOLDS.min_confidence: return "SCALE"
+    if score_p50 >= SCORING_THRESHOLDS.min_overall_score and conf < SCORING_THRESHOLDS.min_confidence:  return "TEST"
     if score_p50 < 0.50 and conf >= 0.70:  return "SKIP"
     return "MONITOR"
 
