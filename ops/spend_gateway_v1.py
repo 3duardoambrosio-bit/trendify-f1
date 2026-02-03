@@ -1,4 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
+from datetime import timezone
+
 from infra.time_utils import now_utc
 
 
@@ -113,11 +116,11 @@ class SpendGateway:
 
     def _log_event(self, event_type: str, payload: Dict[str, Any]) -> None:
         row = {
-            "ts": datetime.now_utc().replace(microsecond=0).isoformat().replace("+00:00","Z"),
+            "ts": datetime.datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z"),
             "event_type": event_type,
             "payload": payload,
         }
-        # IMPORTANT: siempre dejamos nuestra línea AL FINAL, para que rows[-1] sea esta.
+        # IMPORTANT: siempre dejamos nuestra lÃ­nea AL FINAL, para que rows[-1] sea esta.
         try:
             l = self.ledger
             if l is not None:
@@ -251,7 +254,7 @@ class SpendGateway:
         allowed = self._allowed_from(dec)
         reason = self._reason_from(dec, allowed)
 
-        # log approval/denial del vault también
+        # log approval/denial del vault tambiÃ©n
         payload = {
             "reason": str(reason),
             "request_id": str(req_id),
@@ -285,3 +288,4 @@ class SpendGateway:
                 self.product_id = ""
                 self.day = 1
         return self.request(_Req(amount, bucket))
+

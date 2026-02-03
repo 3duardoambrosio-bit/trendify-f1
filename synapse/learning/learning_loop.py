@@ -1,4 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
+from datetime import timezone
+
 from infra.time_utils import now_utc
 
 
@@ -46,7 +49,7 @@ EVIDENCE_KEYS = {
 
 
 def _utc_now_z() -> str:
-    return datetime.now_utc().replace(microsecond=0).isoformat().replace("+00:00","Z")
+    return datetime.datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z")
 
 
 def parse_utm_content(utm: str | None) -> Dict[str, Any]:
@@ -533,3 +536,4 @@ __all__ = [
     "LearningLoopConfig",
     "LearningRunResult",
 ]
+

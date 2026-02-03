@@ -62,3 +62,7 @@ _extracted_proof/
 /exports/**
 !/exports/
 !/exports/secrets_template.env
+
+# pipeline outputs (generated)
+/data/pipeline/
+
