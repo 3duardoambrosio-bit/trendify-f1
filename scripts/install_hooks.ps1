@@ -16,7 +16,7 @@ if (-not (Test-Path ".git")) { throw "NO .git (root incorrecto)" }
 if (-not (Test-Path "scripts\gate_f1.ps1")) { throw "NO scripts\gate_f1.ps1" }
 if (-not (Test-Path ".githooks")) { New-Item -ItemType Directory -Path ".githooks" | Out-Null }
 
-# Construir hook con STRINGS SINGLE-QUOTED (cero expansión de $? o $PS)
+# Construir hook con STRINGS SINGLE-QUOTED (cero expansiÃ³n de $? o $PS)
 $hook = @(
   '#!/bin/sh',
   'set -e',
@@ -30,4 +30,4 @@ $hook = @(
 Write-LFFile -Path ".githooks\pre-commit" -Content ($hook + "`n")
 git config core.hooksPath .githooks | Out-Null
 Write-Host "OK: core.hooksPath=.githooks"
-Write-Host "OK: wrote .githooks/pre-commit (exit $? literal)"
+Write-Host 'OK: wrote .githooks/pre-commit (exit $? literal)'
