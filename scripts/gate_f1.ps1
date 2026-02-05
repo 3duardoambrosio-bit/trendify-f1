@@ -17,9 +17,30 @@ $env:PYTHONUTF8 = "1"
 function Status-Lines { return (git status --porcelain | Measure-Object).Count }
 function Fail([int]$Code,[string]$Msg) { Write-Host "=== SYNAPSE F1 GATE: FAIL ==="; Write-Host $Msg; exit $Code }
 
+function Assert-NoBom([string]$Path) {
+  if (-not (Test-Path $Path)) { Fail 16 ("MISSING_FILE={0}" -f $Path) }
+  $b = [System.IO.File]::ReadAllBytes($Path)
+  if ($b.Length -lt 3) { return }
+
+  $h3 = (($b[0..2] | ForEach-Object { $_.ToString("X2") }) -join " ")
+  if ($h3 -eq "EF BB BF") { Fail 17 ("BOM_UTF8_DETECTED file={0} head3={1}" -f $Path,$h3) }
+
+  if ($b.Length -ge 2) {
+    $h2 = (($b[0..1] | ForEach-Object { $_.ToString("X2") }) -join " ")
+    if ($h2 -eq "FF FE") { Fail 18 ("BOM_UTF16LE_DETECTED file={0} head2={1}" -f $Path,$h2) }
+    if ($h2 -eq "FE FF") { Fail 19 ("BOM_UTF16BE_DETECTED file={0} head2={1}" -f $Path,$h2) }
+  }
+
+  # Marker para pruebas automatizadas
+  Write-Host ("NO_BOM_OK {0} HEAD3={1}" -f $Path,$h3)
+}
+
 # Root guard
 if (-not (Test-Path ".git")) { Fail 10 "NO .git (root incorrecto)" }
 if (-not (Test-Path "pyproject.toml")) { Fail 11 "NO pyproject.toml (root incorrecto)" }
+
+# Guardrail anti-BOM
+Assert-NoBom "pytest.ini"
 
 # DEV auto-bootstrap (SOLO si faltan fixtures)
 function Get-MissingFixtures {
@@ -48,7 +69,6 @@ if ($Mode -eq "dev") {
     Write-Host "=== DEV AUTO-BOOTSTRAP: START ==="
     $missing | ForEach-Object { "MISSING=$_"; } | Out-Host
 
-    # Protege contra side-effects trackeados
     $preTracked = Status-Lines
 
     & powershell -NoProfile -ExecutionPolicy Bypass -File $bootstrap
@@ -63,7 +83,6 @@ if ($Mode -eq "dev") {
       Fail 14 "BOOTSTRAP_INCOMPLETE"
     }
 
-    # Si esto ensucia el repo (archivos trackeados/untracked no ignorados), fallamos duro
     $postTracked = Status-Lines
     "STATUS_LINES_PRE={0} STATUS_LINES_POST={1}" -f $preTracked,$postTracked | Out-Host
     if ($postTracked -ne 0) {
@@ -77,7 +96,7 @@ if ($Mode -eq "dev") {
 }
 "BOOTSTRAP_USED={0}" -f $bootstrapUsed | Out-Host
 
-# PRE clean: solo en ops/release (y opcional en dev). En precommit NO.
+# PRE clean: solo en ops/release. En precommit NO.
 if ($Mode -in @("ops","release")) {
   $pre = Status-Lines
   if ($pre -ne 0) {
@@ -106,7 +125,7 @@ if ($Mode -in @("ops","release")) {
   if ($doctorOverall -notmatch "^GREEN") { Fail 21 ("DOCTOR_OVERALL={0}" -f $doctorOverall) }
 }
 
-# TESTS: HARD siempre (pero robusto si faltan dirs)
+# TESTS: HARD siempre (robusto si faltan dirs)
 $roots = @("tests","buyer/tests","infra/tests","ops/tests")
 $existing = @()
 foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
