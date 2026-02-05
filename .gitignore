@@ -1,4 +1,4 @@
-﻿# === Python ===
+# === Python ===
 __pycache__/
 *.py[cod]
 *.pyo
@@ -18,22 +18,18 @@ _local_secrets/
 secrets/
 *.key
 *.pem
-
 # === IDEs ===
 .vscode/
 .idea/
-
 # === OS ===
 .DS_Store
 Thumbs.db
-
 # === Build / dist ===
 build/
 dist/
 *.egg-info/
 *.egg
 wheels/
-
 # === Runtime / data NO determinística ===
 data/ledger/
 data/backups/
@@ -44,15 +40,12 @@ data/run/
 *.zip
 *.log
 *.pid
-
 # === Extracted / outputs ===
 _extracted/
 _extracted2/
 _extracted_proof/
-
 # === Local audit runs (NO versionar) ===
 .audit_local/
-
 # === exports (generated artifacts, NO versionar) ===
 /exports/releases/
 /exports/demo_*/
@@ -62,7 +55,86 @@ _extracted_proof/
 /exports/**
 !/exports/
 !/exports/secrets_template.env
-
 # pipeline outputs (generated)
 /data/pipeline/
-
+# Byte-compiled / optimized / DLL files
+*$py.class
+# C extensions
+*.so
+# Distribution / packaging
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+.installed.cfg
+MANIFEST
+# PyInstaller
+*.manifest
+*.spec
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+# Environments
+.venv
+ENV/
+env.bak/
+venv.bak/
+# IDEs
+# Logs
+# Data files
+*.csv
+*.json
+*.db
+*.sqlite
+# Config files (except example)
+config/local.dev.yml
+data/bitacora/bitacora.jsonl
+# Python
+*.pyc
+# Local runtime outputs (NO versionar)
+# CSVs reales (los tuyos), dejamos demos como plantillas
+data/catalog/candidates_real*.csv
+# CSVs reales (ruido); demos s├»┬┐┬¢ pueden vivir
+# --- SYNAPSE runtime artifacts ---
+data/ledger/events.ndjson
+**/__pycache__/
+# Env & secrets
+# Data sensible / no determin├â┬¡stica
+data/
+# OS
+# === LOCAL / SECRETS ===
+# === PYTHON CACHE ===
+# === DATA / OUTPUTS ===
+# --- SYNAPSE SECRETS (DO NOT COMMIT) ---
+.env.local
+!.env.template
+exports/secrets_*.env
+!exports/secrets_template.env
+data/run/secrets_*.json
+data/run/secrets_*.txt
+# --- META PUBLISH LEDGER (local, avoid leaking IDs) ---
+data/ledger/meta_publish_map.json
+data/ledger/meta_publish_events.ndjson
+data/run/*.log
+data/run/*.pid
+data/run/pytest_*.log
+data/run/control_tower_snapshot_*.json
+exports/
+.githooks/
