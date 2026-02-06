@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 from synapse.safety.limits import RiskLimits, RiskSnapshot, evaluate_risk
+import logging
+logger = logging.getLogger(__name__)
 
 
 class SafetyGateTripped(RuntimeError):
@@ -29,8 +31,8 @@ def _allowed_from(res: Any) -> bool:
             v = getattr(res, k)
             try:
                 return len(v) == 0
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("suppressed exception", exc_info=True)
 
     # 3) Default conservador
     return False
@@ -50,8 +52,8 @@ def _reason_from(res: Any, *, allowed: bool) -> str:
             try:
                 if isinstance(v, list) and v:
                     return str(v[0])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("suppressed exception", exc_info=True)
 
     return "OK" if allowed else "RISK_VIOLATION"
 

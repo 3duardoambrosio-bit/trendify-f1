@@ -6,6 +6,8 @@ from typing import Sequence
 
 from synapse.cli.commands import doctor_cmd, learning_cmd, pulse_cmd, snapshot_cmd, triage_cmd, wave_cmd
 from synapse.infra.diagnostics import capture_exception, suggest_fix
+import logging
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,7 +82,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 try:
     from synapse.cli._import_hygiene import wrap_main as _wrap_main  # type: ignore
     main = _wrap_main(main)  # type: ignore
-except Exception:
-    pass
+except Exception as e:
+    logger.debug("suppressed exception", exc_info=True)
+
 # --- END AUTO-PATCH ---
 
