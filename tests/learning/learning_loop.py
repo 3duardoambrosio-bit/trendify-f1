@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from synapse.infra.time_utc import now_utc, isoformat_z
 
 
 __LL_MARKER__ = "LL_PATCH_2026-01-10_EVIDENCE_FIRST_HOTFIX_ABSPATH_V3"
@@ -44,7 +45,7 @@ EVIDENCE_KEYS = {
 
 
 def _utc_now_z() -> str:
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return isoformat_z(now_utc(), microsecond_precision=False)
 
 
 def parse_utm_content(utm: str | None) -> Dict[str, Any]:

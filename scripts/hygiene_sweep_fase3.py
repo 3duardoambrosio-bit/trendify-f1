@@ -81,7 +81,7 @@ def patch_bare_except(src: str) -> tuple[str, int]:
 def patch_utcnow(src: str) -> tuple[str, int]:
     n_total = 0
 
-    # Replace common datetime utcnow() call forms with now_utc()
+    # Replace common datetime utcnow call forms with now_utc()
     patterns = [
         r"\bdatetime\.utcnow\(\)",
         r"\bdatetime\.datetime\.utcnow\(\)",
@@ -181,7 +181,7 @@ def main() -> int:
         for f in remaining_bare:
             print(f"  - {f}")
     if remaining_utc:
-        print("REMAINING utcnow() in:")
+        print("REMAINING utcnow in:")
         for f in remaining_utc:
             print(f"  - {f}")
 
