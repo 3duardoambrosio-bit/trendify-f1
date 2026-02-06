@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Literal, Optional, Tuple
 import importlib
+import logging
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -129,8 +131,8 @@ def check_evidence_fanout() -> CheckResult:
         try:
             json.loads(f.read_text(encoding="utf-8"))
             valid += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("suppressed exception", exc_info=True)
 
     if valid == 0:
         return CheckResult("evidence_fanout", "RED", "Ningún JSON válido en evidence/products")
