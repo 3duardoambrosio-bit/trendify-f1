@@ -24,6 +24,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, List
+import logging
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "ct_snapshot_v1"
 MARKER = "CT_SNAPSHOT_CANON_2026-01-20_V1_ATOMIC_FRESHNESS"
@@ -109,9 +111,8 @@ def atomic_write_json(out_path: Path, data: Dict[str, Any]) -> None:
         try:
             if os.path.exists(tmp_name):
                 os.remove(tmp_name)
-        except Exception:
-            pass
-
+        except Exception as e:
+            logger.debug("suppressed exception", exc_info=True)
 
 def build_snapshot(repo_root: Path, include_raw: bool = True, trend_n: int = 10) -> Dict[str, Any]:
     run_dir = repo_root / "data" / "run"

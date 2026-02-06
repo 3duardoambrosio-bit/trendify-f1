@@ -3,6 +3,8 @@ from __future__ import annotations
 import inspect
 from types import ModuleType
 from typing import Any, Callable
+import logging
+logger = logging.getLogger(__name__)
 
 
 _CANDIDATES = (
@@ -53,8 +55,8 @@ def _call_callable(fn: Callable[..., Any], argv: list[str] | None = None, **kwar
                 try:
                     out = fn(argv)
                     return _normalize_rc(out)
-                except TypeError:
-                    pass
+                except TypeError as e:
+                    logger.debug("suppressed exception", exc_info=True)
 
         out = fn()
         return _normalize_rc(out)

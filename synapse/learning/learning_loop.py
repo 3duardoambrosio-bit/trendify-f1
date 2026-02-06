@@ -11,6 +11,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import logging
+logger = logging.getLogger(__name__)
 
 
 __LL_MARKER__ = "LL_PATCH_2026-01-12_SYNTHETIC_GUARD_V4"
@@ -144,8 +146,8 @@ def _iter_events(ledger_obj: Any) -> List[Any]:
                     out = ev()
                     return list(out) if out is not None else []
                 return list(ev) if ev is not None else []
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("suppressed exception", exc_info=True)
 
     for m in ("iter_events", "read_events", "load_events", "get_events", "list_events"):
         fn = getattr(ledger_obj, m, None)
@@ -153,8 +155,8 @@ def _iter_events(ledger_obj: Any) -> List[Any]:
             try:
                 out = fn()
                 return list(out) if out is not None else []
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("suppressed exception", exc_info=True)
 
     try:
         return list(ledger_obj)
@@ -193,8 +195,8 @@ def _extract_payload(e: Any) -> Dict[str, Any]:
                 return d["payload"]
             if any(k in d for k in EVIDENCE_KEYS):
                 return d
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("suppressed exception", exc_info=True)
 
     return {}
 
@@ -302,16 +304,15 @@ def _ledger_write(ledger_obj: Any, *, event_type: str, status: str, input_hash: 
             try:
                 fn(ev)
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("suppressed exception", exc_info=True)
 
     try:
         writes = getattr(ledger_obj, "writes", None)
         if isinstance(writes, list):
             writes.append(ev)
-    except Exception:
-        pass
-
+    except Exception as e:
+        logger.debug("suppressed exception", exc_info=True)
 
 class LearningLoop:
     def __init__(self, repo: Path | str | None = None):

@@ -2,6 +2,8 @@ from config.thresholds import SCORING_WEIGHTS, SCORING_THRESHOLDS
 
 import json, math, pathlib, hashlib
 from datetime import datetime
+import logging
+logger = logging.getLogger(__name__)
 
 def clamp(x,a,b): return max(a, min(b, x))
 
@@ -103,8 +105,9 @@ def normalize_prices(p):
         try:
             spv = float(sp); mv = float(p["margin"])
             cost = round(spv * (1.0 - mv))
-        except:
-            pass
+        except Exception as e:
+            logger.debug("suppressed exception", exc_info=True)
+
     return sp, cost
 
 def ensure_dir(path):
@@ -132,8 +135,8 @@ def enrich_item(p, idx, run_id):
         try:
             spv=float(sp); cv=float(cost)
             margin = (spv-cv)/spv if spv>0 else None
-        except:
-            pass
+        except Exception as e:
+            logger.debug("suppressed exception", exc_info=True)
 
     out = dict(p)
     out["id"] = out.get("id") or f"cand_{idx}"

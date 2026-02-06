@@ -7,6 +7,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import logging
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_REL = Path("data/ledger/events.ndjson")
@@ -262,8 +264,8 @@ def cmd_stats(path: Path) -> int:
         payload_ok += 1
         try:
             spend_sum += float(p.get("spend") or 0.0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("suppressed exception", exc_info=True)
 
     print(json.dumps({
         "ledger": str(path),

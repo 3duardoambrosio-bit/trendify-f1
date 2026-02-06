@@ -7,6 +7,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Dict
 from datetime import datetime, timezone
+import logging
+logger = logging.getLogger(__name__)
 
 
 class KillSwitchLevel(str, Enum):
@@ -75,8 +77,9 @@ class KillSwitch:
             # No active switches: remove state file
             try:
                 self._state_file.unlink(missing_ok=True)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("suppressed exception", exc_info=True)
+
             return
         data = {}
         for key, act in self._active.items():

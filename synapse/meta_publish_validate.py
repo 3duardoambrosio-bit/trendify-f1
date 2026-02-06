@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import logging
+logger = logging.getLogger(__name__)
 
 __MARKER__ = "META_PUBLISH_VALIDATE_2026-01-13_V1"
 
@@ -291,8 +293,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 try:
                     if fp.stat().st_size <= 0:
                         missing_here.append(str(fp) + " (empty)")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("suppressed exception", exc_info=True)
+
         if missing_here:
             file_missing[key] = missing_here
             missing_assets.extend(missing_here)
