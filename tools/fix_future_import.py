@@ -1,4 +1,4 @@
-﻿import re, sys
+import re, sys
 from pathlib import Path
 
 path = Path(sys.argv[1])

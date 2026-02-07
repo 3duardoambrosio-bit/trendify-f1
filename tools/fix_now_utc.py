@@ -1,4 +1,4 @@
-﻿import re, sys
+import re, sys
 from pathlib import Path
 
 TARGET_CALL = re.compile(r"\b(datetime|_dt)\.now_utc\(\)")

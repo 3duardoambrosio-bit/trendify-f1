@@ -1,4 +1,4 @@
-﻿import argparse, csv, json, os, re, sys
+import argparse, csv, json, os, re, sys
 
 PLACEHOLDER_RE = re.compile(r"(via\.placeholder\.com|dummyimage\.com|placehold\.it|picsum\.photos)", re.I)
 

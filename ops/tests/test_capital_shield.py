@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 import warnings
 warnings.filterwarnings(
     "ignore",
