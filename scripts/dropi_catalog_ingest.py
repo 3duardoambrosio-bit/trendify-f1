@@ -4,7 +4,7 @@ from datetime import timezone
 
 from infra.time_utils import now_utc
 
-ï»¿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 dropi_catalog_ingest.py
