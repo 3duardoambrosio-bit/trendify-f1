@@ -1,11 +1,12 @@
 import argparse, re, zipfile, shutil
 from pathlib import Path
 from datetime import datetime
+from synapse.infra.time_utc import now_utc, isoformat_z
 
 MARKER_RE = re.compile(r"^#\s+([\w\-/\\\.]+\.py)\s*$")
 
 def now_tag():
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+    return now_utc().strftime("%Y%m%d_%H%M%S")
 
 def backup_if_exists(path: Path):
     if path.exists():

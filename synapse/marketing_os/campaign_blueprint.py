@@ -6,13 +6,14 @@ Genera configs listas para Meta, TikTok, Google.
 No ideas, EJECUTABLES.
 """
 
-from __future__ import annotations
 
+from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import json
+from synapse.infra.time_utc import now_utc, isoformat_z
 
 
 class Platform(Enum):
@@ -176,7 +177,7 @@ class BlueprintGenerator:
         ))
         
         return CampaignBlueprint(
-            blueprint_id=f"meta_{product_id}_{datetime.now().strftime('%Y%m%d')}",
+            blueprint_id=f"meta_{product_id}_{now_utc().strftime('%Y%m%d')}",
             product_id=product_id,
             product_name=product_name,
             platform=Platform.META,
@@ -230,7 +231,7 @@ class BlueprintGenerator:
         )]
         
         return CampaignBlueprint(
-            blueprint_id=f"tiktok_{product_id}_{datetime.now().strftime('%Y%m%d')}",
+            blueprint_id=f"tiktok_{product_id}_{now_utc().strftime('%Y%m%d')}",
             product_id=product_id,
             product_name=product_name,
             platform=Platform.TIKTOK,

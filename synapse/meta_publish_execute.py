@@ -1,5 +1,5 @@
-from __future__ import annotations
 
+from __future__ import annotations
 import argparse
 import hashlib
 import json
@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+from synapse.infra.time_utc import now_utc, isoformat_z
 
 __MARKER__ = "META_PUBLISH_EXECUTE_2026-01-17_V7"
 
@@ -455,7 +456,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             }
             _write_json(out_path, run)
             out_dir.mkdir(parents=True, exist_ok=True)
-            hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            hist_name = f"meta_publish_run_{mode}_{now_utc().strftime('%Y%m%d_%H%M%S')}.json"
             _write_json(out_dir / hist_name, run)
 
             print(json.dumps({
@@ -493,7 +494,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             }
             _write_json(out_path, run)
             out_dir.mkdir(parents=True, exist_ok=True)
-            hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            hist_name = f"meta_publish_run_{mode}_{now_utc().strftime('%Y%m%d_%H%M%S')}.json"
             _write_json(out_dir / hist_name, run)
 
             print(json.dumps({
@@ -734,7 +735,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _write_json(out_path, run)
     out_dir.mkdir(parents=True, exist_ok=True)
-    hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    hist_name = f"meta_publish_run_{mode}_{now_utc().strftime('%Y%m%d_%H%M%S')}.json"
     _write_json(out_dir / hist_name, run)
 
     print(json.dumps({
