@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from synapse.infra.cli_logging import cli_print
 
 # ops/dropi_dump_ingest.py
@@ -11,7 +13,6 @@ from synapse.infra.cli_logging import cli_print
 #
 # Nota: No depende de libs externas. Solo stdlib.
 
-from __future__ import annotations
 
 import argparse
 import datetime as _dt

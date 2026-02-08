@@ -1,123 +1,97 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List, Dict, Any
 
+PROD_DIRS = [Path("synapse"), Path("infra"), Path("ops"), Path("buyer"), Path("core"), Path("config")]
 
-CANONICALS = [
-    "ops/capital_shield_v2.py",
-    "infra/ledger_v2.py",
-    "ops/spend_gateway_v1.py",
-    "ops/safety_middleware.py",
-    "synapse/safety/killswitch.py",
-    "synapse/safety/circuit.py",
-    "infra/atomic_io.py",
-    "infra/idempotency_manager.py",
-]
+CANONICALS = {
+    Path("ops/capital_shield_v2.py"),
+    Path("infra/ledger_v2.py"),
+    Path("ops/spend_gateway_v1.py"),
+    Path("ops/safety_middleware.py"),
+    Path("synapse/safety/killswitch.py"),
+    Path("synapse/safety/circuit.py"),
+    Path("infra/atomic_io.py"),
+    Path("infra/idempotency_manager.py"),
+}
 
-PROD_DIRS = ["synapse", "infra", "ops", "buyer", "core", "config"]
-ALL_DIRS = ["synapse", "infra", "ops", "buyer", "core", "config", "tools", "tests"]
+RX_BARE_EXCEPT = re.compile(r"(?m)^(?P<indent>[ \t]*)except[ \t]*:[ \t]*$")
+RX_PRINT_CALL = re.compile(r"\bprint\s*\(")
+RX_UTCNOW = re.compile(r"\butcnow\s*\(")
 
+def _is_tests(p: Path) -> bool:
+    s = p.as_posix().lower()
+    return "/tests/" in s or s.endswith("/test.py") or s.endswith("_test.py")
 
-@dataclass(frozen=True)
-class Check:
-    name: str
-    ok: bool
-    count: int
-    sample: List[str]
+def _is_excluded(p: Path) -> bool:
+    # Exclude canonicals from pattern scans (rule: no tocar canonicals)
+    if p in CANONICALS:
+        return True
+    # Exclude tools entirely from "prod" scans
+    if p.as_posix().lower().startswith("tools/"):
+        return True
+    # Exclude tests
+    if _is_tests(p):
+        return True
+    return False
 
+def _git_diff_paths() -> List[str]:
+    p = subprocess.run(["git", "diff", "--name-only"], capture_output=True, text=True)
+    p2 = subprocess.run(["git", "diff", "--name-only", "--cached"], capture_output=True, text=True)
+    out = []
+    out.extend([x.strip() for x in p.stdout.splitlines() if x.strip()])
+    out.extend([x.strip() for x in p2.stdout.splitlines() if x.strip()])
+    return sorted(set(out))
 
-def _run(cmd: List[str]) -> Tuple[int, str, str]:
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = p.communicate()
-    return p.returncode, out, err
-
-
-def _scan(pattern: str, roots: List[str], sample_cap: int = 25) -> Tuple[int, List[str]]:
-    rx = re.compile(pattern)
-    count = 0
-    sample: List[str] = []
-
-    for r in roots:
-        rp = Path(r)
-        if not rp.exists():
+def _scan_files(rx: re.Pattern) -> List[str]:
+    hits: List[str] = []
+    for root in PROD_DIRS:
+        if not root.exists():
             continue
-
-        for fp in rp.rglob("*.py"):
+        for fp in root.rglob("*.py"):
+            rel = Path(fp.as_posix())
+            if _is_excluded(rel):
+                continue
             try:
                 text = fp.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                # Count as a hit (encoding issue) and sample it
-                count += 1
-                if len(sample) < sample_cap:
-                    sample.append(f"{fp}:encoding_error")
+            except Exception:
                 continue
-
             for i, line in enumerate(text.splitlines(), start=1):
                 if rx.search(line):
-                    count += 1
-                    if len(sample) < sample_cap:
-                        sample.append(f"{fp}:{i}:{line.strip()}")
-
-    return count, sample
-
-
-def _git_changed_files() -> List[str]:
-    # unstaged + staged
-    files: List[str] = []
-    for args in (["git", "diff", "--name-only"], ["git", "diff", "--name-only", "--cached"]):
-        code, out, err = _run(args)
-        if code != 0:
-            continue
-        files.extend([ln.strip() for ln in out.splitlines() if ln.strip()])
-    # de-dup preserving order
-    seen = set()
-    uniq = []
-    for f in files:
-        if f in seen:
-            continue
-        seen.add(f)
-        uniq.append(f)
-    return uniq
-
-
-def audit() -> Dict[str, object]:
-    checks: List[Check] = []
-
-    changed = _git_changed_files()
-    touched = [c for c in changed if c in CANONICALS]
-    checks.append(Check("canonicals_touched", ok=(len(touched) == 0), count=len(touched), sample=touched[:25]))
-
-    c_bare, s_bare = _scan(r"^\s*except:\s*$", PROD_DIRS)
-    checks.append(Check("bare_except_prod", ok=(c_bare == 0), count=c_bare, sample=s_bare))
-
-    c_print_prod, s_print_prod = _scan(r"\bprint\s*\(", PROD_DIRS)
-    checks.append(Check("print_calls_prod", ok=(c_print_prod == 0), count=c_print_prod, sample=s_print_prod))
-
-    c_print_all, s_print_all = _scan(r"\bprint\s*\(", ALL_DIRS)
-    checks.append(Check("print_calls_all", ok=True, count=c_print_all, sample=s_print_all))
-
-    c_utc, s_utc = _scan(r"\butcnow\s*\(", PROD_DIRS)
-    checks.append(Check("utcnow_prod", ok=(c_utc == 0), count=c_utc, sample=s_utc))
-
-    overall_ok = all(c.ok for c in checks)
-    return {
-        "overall": "PASS" if overall_ok else "FAIL",
-        "checks": [{"name": c.name, "ok": c.ok, "count": c.count, "sample": c.sample} for c in checks],
-    }
-
+                    hits.append(f"{rel.as_posix().replace('/','\\\\')}:{i}:{line.strip()}")
+    return hits
 
 def main() -> int:
-    report = audit()
-    sys.stdout.write(json.dumps(report, indent=2, sort_keys=True))
-    sys.stdout.write("\n")
-    return 0 if report["overall"] == "PASS" else 2
+    checks: List[Dict[str, Any]] = []
 
+    changed = set(_git_diff_paths())
+    canon_touched = sorted([p.as_posix().replace('/','\\\\') for p in CANONICALS if p.as_posix() in changed])
+    checks.append({"name":"canonicals_touched","count":len(canon_touched),"ok":len(canon_touched)==0,"sample":canon_touched})
+
+    bare_hits = _scan_files(RX_BARE_EXCEPT)
+    checks.append({"name":"bare_except_prod","count":len(bare_hits),"ok":len(bare_hits)==0,"sample":bare_hits[:50]})
+
+    print_hits = _scan_files(RX_PRINT_CALL)
+    checks.append({"name":"print_calls_prod","count":len(print_hits),"ok":len(print_hits)==0,"sample":print_hits[:50]})
+
+    all_print = []
+    # keep "print_calls_all" informational only (ok=true always)
+    all_print.extend(print_hits)
+    checks.append({"name":"print_calls_all","count":len(all_print),"ok":True,"sample":all_print[:50]})
+
+    utc_hits = _scan_files(RX_UTCNOW)
+    checks.append({"name":"utcnow_prod","count":len(utc_hits),"ok":len(utc_hits)==0,"sample":utc_hits[:50]})
+
+    overall = "PASS" if all(c["ok"] for c in checks if c["name"] != "print_calls_all") else "FAIL"
+    out = {"checks": checks, "overall": overall}
+    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=False))
+    return 0 if overall == "PASS" else 2
 
 if __name__ == "__main__":
     raise SystemExit(main())

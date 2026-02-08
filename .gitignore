@@ -176,3 +176,7 @@ _extracted/
 _extracted/
 exports/
 .githooks/
+
+!data/
+!data/catalog/
+!data/catalog/candidates_real.csv
