@@ -1,4 +1,8 @@
 from __future__ import annotations
+import logging
+
+
+log = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, Optional, TypeVar
@@ -25,9 +29,9 @@ class Result(Generic[T, E]):
 
         r = algo()
         if r.is_ok():
-            print(r.value)
+log.debug('%s', r.value)
         else:
-            print(r.error)
+log.debug('%s', r.error)
     """
 
     def is_ok(self) -> bool:

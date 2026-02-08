@@ -99,7 +99,7 @@ class MarketPulseMemo:
 # ---------------------------
 
 def _now_iso() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
 
 
 def _sha256_json(obj: Any) -> str:
