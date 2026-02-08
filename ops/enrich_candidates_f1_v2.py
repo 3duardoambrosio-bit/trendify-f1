@@ -1,3 +1,5 @@
+from synapse.infra.cli_logging import cli_print
+
 from config.thresholds import SCORING_WEIGHTS, SCORING_THRESHOLDS
 
 import json, math, pathlib, hashlib
@@ -209,10 +211,10 @@ def main():
     }
     append_ndjson(audit_path, audit_event)
 
-    print("OK F1 v2:", outp)
-    print("OK audit ndjson:", audit_path)
+    cli_print("OK F1 v2:", outp)
+    cli_print("OK audit ndjson:", audit_path)
     s = enriched[0]
-    print("sample:", s["name"], "conf=", round(s["confidence"],2), "p50=", round(s["score_dist"]["p50"],3), "range=", [round(x,3) for x in s["score_range"]], "rec=", s["recommendation"])
+    cli_print("sample:", s["name"], "conf=", round(s["confidence"],2), "p50=", round(s["score_dist"]["p50"],3), "range=", [round(x,3) for x in s["score_range"]], "rec=", s["recommendation"])
 
 if __name__ == "__main__":
     main()

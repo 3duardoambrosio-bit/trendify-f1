@@ -36,6 +36,8 @@ Reglas:
 
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import datetime as _dt
 import hashlib
@@ -381,7 +383,7 @@ def _cli() -> int:
         force=args.force,
         dry_run=args.dry_run,
     )
-    print(json.dumps(asdict(memo), ensure_ascii=False, indent=2))
+    cli_print(json.dumps(asdict(memo), ensure_ascii=False, indent=2))
     return 0
 
 

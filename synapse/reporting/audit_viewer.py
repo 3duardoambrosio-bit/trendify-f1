@@ -15,6 +15,8 @@ Esto es F1 para operar y auditar rápido.
 
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import json
 import os
 from dataclasses import dataclass
@@ -136,7 +138,7 @@ def _cli() -> int:
     evs = query_events(args.ledger_dir, q)
     md = render_markdown(evs, title="SYNAPSE Audit Trail")
     write_report(md, args.out)
-    print(json.dumps({"events": len(evs), "out": os.path.abspath(args.out)}, ensure_ascii=False, indent=2))
+    cli_print(json.dumps({"events": len(evs), "out": os.path.abspath(args.out)}, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import json
 import subprocess
 import sys
@@ -89,7 +91,7 @@ def check_meta_live_gate() -> GateResult:
 
 def main() -> int:
     r = check_meta_live_gate()
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "ts": _utc_now_z(),
         "status": r.status,

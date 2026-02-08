@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 import os
@@ -393,7 +395,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     _write_json(Path(args.out_json).resolve(), out)
     _write_text(Path(args.out_txt).resolve(), "\n".join(lines) + "\n")
 
-    print(
+    cli_print(
         json.dumps(
             {
                 "marker": __MARKER__,

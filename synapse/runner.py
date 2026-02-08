@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 import os
@@ -180,7 +182,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "readonly": bool(readonly),
     }
 
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0
 
 

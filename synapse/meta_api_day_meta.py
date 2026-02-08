@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 import os
@@ -111,7 +113,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         ok_tok, tok_meta = _token_sanity(secrets.get("META_ACCESS_TOKEN", ""))
         if args.print_secrets_sanity:
-            print(json.dumps({
+            cli_print(json.dumps({
                 "marker": __MARKER__,
                 "stage": "secrets_sanity",
                 "secrets_dir": str(sdir),
@@ -124,7 +126,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         if mode == "live" and not ok_tok:
             # no token = no live. this is a feature.
-            print(json.dumps({
+            cli_print(json.dumps({
                 "marker": __MARKER__,
                 "stage": "secrets_sanity",
                 "status": "FAIL",
@@ -149,7 +151,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         from synapse.infra.live_gate import check_meta_live_gate
 
         gate = check_meta_live_gate()
-        print(json.dumps({
+        cli_print(json.dumps({
             "marker": __MARKER__,
             "stage": "live_gate",
             "status": gate.status,
@@ -167,7 +169,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     rc_pre = int(preflight_main(preflight_argv))
 
     if rc_pre != 0:
-        print(json.dumps({
+        cli_print(json.dumps({
             "marker": __MARKER__,
             "stage": "preflight",
             "status": "FAIL",
@@ -195,7 +197,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     ok_fp = (fp_pre and fp_run and fp_pre == fp_run)
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "stage": "final_check",
         "mode": mode,

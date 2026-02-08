@@ -1,3 +1,5 @@
+from synapse.infra.cli_logging import cli_print
+
 import csv
 from typing import List, Dict, Any
 from buyer.schemas import ProductSchema, ProductSource
@@ -80,5 +82,5 @@ class CatalogNormalizer:
             )
 
         except Exception as e:  # noqa: BLE001
-            print(f"Warning: Skipping row {row_num}: {str(e)}")
+            cli_print(f"Warning: Skipping row {row_num}: {str(e)}")
             return None

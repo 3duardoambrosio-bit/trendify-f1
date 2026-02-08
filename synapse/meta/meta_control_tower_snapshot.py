@@ -12,6 +12,8 @@ CLI:
 
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -310,7 +312,7 @@ def main(argv: List[str]) -> int:
     atomic_write_json(out, snap)
 
     k = snap.get("kpis", {})
-    print(json.dumps({
+    cli_print(json.dumps({
         "status": "OK",
         "marker": MARKER,
         "out": str(out),

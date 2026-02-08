@@ -22,6 +22,8 @@ Principio:
 
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import importlib
@@ -337,7 +339,7 @@ def _cli() -> int:
     repo_root = Path(".").resolve()
     runner = LegacyCleanupRunner(repo_root)
     rep = runner.run(dry_run=args.dry_run, force=args.force)
-    print(json.dumps(asdict(rep), ensure_ascii=False, indent=2))
+    cli_print(json.dumps(asdict(rep), ensure_ascii=False, indent=2))
     return 0
 
 

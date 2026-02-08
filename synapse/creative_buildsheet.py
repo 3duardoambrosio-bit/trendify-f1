@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import csv
 import json
@@ -169,7 +171,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "tasks": tasks,
     }, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "ts": _utc_now_z(),
         "status": "OK",

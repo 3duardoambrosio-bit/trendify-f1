@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import json
 import os
 from dataclasses import dataclass
@@ -213,7 +215,7 @@ def main() -> int:
     if out.get("status") == "OK" and not readonly:
         _write_json(repo / OUT_REL, out)
 
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0
 
 

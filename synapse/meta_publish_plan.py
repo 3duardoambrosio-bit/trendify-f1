@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -344,7 +346,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     _write_json(out_path, plan)
     _write_checklist(checklist_path, plan)
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "ts": _utc_now_z(),
         "status": "OK",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 import os
@@ -166,7 +168,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if isinstance(b, dict) and b.get("id"):
                 _write_json(repo / OUT_DIR_REL / f"{b['id']}.json", b)
 
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0 if out.get("status") == "OK" else 2
 
 

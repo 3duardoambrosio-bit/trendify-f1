@@ -1,3 +1,5 @@
+from synapse.infra.cli_logging import cli_print
+
 import json, math, pathlib, random
 from datetime import datetime
 
@@ -101,8 +103,8 @@ def main():
 
     outp = pathlib.Path(r"data\evidence\launch_candidates_dropi_dump_f1.json")
     outp.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("OK F1 candidates:", outp)
-    print("sample:", enriched[0]["name"], "conf=", round(enriched[0]["confidence"],2), "range=", enriched[0]["score_range"], "rec=", enriched[0]["recommendation"])
+    cli_print("OK F1 candidates:", outp)
+    cli_print("sample:", enriched[0]["name"], "conf=", round(enriched[0]["confidence"],2), "range=", enriched[0]["score_range"], "rec=", enriched[0]["recommendation"])
 
 if __name__ == "__main__":
     main()

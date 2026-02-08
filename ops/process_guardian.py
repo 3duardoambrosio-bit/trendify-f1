@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import glob
 import json
@@ -140,12 +142,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.cmd == "check":
         out = sc.check_step(args.step)
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0 if out["allowed"] else 2
 
     if args.cmd == "whisper":
         out = sc.whisper(args.step, args.expectation, args.reality, args.learning, args.obstacle)
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
 
     return 1

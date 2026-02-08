@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 
 from synapse.cli.commands._invoke import invoke_module
@@ -21,7 +23,7 @@ def _run(args: argparse.Namespace) -> int:
         dry = True
 
     if dry:
-        print("pulse: DRY-RUN — skipping execution. Use --apply to run market_pulse.", flush=True)
+        cli_print("pulse: DRY-RUN — skipping execution. Use --apply to run market_pulse.", flush=True)
         return 0
 
     # Apply mode: try to execute underlying module

@@ -1,3 +1,5 @@
+from synapse.infra.cli_logging import cli_print
+
 # ops/dropi_dump_ingest.py
 # Ingesta un "dump" JSON (copy-paste de DevTools) y genera:
 # 1) NDJSON normalizado para tu pipeline
@@ -258,9 +260,9 @@ def main() -> int:
     _write_json(evidence_path, evidence)
 
     # Prints
-    print(f"OK ndjson: {ndjson_path}")
-    print(f"OK evidence: {evidence_path}")
-    print(f"TOP: {len(top)}")
+    cli_print(f"OK ndjson: {ndjson_path}")
+    cli_print(f"OK evidence: {evidence_path}")
+    cli_print(f"TOP: {len(top)}")
 
     # Mini resumen
     for i, it in enumerate(top, 1):
@@ -270,7 +272,7 @@ def main() -> int:
         imgs = it.get("images") or []
         mtxt = "None" if margin is None else f"{margin:.2f}"
         itxt = len(imgs) if isinstance(imgs, list) else 0
-        print(f"{i}. {name} | {cat} | margin={mtxt} | imgs={itxt} | score={it.get('score',0):.3f}")
+        cli_print(f"{i}. {name} | {cat} | margin={mtxt} | imgs={itxt} | score={it.get('score',0):.3f}")
 
     return 0
 

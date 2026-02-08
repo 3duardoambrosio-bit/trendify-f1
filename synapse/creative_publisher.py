@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -122,7 +124,7 @@ def cmd_show(repo: Path) -> int:
             "items": [],
             "reason": "creative_briefs.json missing or not OK.",
         }
-        print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         st = _load_state(repo)
         snap = {
             "marker": __CP_MARKER__,
@@ -134,7 +136,7 @@ def cmd_show(repo: Path) -> int:
             "produced_count": len(st.get("produced", {})),
             "launched_count": len(st.get("launched", {})),
         }
-        print(json.dumps(snap, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+        cli_print(json.dumps(snap, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 2
 
     items = _items_from_briefs(briefs_obj)
@@ -149,7 +151,7 @@ def cmd_show(repo: Path) -> int:
         "count": len(items),
         "items": items,
     }
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
 
     st = _load_state(repo)
     snap = {
@@ -162,7 +164,7 @@ def cmd_show(repo: Path) -> int:
         "produced_count": len(st.get("produced", {})),
         "launched_count": len(st.get("launched", {})),
     }
-    print(json.dumps(snap, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(snap, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0
 
 
@@ -183,7 +185,7 @@ def cmd_mark(repo: Path, cid: str, status: str, platform: str, external_id: str,
 
     if not cid:
         out = {"marker": __CP_MARKER__, "ts": ts, "status": "BAD_ARGS", "reason": "missing --id"}
-        print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 2
 
     rec = {
@@ -199,7 +201,7 @@ def cmd_mark(repo: Path, cid: str, status: str, platform: str, external_id: str,
         st["launched"][cid] = rec
     else:
         out = {"marker": __CP_MARKER__, "ts": ts, "status": "BAD_STATUS", "reason": "use PRODUCED or LAUNCHED"}
-        print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 2
 
     readonly = _is_readonly()
@@ -217,7 +219,7 @@ def cmd_mark(repo: Path, cid: str, status: str, platform: str, external_id: str,
         "ledger_path": str(repo / LEDGER_REL),
         "payload_hash": rec.get("payload_hash"),
     }
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0
 
 

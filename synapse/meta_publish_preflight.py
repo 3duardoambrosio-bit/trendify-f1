@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 import os
@@ -304,7 +306,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _write_json(out_path, report)
 
-    print(
+    cli_print(
         json.dumps(
             {
                 "marker": __MARKER__,
@@ -323,10 +325,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     if issues:
-        print("")
-        print("ISSUES:")
+        cli_print("")
+        cli_print("ISSUES:")
         for it in issues[:25]:
-            print(f"- {it['severity']}: {it['code']}  {it['msg']}")
+            cli_print(f"- {it['severity']}: {it['code']}  {it['msg']}")
     return 0 if status == "OK" else 2
 
 
