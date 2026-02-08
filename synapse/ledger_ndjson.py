@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
+
 import argparse
 import json
 import random
@@ -115,49 +118,49 @@ def cmd_init(path: Path, force: bool) -> int:
     if path.exists() and not force:
         lines = _read_lines(path)
         if any(ln.strip() for ln in lines):
-            print(f"OK: ledger exists -> {path}")
+            cli_print(f"OK: ledger exists -> {path}")
             return 0
         _write_genesis(path)
-        print(f"OK: ledger existed but empty -> wrote genesis -> {path}")
+        cli_print(f"OK: ledger existed but empty -> wrote genesis -> {path}")
         return 0
 
     _write_genesis(path)
-    print(f"OK: ledger initialized -> {path}")
+    cli_print(f"OK: ledger initialized -> {path}")
     return 0
 
 
 def cmd_reset(path: Path) -> int:
     _write_genesis(path)
-    print(f"OK: ledger reset (genesis kept) -> {path}")
+    cli_print(f"OK: ledger reset (genesis kept) -> {path}")
     return 0
 
 
 def cmd_append(path: Path, json_str: Optional[str], json_file: Optional[Path]) -> int:
     if json_file is not None:
         if not json_file.exists():
-            print(f"ERROR: file not found: {json_file}", file=sys.stderr)
+            cli_print(f"ERROR: file not found: {json_file}", file=sys.stderr)
             return 2
         raw = json_file.read_text(encoding="utf-8")
     else:
         raw = (json_str or "").strip()
 
     if not raw:
-        print("ERROR: provide --json '{...}' or --file path.json", file=sys.stderr)
+        cli_print("ERROR: provide --json '{...}' or --file path.json", file=sys.stderr)
         return 2
 
     obj, err = _safe_json_loads(raw)
     if err:
-        print(f"ERROR: invalid JSON: {err}", file=sys.stderr)
+        cli_print(f"ERROR: invalid JSON: {err}", file=sys.stderr)
         return 2
 
     ev = _ensure_payload(obj)
     if ev is None:
-        print("ERROR: JSON must be an object/dict.", file=sys.stderr)
+        cli_print("ERROR: JSON must be an object/dict.", file=sys.stderr)
         return 2
 
     line = json.dumps(ev, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     _append_line(path, line)
-    print(f"OK: appended 1 event -> {path}")
+    cli_print(f"OK: appended 1 event -> {path}")
     return 0
 
 
@@ -196,7 +199,7 @@ def cmd_seed(path: Path, n: int, platform: str, seed: int) -> int:
         line = json.dumps(ev, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
         _append_line(path, line)
 
-    print(f"OK: seeded {n} events -> {path}")
+    cli_print(f"OK: seeded {n} events -> {path}")
     return 0
 
 
@@ -204,7 +207,7 @@ def cmd_validate(path: Path) -> int:
     lines = _read_lines(path)
     if not lines or not any(ln.strip() for ln in lines):
         _write_genesis(path)
-        print(f"OK: empty ledger fixed -> wrote genesis -> {path}")
+        cli_print(f"OK: empty ledger fixed -> wrote genesis -> {path}")
         return 0
 
     bad = 0
@@ -216,27 +219,27 @@ def cmd_validate(path: Path) -> int:
         obj, err = _safe_json_loads(line)
         if err:
             bad += 1
-            print(f"BAD line {idx}: invalid JSON: {err}", file=sys.stderr)
+            cli_print(f"BAD line {idx}: invalid JSON: {err}", file=sys.stderr)
             continue
         if not isinstance(obj, dict):
             bad += 1
-            print(f"BAD line {idx}: not a JSON object", file=sys.stderr)
+            cli_print(f"BAD line {idx}: not a JSON object", file=sys.stderr)
             continue
         ts = str(obj.get("ts_utc") or "").strip()
         if not ts:
             bad += 1
-            print(f"BAD line {idx}: missing ts_utc", file=sys.stderr)
+            cli_print(f"BAD line {idx}: missing ts_utc", file=sys.stderr)
             continue
         if not isinstance(obj.get("payload"), dict):
             bad += 1
-            print(f"BAD line {idx}: missing/invalid payload", file=sys.stderr)
+            cli_print(f"BAD line {idx}: missing/invalid payload", file=sys.stderr)
             continue
         good += 1
 
     if bad:
-        print(f"VALIDATE: {good} good, {bad} bad -> {path}", file=sys.stderr)
+        cli_print(f"VALIDATE: {good} good, {bad} bad -> {path}", file=sys.stderr)
         return 2
-    print(f"VALIDATE: {good} good, {bad} bad -> {path}")
+    cli_print(f"VALIDATE: {good} good, {bad} bad -> {path}")
     return 0
 
 
@@ -265,7 +268,7 @@ def cmd_stats(path: Path) -> int:
         except Exception:
             pass
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "ledger": str(path),
         "lines_total": len(lines),
         "events_total": total,

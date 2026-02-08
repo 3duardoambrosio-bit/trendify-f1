@@ -12,6 +12,10 @@ Output:
 
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
+
+
 import json
 import sys
 import os
@@ -331,9 +335,9 @@ def print_report(overall: Status, results: List[CheckResult]):
     red = colors["RED"]
     reset = colors["RESET"]
 
-    print("\n" + "=" * 60)
-    print("SYNAPSE DOCTOR REPORT")
-    print("=" * 60)
+    cli_print("\n" + "=" * 60)
+    cli_print("SYNAPSE DOCTOR REPORT")
+    cli_print("=" * 60)
 
     for r in results:
         if r.status == "GREEN":
@@ -343,20 +347,20 @@ def print_report(overall: Status, results: List[CheckResult]):
         else:
             icon = f"{red}✗{reset}"
 
-        print(f"{icon} [{r.status:6}] {r.name}: {r.message}")
+        cli_print(f"{icon} [{r.status:6}] {r.name}: {r.message}")
         if r.detail:
-            print(f"           └─ {r.detail}")
+            cli_print(f"           └─ {r.detail}")
 
-    print("=" * 60)
+    cli_print("=" * 60)
 
     if overall == "GREEN":
-        print(f"{green}OVERALL: GREEN - Sistema operativo{reset}")
+        cli_print(f"{green}OVERALL: GREEN - Sistema operativo{reset}")
     elif overall == "YELLOW":
-        print(f"{yellow}OVERALL: YELLOW - Warnings, puede operar con precaución{reset}")
+        cli_print(f"{yellow}OVERALL: YELLOW - Warnings, puede operar con precaución{reset}")
     else:
-        print(f"{red}OVERALL: RED - Errores críticos, NO operar{reset}")
+        cli_print(f"{red}OVERALL: RED - Errores críticos, NO operar{reset}")
 
-    print("=" * 60 + "\n")
+    cli_print("=" * 60 + "\n")
 
 
 def main():
