@@ -103,7 +103,7 @@ def normalize_prices(p):
         try:
             spv = float(sp); mv = float(p["margin"])
             cost = round(spv * (1.0 - mv))
-        except:
+        except Exception:
             pass
     return sp, cost
 
@@ -132,7 +132,7 @@ def enrich_item(p, idx, run_id):
         try:
             spv=float(sp); cv=float(cost)
             margin = (spv-cv)/spv if spv>0 else None
-        except:
+        except Exception:
             pass
 
     out = dict(p)

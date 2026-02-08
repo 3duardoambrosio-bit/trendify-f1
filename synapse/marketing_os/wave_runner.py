@@ -178,7 +178,7 @@ class WaveRunner:
                     manifest = json.load(f)
                     if manifest.get("input_hash") == input_hash:
                         return True
-            except:
+            except Exception:
                 continue
         return False
     
@@ -240,7 +240,7 @@ class WaveRunner:
             from synapse.infra.ledger import Ledger
             ledger = Ledger(str(self.ledger_dir))
             ledger.write(event_type=event_type, entity_type="product", entity_id=entity_id, payload=payload, wave_id=payload.get("wave_id", ""))
-        except:
+        except Exception:
             pass
 
 
