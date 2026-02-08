@@ -64,7 +64,8 @@ def _scan_files(rx: re.Pattern) -> List[str]:
                 continue
             for i, line in enumerate(text.splitlines(), start=1):
                 if rx.search(line):
-                    hits.append(f"{rel.as_posix().replace('/','\\\\')}:{i}:{line.strip()}")
+                    rel_s = rel.as_posix().replace("/", "\\")
+                    hits.append(f"{rel_s}:{i}:{line.strip()}")
     return hits
 
 def main() -> int:
