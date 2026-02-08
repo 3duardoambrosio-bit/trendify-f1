@@ -5,7 +5,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -49,10 +49,10 @@ def _ndjson_write(path: str, rows: Iterable[Dict[str, Any]]) -> int:
     return n
 
 def _now_stamp() -> str:
-    return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 def _date_dir() -> str:
-    return datetime.utcnow().strftime("%Y%m%d")
+    return datetime.now(timezone.utc).strftime("%Y%m%d")
 
 @dataclass
 class FinderArgs:

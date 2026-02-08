@@ -1,8 +1,7 @@
 from synapse.infra.cli_logging import cli_print
 
 import json, math, pathlib, random
-from datetime import datetime
-
+from datetime import datetime, timezone
 def clamp(x,a,b): return max(a, min(b, x))
 
 def confidence_heuristic(p):
@@ -90,7 +89,7 @@ def main():
     out = {
         "isSuccess": True,
         "source": "launch_candidates_dropi_dump.json",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
         "top": enriched,
         "meta": {
             "count": len(enriched),

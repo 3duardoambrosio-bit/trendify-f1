@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List
 
@@ -74,9 +74,9 @@ def load_exit_events(path: Path = BITACORA_PATH) -> List[ExitEvent]:
             ts = raw.get("timestamp")
 
             try:
-                timestamp = datetime.fromisoformat(ts) if ts else datetime.utcnow()
+                timestamp = datetime.fromisoformat(ts) if ts else datetime.now(timezone.utc)
             except Exception:
-                timestamp = datetime.utcnow()
+                timestamp = datetime.now(timezone.utc)
 
             events.append(
                 ExitEvent(

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import timezone
 
 from datetime import datetime, timezone
 
@@ -32,7 +33,7 @@ class Lock:
     lock_type: LockType
     reason: str
     status: LockStatus = LockStatus.ACTIVE
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
     released_at: Optional[str] = None
     metadata: dict = field(default_factory=dict)
 
@@ -77,7 +78,7 @@ class Blindaje:
                         reason=raw["reason"],
                         status=LockStatus(raw.get("status", LockStatus.ACTIVE)),
                         created_at=raw.get("created_at")
-                        or datetime.utcnow().isoformat(),
+                        or datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
                         released_at=raw.get("released_at"),
                         metadata=raw.get("metadata", {}),
                     )
@@ -131,7 +132,7 @@ class Blindaje:
             lock_type=lock_type,
             reason=reason,
             status=LockStatus.ACTIVE,
-            created_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
             released_at=None,
             metadata=metadata,
         )
@@ -149,7 +150,7 @@ class Blindaje:
             return None
 
         lock.status = LockStatus.RELEASED
-        lock.released_at = datetime.utcnow().isoformat()
+        lock.released_at = datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
         if reason:
             lock.metadata.setdefault("release_reason", reason)
 

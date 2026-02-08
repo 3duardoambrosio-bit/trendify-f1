@@ -3,8 +3,7 @@ from synapse.infra.cli_logging import cli_print
 from config.thresholds import SCORING_WEIGHTS, SCORING_THRESHOLDS
 
 import json, math, pathlib, hashlib
-from datetime import datetime
-
+from datetime import datetime, timezone
 def clamp(x,a,b): return max(a, min(b, x))
 
 def stable_seed(*parts):
@@ -175,13 +174,13 @@ def main():
     if not isinstance(arr, list) or not arr:
         raise SystemExit("No candidates/top array found in JSON.")
 
-    run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     enriched = [enrich_item(p, i, run_id) for i,p in enumerate(arr)]
 
     out = {
         "isSuccess": True,
         "source": "launch_candidates_dropi_dump.json",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
         "top": enriched,
         "meta": {
             "count": len(enriched),
@@ -199,7 +198,7 @@ def main():
     audit_path = pathlib.Path(r"data\ledger\decision_audit.ndjson")
     audit_event = {
         "type": "decision_batch",
-        "ts": datetime.utcnow().isoformat() + "Z",
+        "ts": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
         "run_id": run_id,
         "source_file": str(inp),
         "out_file": str(outp),
