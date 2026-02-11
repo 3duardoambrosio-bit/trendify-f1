@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
@@ -15,6 +17,10 @@ EXIT_OK = 0
 EXIT_BAD_REQUEST = 1
 EXIT_UNAUTHORIZED = 2
 EXIT_DUPLICATE = 3
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _read_headers(headers_path: Path) -> Dict[str, str]:
@@ -99,6 +105,8 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     args = p.parse_args(list(argv) if argv is not None else None)
 
+    t0 = time.perf_counter()
+
     fixture_dir = Path(args.fixture_dir) if args.fixture_dir else None
 
     if fixture_dir is not None:
@@ -125,6 +133,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     provided_hmac = _get_header_ci(headers, "X-Shopify-Hmac-Sha256").strip()
 
     dedup_key = _build_dedup_key(shop_domain, webhook_id)
+    hmac_valid = False
+    dedup_result = "new"
 
     status_code = 400
     rc = EXIT_BAD_REQUEST
@@ -147,16 +157,33 @@ def main(argv: Iterable[str] | None = None) -> int:
             if dedup_key in dedup_entries:
                 status_code = 409
                 rc = EXIT_DUPLICATE
+                dedup_result = "duplicate"
                 body_json = {"ok": False, "reason": "duplicate_webhook", "dedup_key": dedup_key}
             else:
                 dedup_entries.append(dedup_key)
                 _save_dedup_list(dedup_path, dedup_entries)
                 status_code = 200
                 rc = EXIT_OK
+                dedup_result = "new"
                 body_json = {"ok": True}
 
     (out_dir / "status_code.txt").write_text(str(status_code) + "\n", encoding="utf-8")
     _write_json(out_dir / "response.json", {"status_code": status_code, "body_json": body_json, "dedup_key": dedup_key})
+
+    processing_ms = int((time.perf_counter() - t0) * 1000)
+    _write_json(
+        out_dir / "processing_metadata.json",
+        {
+            "timestamp_utc": _utc_iso(),
+            "processing_ms": processing_ms,
+            "hmac_valid": bool(hmac_valid),
+            "hmac_algorithm": "sha256",
+            "dedup_key": dedup_key,
+            "dedup_result": dedup_result,
+            "webhook_topic": topic,
+            "shop_domain": shop_domain,
+        },
+    )
 
     return rc
 
