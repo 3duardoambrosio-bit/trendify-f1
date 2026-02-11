@@ -98,7 +98,7 @@ data/ledger/
 data/backups/
 data/evidence/
 
-# CSVs reales (ruido); demos sÃ¯Â¿Â½ pueden vivir
+# CSVs reales (ruido); demos sÃƒÂ¯Ã‚Â¿Ã‚Â½ pueden vivir
 data/catalog/candidates_real*.csv
 
 __pycache__/
@@ -111,7 +111,7 @@ data/ledger/
 data/backups/
 data/evidence/
 
-# CSVs reales (ruido); demos sÃ¯Â¿Â½ pueden vivir
+# CSVs reales (ruido); demos sÃƒÂ¯Ã‚Â¿Ã‚Â½ pueden vivir
 data/catalog/candidates_real*.csv
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
@@ -127,7 +127,7 @@ __pycache__/
 .env
 .env.*
 
-# Data sensible / no determinÃƒÂ­stica
+# Data sensible / no determinÃƒÆ’Ã‚Â­stica
 data/
 
 # OS
