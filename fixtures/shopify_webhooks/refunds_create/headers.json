@@ -1,0 +1,6 @@
+{
+    "X-Shopify-Hmac-Sha256":  "woLoDnPPvIiG7stWXj0ixWlYiq/NGlQ9NE54QDYvwFU=",
+    "X-Shopify-Webhook-Id":  "wh_refunds_create_1",
+    "X-Shopify-Topic":  "refunds/create",
+    "X-Shopify-Shop-Domain":  "example.myshopify.com"
+}
