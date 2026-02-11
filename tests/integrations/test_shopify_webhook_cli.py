@@ -1,124 +1,98 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from synapse.integrations.shopify_webhook import compute_shopify_hmac_sha256_base64
-from synapse.integrations.shopify_webhook_cli import main
 
 
-def _write_json(p: Path, obj) -> None:
-    p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+def _write_fixture(dir_path: Path, *, secret: str, shop: str, webhook_id: str, topic: str, body_text: str, hmac_override: str | None = None) -> None:
+    dir_path.mkdir(parents=True, exist_ok=True)
 
+    body_bytes = body_text.encode("utf-8")
+    (dir_path / "body.bin").write_bytes(body_bytes)
 
-def test_cli_accepts_and_writes_artifacts(tmp_path: Path):
-    secret = "shpss_test_secret"
-    body = b'{"hello":"world","n":1}'
-    h = compute_shopify_hmac_sha256_base64(secret, body)
+    hmac_val = hmac_override if hmac_override is not None else compute_shopify_hmac_sha256_base64(secret, body_bytes)
 
     headers = {
-        "x-shopify-hmac-sha256": h,
-        "X-Shopify-Webhook-Id": "wh_cli_1",
-        "X-Shopify-Topic": "orders/create",
-        "X-Shopify-Shop-Domain": "example.myshopify.com",
+        "X-Shopify-Hmac-Sha256": hmac_val,
+        "X-Shopify-Webhook-Id": webhook_id,
+        "X-Shopify-Topic": topic,
+        "X-Shopify-Shop-Domain": shop,
     }
+    (dir_path / "headers.json").write_text(json.dumps(headers, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    headers_path = tmp_path / "headers.json"
-    body_path = tmp_path / "body.bin"
-    secret_path = tmp_path / "secret.txt"
-    out_dir = tmp_path / "out"
-    dedup_path = tmp_path / "dedup.json"
 
-    _write_json(headers_path, headers)
-    body_path.write_bytes(body)
-    secret_path.write_text(secret, encoding="utf-8")
-
-    rc = main([
-        "--headers", str(headers_path),
-        "--body", str(body_path),
-        "--secret-file", str(secret_path),
-        "--dedup-file", str(dedup_path),
-        "--out-dir", str(out_dir),
+def _run_cli(fixture_dir: Path, secret: str) -> subprocess.CompletedProcess[str]:
+    cmd = [
+        sys.executable,
+        "-m",
+        "synapse.integrations.shopify_webhook_cli",
+        "--fixture-dir",
+        str(fixture_dir),
+        "--secret",
+        secret,
         "--quiet",
-    ])
-    assert rc == 0
-
-    resp = json.loads((out_dir / "response.json").read_text(encoding="utf-8"))
-    assert resp["status_code"] == 200
-    assert resp["body_json"]["ok"] is True
-    assert resp["body_json"]["webhook_id"] == "wh_cli_1"
-
-    # result is JSON-safe (raw_body converted)
-    assert resp["result"]["event"]["raw_body_b64"] != ""
-
-    sc = (out_dir / "status_code.txt").read_text(encoding="utf-8").strip()
-    assert sc == "200"
-
-    d = json.loads(dedup_path.read_text(encoding="utf-8"))
-    assert "wh_cli_1" in d
+    ]
+    return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def test_cli_rejects_invalid_hmac(tmp_path: Path):
+def test_cli_accepts_200_and_writes_status(tmp_path: Path) -> None:
     secret = "shpss_test_secret"
-    body = b'{"x":1}'
-    headers = {"X-Shopify-Hmac-Sha256": "bogus=="}
+    fx = tmp_path / "orders_create"
+    _write_fixture(
+        fx,
+        secret=secret,
+        shop="example.myshopify.com",
+        webhook_id="wh_test_1",
+        topic="orders/create",
+        body_text='{"hello":"world","n":1}',
+    )
 
-    headers_path = tmp_path / "headers.json"
-    body_path = tmp_path / "body.bin"
-    out_dir = tmp_path / "out"
-
-    _write_json(headers_path, headers)
-    body_path.write_bytes(body)
-
-    rc = main([
-        "--headers", str(headers_path),
-        "--body", str(body_path),
-        "--secret", secret,
-        "--out-dir", str(out_dir),
-        "--quiet",
-    ])
-    assert rc == 3
-
-    resp = json.loads((out_dir / "response.json").read_text(encoding="utf-8"))
-    assert resp["status_code"] == 401
-    assert resp["body_json"]["ok"] is False
-    assert resp["body_json"]["reason"] == "invalid_hmac"
+    r = _run_cli(fx, secret)
+    assert r.returncode == 0
+    assert (fx / "out" / "status_code.txt").read_text(encoding="utf-8").strip() == "200"
 
 
-def test_cli_dedup_persisted_across_runs(tmp_path: Path):
+def test_cli_rejects_invalid_hmac_401(tmp_path: Path) -> None:
     secret = "shpss_test_secret"
-    body = b'{"x":1}'
-    h = compute_shopify_hmac_sha256_base64(secret, body)
-    headers = {"X-Shopify-Hmac-Sha256": h, "X-Shopify-Webhook-Id": "wh_cli_dup"}
+    fx = tmp_path / "orders_create_bad_hmac"
+    _write_fixture(
+        fx,
+        secret=secret,
+        shop="example.myshopify.com",
+        webhook_id="wh_test_2",
+        topic="orders/create",
+        body_text='{"x":1}',
+        hmac_override="NOT_A_REAL_HMAC_44_CHARS____________________",
+    )
 
-    headers_path = tmp_path / "headers.json"
-    body_path = tmp_path / "body.bin"
-    out_dir = tmp_path / "out"
-    dedup_path = tmp_path / "dedup.json"
+    r = _run_cli(fx, secret)
+    assert r.returncode == 2
+    assert (fx / "out" / "status_code.txt").read_text(encoding="utf-8").strip() == "401"
 
-    _write_json(headers_path, headers)
-    body_path.write_bytes(body)
 
-    rc1 = main([
-        "--headers", str(headers_path),
-        "--body", str(body_path),
-        "--secret", secret,
-        "--dedup-file", str(dedup_path),
-        "--out-dir", str(out_dir),
-        "--quiet",
-    ])
-    assert rc1 == 0
+def test_cli_dedup_persisted_across_runs_409(tmp_path: Path) -> None:
+    secret = "shpss_test_secret"
+    fx = tmp_path / "orders_paid"
+    _write_fixture(
+        fx,
+        secret=secret,
+        shop="example.myshopify.com",
+        webhook_id="wh_test_3",
+        topic="orders/paid",
+        body_text='{"order_id":123,"status":"paid"}',
+    )
 
-    rc2 = main([
-        "--headers", str(headers_path),
-        "--body", str(body_path),
-        "--secret", secret,
-        "--dedup-file", str(dedup_path),
-        "--out-dir", str(out_dir),
-        "--quiet",
-    ])
-    assert rc2 == 3
+    r1 = _run_cli(fx, secret)
+    assert r1.returncode == 0
+    assert (fx / "out" / "status_code.txt").read_text(encoding="utf-8").strip() == "200"
 
-    resp2 = json.loads((out_dir / "response.json").read_text(encoding="utf-8"))
-    assert resp2["status_code"] == 409
-    assert resp2["body_json"]["reason"] == "duplicate_webhook"
+    r2 = _run_cli(fx, secret)
+    assert r2.returncode == 3
+    assert (fx / "out" / "status_code.txt").read_text(encoding="utf-8").strip() == "409"
+
+    dedup = json.loads((fx / "out" / "dedup.json").read_text(encoding="utf-8"))
+    assert "example.myshopify.com:wh_test_3" in dedup
