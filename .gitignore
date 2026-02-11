@@ -98,7 +98,7 @@ data/ledger/
 data/backups/
 data/evidence/
 
-# CSVs reales (ruido); demos sÃƒÂ¯Ã‚Â¿Ã‚Â½ pueden vivir
+# CSVs reales (ruido); demos sÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ pueden vivir
 data/catalog/candidates_real*.csv
 
 __pycache__/
@@ -111,7 +111,7 @@ data/ledger/
 data/backups/
 data/evidence/
 
-# CSVs reales (ruido); demos sÃƒÂ¯Ã‚Â¿Ã‚Â½ pueden vivir
+# CSVs reales (ruido); demos sÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ pueden vivir
 data/catalog/candidates_real*.csv
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
@@ -127,7 +127,7 @@ __pycache__/
 .env
 .env.*
 
-# Data sensible / no determinÃƒÆ’Ã‚Â­stica
+# Data sensible / no determinÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­stica
 data/
 
 # OS
@@ -181,3 +181,9 @@ exports/
 !data/catalog/
 !data/catalog/candidates_real.csv
 fixtures/shopify_webhooks/**/secret.txt
+# --- Shopify webhook fixtures ---
+fixtures/shopify_webhooks/**/out/
+# Allowlist tracked fixture artifacts
+!fixtures/shopify_webhooks/README.md
+!fixtures/shopify_webhooks/**/headers.json
+!fixtures/shopify_webhooks/**/body.bin
