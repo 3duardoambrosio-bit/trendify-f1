@@ -1,19 +1,7 @@
-# DEPRECATED: Use ops.capital_shield_v2 for new code.
-# This module re-exports the v1 implementation for backwards compatibility.
-# It will be removed in a future version.
-from __future__ import annotations
+﻿from __future__ import annotations
 
-import warnings
-
-warnings.warn(
-    "ops.capital_shield is deprecated. Use ops.capital_shield_v2 instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-
-# Re-export v1 classes for backwards compatibility
-from ops.capital_shield_v1_DEPRECATED import (  # noqa: F401
-    CapitalShield,
-    CapitalShieldConfig,
-    SpendDecision,
+raise ImportError(
+    "P0 BLOCK: ops.capital_shield (v1) está PROHIBIDO. "
+    "Usa ops.capital_shield_v2.CapitalShieldV2. "
+    "Verifica con: powershell -File tools\\check_no_capital_shield_v1_imports.ps1"
 )
