@@ -1,4 +1,4 @@
-"""Tests for KillSwitch and CircuitBreaker persistence across restarts."""
+﻿"""Tests for KillSwitch and CircuitBreaker persistence across restarts."""
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -63,12 +63,12 @@ def test_killswitch_timestamp_is_per_instance() -> None:
     assert diff < 1.0  # created within 1s of each other
 
 
-def test_killswitch_corrupted_state_file_starts_clean(tmp_path: Path) -> None:
+def test_killswitch_corrupted_state_file_fail_closed(tmp_path: Path) -> None:
     state_file = tmp_path / "ks.json"
     state_file.write_text("NOT VALID JSON {{{", encoding="utf-8")
 
     ks = KillSwitch(state_file=state_file)
-    assert ks.is_active(KillSwitchLevel.SYSTEM) is False
+    assert ks.is_active(KillSwitchLevel.SYSTEM) is True
 
 
 # ── CircuitBreaker persistence ──────────────────────────────────────

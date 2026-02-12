@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -77,10 +77,10 @@ class KillSwitch:
             # No active switches: remove state file
             try:
                 self._state_file.unlink(missing_ok=True)
-            except OSError as e:
+            except OSError:
                 logger.debug("suppressed exception", exc_info=True)
-
             return
+
         data = {}
         for key, act in self._active.items():
             data[key] = {
@@ -118,5 +118,13 @@ class KillSwitch:
                 )
                 self._active[key] = act
         except (json.JSONDecodeError, KeyError, ValueError):
-            # Corrupted state file — start clean, don't crash
+            # Corrupted state file — FAIL CLOSED (SYSTEM kill), never fail-open.
             self._active = {}
+            sys_key = self._key(KillSwitchLevel.SYSTEM, None)
+            self._active[sys_key] = KillSwitchActivation(
+                level=KillSwitchLevel.SYSTEM,
+                reason="KILLSWITCH_STATE_CORRUPTED",
+                triggered_by="killswitch_loader",
+                target_id=None,
+            )
+            logger.error("killswitch state corrupted at %s; FAIL-CLOSED SYSTEM kill activated", self._state_file)
