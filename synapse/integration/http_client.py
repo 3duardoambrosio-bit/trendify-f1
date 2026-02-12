@@ -1,4 +1,4 @@
-# synapse/integration/http_client.py
+﻿# synapse/integration/http_client.py
 """
 HTTP Client (stdlib) para SYNAPSE.
 
@@ -12,6 +12,7 @@ ACERO, NO HUMO:
 """
 
 from __future__ import annotations
+from infra.network_guard import enforce_url_policy
 
 import json
 import time
@@ -84,6 +85,7 @@ class SimpleHttpClient:
         self.user_agent = user_agent
 
     def request(self, req: HttpRequest) -> HttpResponse:
+        enforce_url_policy(req.url)
         if self.dry_run:
             return HttpResponse(status=200, headers={"x-dry-run": "1"}, body=b'{"dry_run": true}')
 
