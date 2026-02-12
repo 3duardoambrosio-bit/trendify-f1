@@ -13,3 +13,5 @@
 fixtures/shopify_webhooks/**/headers.json text eol=lf
 fixtures/shopify_webhooks/**/README.md text eol=lf
 fixtures/shopify_webhooks/**/body.bin -text -diff
+*.ps1 text eol=lf
+*.psm1 text eol=lf
