@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -8,14 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Ahora sí podemos importar los módulos del proyecto
+# Ahora sÃ­ podemos importar los mÃ³dulos del proyecto
 from ops.catalog_pipeline import evaluate_catalog
-from ops.capital_shield import CapitalShield
+from ops.capital_shield_v2 import CapitalShieldV2 as CapitalShield
 
 
 def main() -> None:
     """
-    Demo del pipeline de catálogo:
+    Demo del pipeline de catÃ¡logo:
 
     - Lee data/catalog/demo_catalog.csv
     - Ejecuta evaluate_catalog (Buyer + Quality + CapitalShield)
@@ -36,8 +36,8 @@ def main() -> None:
     print(f"Total productos      : {summary.total_products}")
     print(f"Aprobados (test)     : {summary.approved}")
     print(f"Rechazados           : {summary.rejected}")
-    # 👇 AQUÍ ESTABA EL PROBLEMA: es needs_review, no under_review
-    print(f"En revisión          : {summary.needs_review}")
+    # ðŸ‘‡ AQUÃ ESTABA EL PROBLEMA: es needs_review, no under_review
+    print(f"En revisiÃ³n          : {summary.needs_review}")
     print(f"Budget total (input) : 100.0")
 
     # === RANKING POR SCORE ===
@@ -63,3 +63,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

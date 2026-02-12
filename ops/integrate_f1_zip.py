@@ -1,3 +1,5 @@
+from synapse.infra.cli_logging import cli_print
+
 import argparse, re, zipfile, shutil
 from pathlib import Path
 from datetime import datetime
@@ -48,7 +50,7 @@ def write_files(repo: Path, items, label: str):
         backup_if_exists(out_path)
         out_path.write_text(body.rstrip() + "\n", encoding="utf-8")
         written.append(out_rel.as_posix())
-    print(f"OK {label}: {len(written)} archivos")
+    cli_print(f"OK {label}: {len(written)} archivos")
     return written
 
 def parse_data_files(text: str):
@@ -105,11 +107,11 @@ def main():
     written_tests = write_files(repo, test_items, "tests")
     written_data = write_files(repo, data_items, "data")
 
-    print("\nResumen:")
-    print(" - code:", len(written_code))
-    print(" - tests:", len(written_tests))
-    print(" - data:", len(written_data))
-    print("\nSiguiente: instala deps y corre pytest.")
+    cli_print("\nResumen:")
+    cli_print(" - code:", len(written_code))
+    cli_print(" - tests:", len(written_tests))
+    cli_print(" - data:", len(written_data))
+    cli_print("\nSiguiente: instala deps y corre pytest.")
 
 if __name__ == "__main__":
     main()

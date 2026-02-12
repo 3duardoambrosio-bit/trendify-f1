@@ -1,6 +1,6 @@
-# scripts/capital_demo.py
+﻿# scripts/capital_demo.py
 
-from ops.capital_shield import CapitalShield
+from ops.capital_shield_v2 import CapitalShieldV2 as CapitalShield
 from infra.bitacora_auto import bitacora, EntryType
 
 
@@ -9,11 +9,11 @@ def run_capital_demo() -> None:
     Demo simple de CapitalShield:
     - Mismo producto
     - Varios spends consecutivos
-    - Vemos cuándo avisa (soft) y cuándo bloquea (hard)
-    - Cada decisión se registra en Bitácora
+    - Vemos cuÃ¡ndo avisa (soft) y cuÃ¡ndo bloquea (hard)
+    - Cada decisiÃ³n se registra en BitÃ¡cora
     """
 
-    shield = CapitalShield()  # ⚠️ Sin total_budget, usa la config del sistema
+    shield = CapitalShield()  # âš ï¸ Sin total_budget, usa la config del sistema
 
     product_id = "demo_product_1"
     spends = [10.0, 10.0, 15.0]  # Ajustado para forzar soft warning y hard block
@@ -34,7 +34,7 @@ def run_capital_demo() -> None:
             print(f"    soft_warnings : {decision.soft_warnings}")
         print()
 
-        # Registramos la decisión en Bitácora
+        # Registramos la decisiÃ³n en BitÃ¡cora
         bitacora.log(
             entry_type=EntryType.PRODUCT_EVALUATION,  # por ahora usamos este tipo
             data={
@@ -49,7 +49,7 @@ def run_capital_demo() -> None:
             },
         )
 
-    print("\n[SYNAPSE] Demo CapitalShield + Bitácora completada ✅")
+    print("\n[SYNAPSE] Demo CapitalShield + BitÃ¡cora completada âœ…")
 
 
 def main() -> None:
@@ -58,3 +58,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

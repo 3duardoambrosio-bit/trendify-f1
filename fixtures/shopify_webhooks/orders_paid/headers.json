@@ -1,0 +1,6 @@
+{
+    "X-Shopify-Webhook-Id":  "wh_9d0cd002c15e40d2bfe25b9019e2bfb7",
+    "X-Shopify-Hmac-Sha256":  "XpdKWF35UAIhLYWv8/j+tKFdCRefIYNGqYQDamCALgs=",
+    "X-Shopify-Shop-Domain":  "example.myshopify.com",
+    "X-Shopify-Topic":  "orders/paid"
+}

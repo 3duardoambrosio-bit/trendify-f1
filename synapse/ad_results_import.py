@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import csv
 import hashlib
@@ -284,14 +286,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             "count": len(cands),
             "items": [str(p) for p in cands[:25]],
         }
-        print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 0
 
     if str(args.csv).strip().lower() == "auto":
         picked = _pick_auto_csv(repo, exports_dir)
         if not picked:
             out = {"marker": __ARI_MARKER__, "ts": _utc_now_z(), "status": "NO_CSV_FOUND", "exports_dir": str(exports_dir)}
-            print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+            cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
             return 2
         csv_path = picked
     else:
@@ -305,7 +307,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         allow_duplicates=bool(args.allow_duplicates),
         dry_run=bool(args.dry_run),
     )
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0 if out.get("status") == "OK" else 2
 
 

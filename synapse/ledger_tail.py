@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 from pathlib import Path
@@ -37,7 +39,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     lines = _read_lines(p)
 
     if not lines:
-        print(json.dumps({"marker": __MARKER__, "status": "EMPTY", "ledger": str(p)}, ensure_ascii=False, indent=2))
+        cli_print(json.dumps({"marker": __MARKER__, "status": "EMPTY", "ledger": str(p)}, ensure_ascii=False, indent=2))
         return 0
 
     sample = lines[-args.n:] if len(lines) > args.n else lines
@@ -55,7 +57,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             for f in fields:
                 row[f] = _get_path(ev, f)
             out_rows.append(row)
-        print(json.dumps(
+        cli_print(json.dumps(
             {
                 "marker": __MARKER__,
                 "status": "OK",
@@ -75,11 +77,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.pretty:
             try:
                 ev = json.loads(ln)
-                print(json.dumps(ev, ensure_ascii=False, indent=2, default=str))
+                cli_print(json.dumps(ev, ensure_ascii=False, indent=2, default=str))
             except Exception:
-                print(ln)
+                cli_print(ln)
         else:
-            print(ln)
+            cli_print(ln)
     return 0
 
 

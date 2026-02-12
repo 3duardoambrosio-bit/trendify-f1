@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 from dataclasses import dataclass
@@ -169,7 +171,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     out_json.write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     out_txt.write_text(_txt(out), encoding="utf-8")
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "status": out.get("status","-"),
         "reason": out.get("reason","-"),

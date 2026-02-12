@@ -1,11 +1,9 @@
+from synapse.infra.cli_logging import cli_print
+
 from config.thresholds import SCORING_WEIGHTS, SCORING_THRESHOLDS
-from synapse.infra.time_utc import now_utc, isoformat_z
 
 import json, math, pathlib, hashlib
-from datetime import datetime
-import logging
-logger = logging.getLogger(__name__)
-
+from datetime import datetime, timezone
 def clamp(x,a,b): return max(a, min(b, x))
 
 def stable_seed(*parts):
@@ -106,9 +104,8 @@ def normalize_prices(p):
         try:
             spv = float(sp); mv = float(p["margin"])
             cost = round(spv * (1.0 - mv))
-        except Exception as e:
-            logger.debug("suppressed exception", exc_info=True)
-
+        except Exception:
+            pass
     return sp, cost
 
 def ensure_dir(path):
@@ -136,8 +133,8 @@ def enrich_item(p, idx, run_id):
         try:
             spv=float(sp); cv=float(cost)
             margin = (spv-cv)/spv if spv>0 else None
-        except Exception as e:
-            logger.debug("suppressed exception", exc_info=True)
+        except Exception:
+            pass
 
     out = dict(p)
     out["id"] = out.get("id") or f"cand_{idx}"
@@ -177,13 +174,13 @@ def main():
     if not isinstance(arr, list) or not arr:
         raise SystemExit("No candidates/top array found in JSON.")
 
-    run_id = now_utc().strftime("%Y%m%d_%H%M%S")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     enriched = [enrich_item(p, i, run_id) for i,p in enumerate(arr)]
 
     out = {
         "isSuccess": True,
         "source": "launch_candidates_dropi_dump.json",
-        "generated_at": isoformat_z(now_utc()),
+        "generated_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
         "top": enriched,
         "meta": {
             "count": len(enriched),
@@ -201,7 +198,7 @@ def main():
     audit_path = pathlib.Path(r"data\ledger\decision_audit.ndjson")
     audit_event = {
         "type": "decision_batch",
-        "ts": isoformat_z(now_utc()),
+        "ts": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
         "run_id": run_id,
         "source_file": str(inp),
         "out_file": str(outp),
@@ -213,10 +210,10 @@ def main():
     }
     append_ndjson(audit_path, audit_event)
 
-    print("OK F1 v2:", outp)
-    print("OK audit ndjson:", audit_path)
+    cli_print("OK F1 v2:", outp)
+    cli_print("OK audit ndjson:", audit_path)
     s = enriched[0]
-    print("sample:", s["name"], "conf=", round(s["confidence"],2), "p50=", round(s["score_dist"]["p50"],3), "range=", [round(x,3) for x in s["score_range"]], "rec=", s["recommendation"])
+    cli_print("sample:", s["name"], "conf=", round(s["confidence"],2), "p50=", round(s["score_dist"]["p50"],3), "range=", [round(x,3) for x in s["score_range"]], "rec=", s["recommendation"])
 
 if __name__ == "__main__":
     main()

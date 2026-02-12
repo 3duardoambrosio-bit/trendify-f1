@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -192,7 +194,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if out.get("status") == "OK" and not _is_readonly():
         _write_json(repo / OUT_REL, out)
 
-    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0 if out.get("status") == "OK" else 2
 
 

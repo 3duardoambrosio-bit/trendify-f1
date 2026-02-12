@@ -25,8 +25,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import threading
-import logging
-logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -245,14 +243,13 @@ class Ledger:
                                 d = json.loads(line)
                                 if d.get("event_type") == event_type:
                                     count += 1
-                            except Exception as e:
-                                logger.debug("suppressed exception", exc_info=True)
-
+                            except Exception:
+                                pass
                         else:
                             count += 1
-            except Exception as e:
-                logger.debug("suppressed exception", exc_info=True)
-
+            except Exception:
+                pass
+        
         return count
 
 

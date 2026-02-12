@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import json, math, hashlib
 from pathlib import Path
 from datetime import datetime, timezone
@@ -181,11 +183,11 @@ def main():
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     sample = enriched[0] if enriched else None
-    print("OK pack:", outp)
-    print("OK ledger:", r"data\ledger\ledger_*.ndjson")
-    print("in:", len(arr), "out:", len(enriched), "drops:", drops)
+    cli_print("OK pack:", outp)
+    cli_print("OK ledger:", r"data\ledger\ledger_*.ndjson")
+    cli_print("in:", len(arr), "out:", len(enriched), "drops:", drops)
     if sample:
-        print("sample:", sample.get("name"), "conf=", round(sample["confidence"],2),
+        cli_print("sample:", sample.get("name"), "conf=", round(sample["confidence"],2),
               "p50=", round(sample["score_dist"]["p50"],3),
               "range=", [round(x,3) for x in sample["score_range"]],
               "rec=", sample["recommendation"])

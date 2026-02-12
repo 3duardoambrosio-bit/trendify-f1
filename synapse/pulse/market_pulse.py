@@ -1,17 +1,10 @@
-from __future__ import annotations
-
-from datetime import timezone
-
-
 # synapse/pulse/market_pulse.py
-from infra.time_utils import now_utc
-
 """
-Market Pulse â€” OLEADA 13
+Market Pulse — OLEADA 13
 =======================
 
 Objetivo:
-- Registrar seÃ±ales del mercado MX (manuales) con evidencia obligatoria.
+- Registrar señales del mercado MX (manuales) con evidencia obligatoria.
 - CERO scraping. CERO "se rumorea". CERO numeritos sin URL.
 - Output: memo JSON + reporte Markdown.
 - Idempotente por input_hash. Soporta --dry-run y --force.
@@ -25,8 +18,8 @@ Input (JSON):
       "signal_id": "trend_audio_001",
       "source_type": "google_trends|ad_library|inegi|banxico|news|other",
       "evidence_url": "https://...",
-      "headline": "BÃºsquedas suben para ...",
-      "description": "DescripciÃ³n concreta. Sin humo.",
+      "headline": "Búsquedas suben para ...",
+      "description": "Descripción concreta. Sin humo.",
       "metric_name": "trend_index|cpm|cpc|inflation|etc",
       "metric_value": 12.3,
       "confidence": 0.7
@@ -36,11 +29,14 @@ Input (JSON):
 
 Reglas:
 - evidence_url obligatorio y debe iniciar con http/https.
-- confidence âˆˆ [0,1]
-- Si confidence > 0.5, description/headline no puede contener: "podrÃ­a", "tal vez", "se rumorea", "quizÃ¡", "chance", "dicen que".
-- Si <2 seÃ±ales vÃ¡lidas => INSUFFICIENT_EVIDENCE (no inventar).
+- confidence ∈ [0,1]
+- Si confidence > 0.5, description/headline no puede contener: "podría", "tal vez", "se rumorea", "quizá", "chance", "dicen que".
+- Si <2 señales válidas => INSUFFICIENT_EVIDENCE (no inventar).
 """
 
+from __future__ import annotations
+
+from synapse.infra.cli_logging import cli_print
 
 import argparse
 import datetime as _dt
@@ -67,7 +63,7 @@ _ALLOWED_SOURCE_TYPES = {
 }
 
 _SPECULATIVE_RE = re.compile(
-    r"\b(podr[iÃ­]a|tal\s*vez|se\s*rumorea|quiz[aÃ¡]|chance|dicen\s*que)\b",
+    r"\b(podr[ií]a|tal\s*vez|se\s*rumorea|quiz[aá]|chance|dicen\s*que)\b",
     re.IGNORECASE,
 )
 
@@ -103,7 +99,7 @@ class MarketPulseMemo:
 # ---------------------------
 
 def _now_iso() -> str:
-    return _dt.datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z")
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
 
 
 def _sha256_json(obj: Any) -> str:
@@ -167,9 +163,9 @@ def validate_signal(raw: Dict[str, Any]) -> Tuple[Optional[PulseSignal], List[st
     if not signal_id:
         errs.append("signal_id requerido")
     if source_type not in _ALLOWED_SOURCE_TYPES:
-        errs.append(f"source_type invÃ¡lido: {source_type}")
+        errs.append(f"source_type inválido: {source_type}")
     if not _is_valid_http_url(evidence_url):
-        errs.append("evidence_url invÃ¡lido (requiere http/https + dominio)")
+        errs.append("evidence_url inválido (requiere http/https + dominio)")
     if not headline:
         errs.append("headline requerido")
     if not description:
@@ -185,7 +181,7 @@ def validate_signal(raw: Dict[str, Any]) -> Tuple[Optional[PulseSignal], List[st
         metric_value_f = float(metric_value)
     except Exception:
         metric_value_f = 0.0
-        errs.append("metric_value debe ser numÃ©rico")
+        errs.append("metric_value debe ser numérico")
 
     if errs:
         return None, errs
@@ -285,13 +281,13 @@ class MarketPulseRunner:
                 continue
             sig, errs = validate_signal(rs)
             if errs:
-                errors_accum.append(f"signal[{i}] invÃ¡lida: " + "; ".join(errs))
+                errors_accum.append(f"signal[{i}] inválida: " + "; ".join(errs))
                 continue
             assert sig is not None
             valid.append(sig)
 
         if errors_accum:
-            notes.append("Se detectaron seÃ±ales invÃ¡lidas (ignoradas):")
+            notes.append("Se detectaron señales inválidas (ignoradas):")
             notes.extend([f"- {e}" for e in errors_accum])
 
         status = "SUFFICIENT_EVIDENCE" if len(valid) >= 2 else "INSUFFICIENT_EVIDENCE"
@@ -343,9 +339,9 @@ class MarketPulseRunner:
         lines.append(f"- input_hash: `{memo.input_hash}`")
         lines.append(f"- signals_used: **{memo.signals_used}**")
         lines.append("")
-        lines.append("## SeÃ±ales")
+        lines.append("## Señales")
         if not memo.signals:
-            lines.append("- (sin seÃ±ales vÃ¡lidas suficientes)")
+            lines.append("- (sin señales válidas suficientes)")
         for s in memo.signals:
             lines.append(f"- **{s.get('headline','')}**")
             lines.append(f"  - source_type: `{s.get('source_type','')}`")
@@ -356,7 +352,7 @@ class MarketPulseRunner:
             lines.append(f"  - detalle: {s.get('description','')}")
             lines.append("")
         if memo.notes:
-            lines.append("## Notas / ValidaciÃ³n")
+            lines.append("## Notas / Validación")
             lines.extend(memo.notes)
             lines.append("")
         lines.append("## Regla de oro")
@@ -370,7 +366,7 @@ class MarketPulseRunner:
 
 def _cli() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", required=True, help="Ruta a JSON de seÃ±ales (ej: data/evidence/pulse/signals.json)")
+    ap.add_argument("--input", required=True, help="Ruta a JSON de señales (ej: data/evidence/pulse/signals.json)")
     ap.add_argument("--out-dir", default="", help="Override output dir (default: data/pulse)")
     ap.add_argument("--force", action="store_true", help="Ignora idempotencia")
     ap.add_argument("--dry-run", action="store_true", help="No escribe memo JSON (solo report/state)")
@@ -387,10 +383,9 @@ def _cli() -> int:
         force=args.force,
         dry_run=args.dry_run,
     )
-    print(json.dumps(asdict(memo), ensure_ascii=False, indent=2))
+    cli_print(json.dumps(asdict(memo), ensure_ascii=False, indent=2))
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(_cli())
-

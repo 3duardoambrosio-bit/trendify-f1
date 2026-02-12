@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import os
 from typing import Sequence
@@ -52,7 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     except KeyboardInterrupt:
-        print("synapse: CANCELLED (KeyboardInterrupt)", flush=True)
+        cli_print("synapse: CANCELLED (KeyboardInterrupt)", flush=True)
         return 130
 
     except SystemExit as e:
@@ -70,12 +72,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
             },
         )
-        print(f"synapse: ERROR — {type(e).__name__}: {e}", flush=True)
+        cli_print(f"synapse: ERROR — {type(e).__name__}: {e}", flush=True)
         hint = suggest_fix(e)
         if hint:
-            print(f"synapse: HINT — {hint}", flush=True)
-        print(f"synapse: crash_report={rep.path} fingerprint={rep.fingerprint}", flush=True)
-        print(f"synapse: next => python -m synapse.cli triage --path \"{rep.path}\"", flush=True)
+            cli_print(f"synapse: HINT — {hint}", flush=True)
+        cli_print(f"synapse: crash_report={rep.path} fingerprint={rep.fingerprint}", flush=True)
+        cli_print(f"synapse: next => python -m synapse.cli triage --path \"{rep.path}\"", flush=True)
         return 3
 
 # --- AUTO-PATCH: import hygiene wrapper (tests expect no heavy modules in sys.modules after dry-run) ---

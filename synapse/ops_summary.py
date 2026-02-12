@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 from datetime import datetime, timezone
@@ -144,11 +146,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     OUT_JSON.write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     if args.json:
-        print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True))
+        cli_print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        print("\n".join(text))
-        print(f"\n(wrote) {OUT_TXT.resolve()}")
-        print(f"(wrote) {OUT_JSON.resolve()}")
+        cli_print("\n".join(text))
+        cli_print(f"\n(wrote) {OUT_TXT.resolve()}")
+        cli_print(f"(wrote) {OUT_JSON.resolve()}")
 
     return 0
 

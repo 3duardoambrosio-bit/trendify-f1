@@ -1,0 +1,6 @@
+{
+    "X-Shopify-Hmac-Sha256":  "hmTfdpRIz2TOVIxVvkdIG4AUzFA7LTkUL6sjdspqbvU=",
+    "X-Shopify-Webhook-Id":  "wh_orders_cancelled_1",
+    "X-Shopify-Topic":  "orders/cancelled",
+    "X-Shopify-Shop-Domain":  "example.myshopify.com"
+}

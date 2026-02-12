@@ -15,8 +15,6 @@ from typing import Any, Dict, List, Optional
 from .models import ProductContext, InterrogationVerdict
 from .interrogation_engine import InterrogationEngine
 from .creative_factory import CreativeFactory
-import logging
-logger = logging.getLogger(__name__)
 
 
 WAVE_VERSION = "05"
@@ -242,8 +240,9 @@ class WaveRunner:
             from synapse.infra.ledger import Ledger
             ledger = Ledger(str(self.ledger_dir))
             ledger.write(event_type=event_type, entity_type="product", entity_id=entity_id, payload=payload, wave_id=payload.get("wave_id", ""))
-        except Exception as e:
-            logger.debug("suppressed exception", exc_info=True)
+        except Exception:
+            pass
+
 
 def run_wave(product_id: str, name: str, category: str, price: float, cost: float, description: str = "", unique_features: Optional[List[str]] = None, force: bool = False) -> WaveResult:
     product = ProductContext(product_id=product_id, name=name, category=category, price=price, cost=cost, description=description, unique_features=unique_features or [])

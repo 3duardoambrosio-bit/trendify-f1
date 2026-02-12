@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 from pathlib import Path
@@ -108,7 +110,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         for r in runs:
             f.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "status": "OK",
         "count": len(runs),

@@ -1,0 +1,1 @@
+{"id":555666777,"order_id":9876543210,"created_at":"2026-02-10T02:20:00-06:00","note":"Customer requested refund","currency":"MXN","refund_line_items":[{"line_item_id":444555666,"quantity":1,"restock_type":"return","subtotal":"799.00","total_tax":"0.00"}],"transactions":[{"id":888999000,"amount":"799.00","currency":"MXN","kind":"refund","gateway":"manual","status":"success"}]}

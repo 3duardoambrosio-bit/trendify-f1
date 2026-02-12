@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
+
 import argparse
 from pathlib import Path
 
@@ -21,7 +24,7 @@ def register(sub: argparse._SubParsersAction) -> None:
 def _print_wave_ok(pid: str, out_root: str | None) -> None:
     root = Path(out_root) if out_root else Path("data/marketing/waves")
     kit = root / pid
-    print(f"wave: OK — kit_dir={kit}", flush=True)
+    cli_print(f"wave: OK — kit_dir={kit}", flush=True)
 
     manifest = kit / "manifest.json"
     if manifest.exists():
@@ -31,15 +34,15 @@ def _print_wave_ok(pid: str, out_root: str | None) -> None:
             m = read_manifest(manifest)
             arts = m.get("artifacts") or []
             if arts:
-                print("wave: artifacts:", flush=True)
+                cli_print("wave: artifacts:", flush=True)
                 for a in arts:
                     rp = a.get("relpath")
                     sh = a.get("sha256")
-                    print(f"  - {rp}  sha256={sh}", flush=True)
+                    cli_print(f"  - {rp}  sha256={sh}", flush=True)
             meta = m.get("meta") or {}
             mode = meta.get("catalog_mode")
             if mode:
-                print(f"wave: catalog_mode={mode}", flush=True)
+                cli_print(f"wave: catalog_mode={mode}", flush=True)
         except Exception:
             # keep DX robust; summary is best-effort
             return
@@ -54,11 +57,11 @@ def _run(args: argparse.Namespace) -> int:
     )
 
     if not decision.dry_run and not pid:
-        print("wave: ERROR — --product-id is required when using --apply", flush=True)
+        cli_print("wave: ERROR — --product-id is required when using --apply", flush=True)
         return 2
 
     if decision.dry_run:
-        print(f"wave: DRY-RUN — would run wave for product_id={pid or '<none>'}. Use --apply to execute.", flush=True)
+        cli_print(f"wave: DRY-RUN — would run wave for product_id={pid or '<none>'}. Use --apply to execute.", flush=True)
         return 0
 
     kw = {"product_id": str(pid), "dry_run": False}
@@ -73,7 +76,7 @@ def _run(args: argparse.Namespace) -> int:
             _print_wave_ok(str(pid), getattr(args, "out_root", None))
         return rc
     except FileNotFoundError as e:
-        print(f"wave: ERROR — {e}", flush=True)
+        cli_print(f"wave: ERROR — {e}", flush=True)
         return 2
     except Exception as e:
         # Let CLI crash-guard handle it (crash report)

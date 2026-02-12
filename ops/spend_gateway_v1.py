@@ -149,7 +149,7 @@ class SpendGateway:
                     return v.strip()
         return "OK" if allowed else "DENIED"
 
-    def request(self, req: Any, *, idempotency_key: Optional[str] = None) -> SpendGatewayDecision:
+    def request(self, req: Any, *, idempotency_key: str) -> SpendGatewayDecision:
         # Vault v1 usa req.budget
         budget_obj = self._get(req, ("budget", "budget_type", "pool", "bucket", "type"), default="operational")
         pool = self._pool_from_budget(budget_obj)
@@ -170,7 +170,7 @@ class SpendGateway:
         if self._idempotency is not None and self._idempotency.is_processed(idem_key):
             cached = self._idempotency.get_result(idem_key)
             if cached is not None:
-                logger.info("idempotency hit for key=%s", idem_key)
+                logger.info("idempotency_hit", idem_key)
                 return cached
 
         # --- Safety checks (P0-005) ---

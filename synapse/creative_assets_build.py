@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -421,7 +423,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     _write_json(manifest_path, manifest)
 
     status = "OK" if failed == 0 else "FAIL"
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "ts": manifest["ts"],
         "status": status,

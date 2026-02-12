@@ -14,8 +14,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 
 from .niche_selector import NicheProfile, get_niche_filters, NICHE_CATALOG
-import logging
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -163,9 +161,8 @@ class CatalogScanner:
                 reader = csv.DictReader(f)
                 for row in reader:
                     products.append(row)
-        except Exception as e:
-            logger.debug("suppressed exception", exc_info=True)
-
+        except Exception:
+            pass
         return products
     
     def _match_keywords(self, products: List[Dict], niche: NicheProfile) -> List[ProductCandidate]:

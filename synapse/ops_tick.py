@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -158,7 +160,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
     report["out_path"] = str(out_path.resolve())
 
-    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+    cli_print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str))
     return 0 if report["status"] == "OK" else 2
 
 

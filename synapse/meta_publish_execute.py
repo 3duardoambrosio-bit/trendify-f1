@@ -1,5 +1,8 @@
-
 from __future__ import annotations
+
+from synapse.infra.cli_logging import cli_print
+
+
 import argparse
 import hashlib
 import json
@@ -12,7 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from synapse.infra.time_utc import now_utc, isoformat_z
 
 __MARKER__ = "META_PUBLISH_EXECUTE_2026-01-17_V7"
 
@@ -255,17 +257,17 @@ def _simulate_id(key: str, plan_hash: str) -> str:
 
 def _dry_print_steps(plan: Dict[str, Any]) -> None:
     steps = plan.get("steps", [])
-    print("=== META PUBLISH EXECUTE (DRY) ===")
-    print(f"marker: {plan.get('marker')}")
-    print(f"plan_hash: {plan.get('plan_hash')}")
-    print(f"graph_version: {plan.get('graph_version')}")
-    print(f"ad_account: {plan.get('ad_account')}")
-    print(f"steps: {len(steps)}")
-    print("")
+    cli_print("=== META PUBLISH EXECUTE (DRY) ===")
+    cli_print(f"marker: {plan.get('marker')}")
+    cli_print(f"plan_hash: {plan.get('plan_hash')}")
+    cli_print(f"graph_version: {plan.get('graph_version')}")
+    cli_print(f"ad_account: {plan.get('ad_account')}")
+    cli_print(f"steps: {len(steps)}")
+    cli_print("")
     for s in steps:
         if not isinstance(s, dict):
             continue
-        print(f"- {s.get('i')}: {s.get('op')}  key={s.get('key')}  deps={s.get('depends_on', [])}  endpoint={s.get('endpoint')}")
+        cli_print(f"- {s.get('i')}: {s.get('op')}  key={s.get('key')}  deps={s.get('depends_on', [])}  endpoint={s.get('endpoint')}")
 
 
 def _repo_root_from_plan(plan_path: Path) -> Path:
@@ -397,13 +399,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             if unresolved:
                 unresolved_all[_safe_str(s.get("key"))] = unresolved
 
-        print("")
-        print("UNRESOLVED PLACEHOLDERS (given current flags):")
+        cli_print("")
+        cli_print("UNRESOLVED PLACEHOLDERS (given current flags):")
         if not unresolved_all:
-            print("- none")
+            cli_print("- none")
         else:
             for k, u in unresolved_all.items():
-                print(f"- {k}: {u}")
+                cli_print(f"- {k}: {u}")
         return 0
 
     # env knobs (safe)
@@ -456,10 +458,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             }
             _write_json(out_path, run)
             out_dir.mkdir(parents=True, exist_ok=True)
-            hist_name = f"meta_publish_run_{mode}_{now_utc().strftime('%Y%m%d_%H%M%S')}.json"
+            hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             _write_json(out_dir / hist_name, run)
 
-            print(json.dumps({
+            cli_print(json.dumps({
                 "marker": __MARKER__,
                 "ts": run["ts"],
                 "mode": mode,
@@ -494,10 +496,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             }
             _write_json(out_path, run)
             out_dir.mkdir(parents=True, exist_ok=True)
-            hist_name = f"meta_publish_run_{mode}_{now_utc().strftime('%Y%m%d_%H%M%S')}.json"
+            hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             _write_json(out_dir / hist_name, run)
 
-            print(json.dumps({
+            cli_print(json.dumps({
                 "marker": __MARKER__,
                 "ts": run["ts"],
                 "mode": mode,
@@ -735,10 +737,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     _write_json(out_path, run)
     out_dir.mkdir(parents=True, exist_ok=True)
-    hist_name = f"meta_publish_run_{mode}_{now_utc().strftime('%Y%m%d_%H%M%S')}.json"
+    hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     _write_json(out_dir / hist_name, run)
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "ts": run["ts"],
         "mode": mode,

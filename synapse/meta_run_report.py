@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import json
 from pathlib import Path
@@ -241,7 +243,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     out_txt.parent.mkdir(parents=True, exist_ok=True)
     out_txt.write_text(_txt_report(report), encoding="utf-8")
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "status": status,
         "reason": reason,

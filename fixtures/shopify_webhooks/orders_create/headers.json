@@ -1,0 +1,6 @@
+{
+    "X-Shopify-Webhook-Id":  "wh_fixture_1",
+    "X-Shopify-Hmac-Sha256":  "2yz3D5wFfGZiKP7bYDMl/QuKg7VWx5OT4vmAeippTCo=",
+    "X-Shopify-Shop-Domain":  "example.myshopify.com",
+    "X-Shopify-Topic":  "orders/create"
+}

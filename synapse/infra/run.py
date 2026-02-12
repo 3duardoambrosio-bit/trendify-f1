@@ -9,6 +9,8 @@ Uso:
 
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import sys
 
 
@@ -31,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     if cmd in {"doctor", "doc"}:
         return _run_doctor(argv[1:])
 
-    print("Uso: python -m synapse.infra.run doctor")
+    cli_print("Uso: python -m synapse.infra.run doctor")
     return 2
 
 

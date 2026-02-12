@@ -1,6 +1,6 @@
 from __future__ import annotations
-from infra.time_utils import now_utc
 
+from datetime import timezone
 from datetime import datetime, timezone
 
 
@@ -126,7 +126,7 @@ class HypothesisTracker:
                 "hypothesis_id": hypothesis_id,
                 "result": result.value,
                 "result_value": new_value,
-                "closed_at": now_utc().isoformat(),
+                "closed_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
             },
         )
 

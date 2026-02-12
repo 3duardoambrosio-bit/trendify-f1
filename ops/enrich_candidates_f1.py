@@ -1,8 +1,7 @@
-from infra.time_utils import now_utc
+from synapse.infra.cli_logging import cli_print
 
 import json, math, pathlib, random
-from datetime import datetime
-
+from datetime import datetime, timezone
 def clamp(x,a,b): return max(a, min(b, x))
 
 def confidence_heuristic(p):
@@ -90,7 +89,7 @@ def main():
     out = {
         "isSuccess": True,
         "source": "launch_candidates_dropi_dump.json",
-        "generated_at": now_utc().isoformat().replace("+00:00","Z"),
+        "generated_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
         "top": enriched,
         "meta": {
             "count": len(enriched),
@@ -103,8 +102,8 @@ def main():
 
     outp = pathlib.Path(r"data\evidence\launch_candidates_dropi_dump_f1.json")
     outp.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("OK F1 candidates:", outp)
-    print("sample:", enriched[0]["name"], "conf=", round(enriched[0]["confidence"],2), "range=", enriched[0]["score_range"], "rec=", enriched[0]["recommendation"])
+    cli_print("OK F1 candidates:", outp)
+    cli_print("sample:", enriched[0]["name"], "conf=", round(enriched[0]["confidence"],2), "range=", enriched[0]["score_range"], "rec=", enriched[0]["recommendation"])
 
 if __name__ == "__main__":
     main()

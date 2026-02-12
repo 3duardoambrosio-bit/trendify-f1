@@ -138,3 +138,9 @@ data/run/pytest_*.log
 data/run/control_tower_snapshot_*.json
 exports/
 .githooks/
+
+.audit/
+
+
+data/pipeline/
+

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from synapse.infra.cli_logging import cli_print
+
 import argparse
 import hashlib
 import json
@@ -152,7 +154,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.template:
         write_template(Path(args.template).resolve())
-        print(json.dumps({"marker": __MARKER__, "status": "OK", "wrote_template": str(Path(args.template).resolve())}, ensure_ascii=False, indent=2))
+        cli_print(json.dumps({"marker": __MARKER__, "status": "OK", "wrote_template": str(Path(args.template).resolve())}, ensure_ascii=False, indent=2))
         return 0
 
     report = build_report(scope=str(args.scope), include_optional=bool(args.include_optional))
@@ -187,7 +189,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             lines.append(f"- {k}: <missing>")
     _write_text(out_txt, "\n".join(lines) + "\n")
 
-    print(json.dumps({
+    cli_print(json.dumps({
         "marker": __MARKER__,
         "ts": report.get("ts"),
         "status": report.get("status"),
