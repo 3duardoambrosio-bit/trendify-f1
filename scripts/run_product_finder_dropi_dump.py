@@ -13,7 +13,7 @@ def pick_list(raw):
 def to_decimal(x):
     try:
         return float(str(x).replace(",", "."))
-    except:
+    except Exception:
         return None
 
 def score(p):

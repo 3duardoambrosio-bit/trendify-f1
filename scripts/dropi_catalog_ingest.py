@@ -1,4 +1,10 @@
-﻿#!/usr/bin/env python3
+from __future__ import annotations
+
+from datetime import timezone
+
+from infra.time_utils import now_utc
+
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 dropi_catalog_ingest.py
@@ -14,7 +20,6 @@ Uso:
   python scripts/dropi_catalog_ingest.py --catalog data\\evidence\\dropi_catalog_export_REAL.csv --out data\\evidence\\launch_candidates_dropi_catalog_v3.json --limit 5000
 """
 
-from __future__ import annotations
 
 import argparse
 import csv
@@ -28,13 +33,13 @@ from typing import Dict, List, Optional, Tuple
 CANON_KEYS = ["product_id", "title", "description", "price", "compare_at_price", "image_url", "tags"]
 
 SYNONYMS: Dict[str, List[str]] = {
-    "product_id": ["product_id","productid","id","sku","product_sku","variant_sku","item_id","codigo","código","code","producto_id"],
-    "title": ["title","name","product_name","nombre","nombre_producto","titulo","título","product_title"],
-    "description": ["description","desc","body","body_html","descripcion","descripción","detalle","details","long_description","short_description"],
+    "product_id": ["product_id","productid","id","sku","product_sku","variant_sku","item_id","codigo","cÃ³digo","code","producto_id"],
+    "title": ["title","name","product_name","nombre","nombre_producto","titulo","tÃ­tulo","product_title"],
+    "description": ["description","desc","body","body_html","descripcion","descripciÃ³n","detalle","details","long_description","short_description"],
     "price": ["price","precio","sale_price","precio_venta","unit_price","amount","price_mxn","mxn_price"],
     "compare_at_price": ["compare_at_price","compareatprice","old_price","precio_lista","precio_regular","regular_price","list_price"],
     "image_url": ["image_url","image","img","imagen","imagen_url","url_imagen","photo","thumbnail","main_image","featured_image","images","imagenes"],
-    "tags": ["tags","etiquetas","categories","category","categoria","categoría","collections","collection"],
+    "tags": ["tags","etiquetas","categories","category","categoria","categorÃ­a","collections","collection"],
 }
 
 # Bloqueo de placeholders (puedes ampliar cuando veas otros)
@@ -49,7 +54,7 @@ URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def _now_iso() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z")
 
 
 def _norm_header(h: str) -> str:
@@ -142,7 +147,7 @@ def _extract_image_candidates(raw: str) -> List[str]:
         except Exception:
             pass
 
-    # Separadores típicos
+    # Separadores tÃ­picos
     for sep in ("|", "; ", ",", "\n"):
         if sep in s:
             parts = [p.strip() for p in s.split(sep) if p.strip()]
@@ -154,7 +159,7 @@ def _extract_image_candidates(raw: str) -> List[str]:
 def _extract_first_real_image_url(raw: str, block_placeholders: bool = True) -> Tuple[str, int]:
     """
     Regresa (url, blocked_hits)
-    - Se queda con la primera URL http(s) válida
+    - Se queda con la primera URL http(s) vÃ¡lida
     - Si block_placeholders=True, ignora placeholders y los cuenta
     """
     blocked_hits = 0
@@ -168,7 +173,7 @@ def _extract_first_real_image_url(raw: str, block_placeholders: bool = True) -> 
             continue
         return u, blocked_hits
 
-    # si todas eran placeholders, igual cuenta y regresa vacío
+    # si todas eran placeholders, igual cuenta y regresa vacÃ­o
     if block_placeholders:
         for u in candidates:
             if _is_url(u) and _is_blocked_image_url(u):
@@ -293,7 +298,7 @@ def canonize_row(row: Dict[str, str], hm: Dict[str, Optional[str]], idx: int, bl
 
     if not desc:
         base = title + (f". Tags: {', '.join(tags[:8])}" if tags else "")
-        desc = base + ". Producto de catálogo Dropi."
+        desc = base + ". Producto de catÃ¡logo Dropi."
 
     return CanonRow(pid, title, desc, price, cap, img, tags, blocked_hits)
 
@@ -356,7 +361,7 @@ def main() -> int:
 
     rows, headers, used_delim = read_catalog_rows(args.catalog, enc, delim, int(args.limit))
     if not headers:
-        raise SystemExit("ERROR: CSV sin headers (fieldnames vacíos). Revisa export/delimitador/encoding.")
+        raise SystemExit("ERROR: CSV sin headers (fieldnames vacÃ­os). Revisa export/delimitador/encoding.")
 
     hm = pick_header_map(headers)
 
@@ -456,10 +461,11 @@ def main() -> int:
     print(f"  placeholders: rows_with_hits={placeholder_rows} blocked_total={placeholder_blocked_total}")
     print(f"- out: {args.out}")
     if kept == 0:
-        print("WARNING: kept=0 (normalmente: price no parsea o image_url real no existe; si estás bootstrap, corre con --no-require-image).")
+        print("WARNING: kept=0 (normalmente: price no parsea o image_url real no existe; si estÃ¡s bootstrap, corre con --no-require-image).")
 
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -1,5 +1,7 @@
 import uuid
 from datetime import datetime
+from synapse.infra.time_utc import now_utc, isoformat_z
+import time
 from typing import List, Dict, Any, Tuple
 
 from buyer.schemas import ProductSchema, BuyerDecisionSchema, Decision
@@ -88,12 +90,12 @@ class BuyerBlock:
 
     def evaluate_product(self, product: ProductSchema) -> BuyerDecisionSchema:
         """Evaluate a single product"""
-        start_time = datetime.now()
+        start_time = time.perf_counter()
 
         evaluation = self.scoring_rules.evaluate_product(product)
         decision, reasons = self._make_decision(evaluation)
 
-        processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+        processing_time_ms = (time.perf_counter() - start_time) * 1000
 
         return BuyerDecisionSchema(
             decision_id=str(uuid.uuid4()),
@@ -106,7 +108,7 @@ class BuyerBlock:
                 "composite_score": evaluation["composite_score"],
             },
             model_used="deterministic_rules",
-            evaluated_at=datetime.now().isoformat(),
+            evaluated_at=isoformat_z(now_utc()),
             metadata={
                 "processing_time_ms": processing_time_ms,
                 "suspicion_flags": evaluation["suspicion_flags"],
@@ -144,6 +146,6 @@ class BuyerBlock:
             reasons=[f"evaluation_error: {error}"],
             scores={},
             model_used="error_fallback",
-            evaluated_at=datetime.now().isoformat(),
+            evaluated_at=isoformat_z(now_utc()),
             metadata={"error": error},
         )

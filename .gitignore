@@ -1,16 +1,69 @@
-# Byte-compiled / optimized / DLL files
+# === Python ===
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
 
+# === Envs / secrets ===
+.env
+.env.*
+.venv/
+venv/
+env/
+_local_secrets/
+secrets/
+*.key
+*.pem
+# === IDEs ===
+.vscode/
+.idea/
+# === OS ===
+.DS_Store
+Thumbs.db
+# === Build / dist ===
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+# === Runtime / data NO determinística ===
+data/ledger/
+data/backups/
+data/evidence/
+data/evidencia/
+data/run/
+*.ndjson
+*.zip
+*.log
+*.pid
+# === Extracted / outputs ===
+_extracted/
+_extracted2/
+_extracted_proof/
+# === Local audit runs (NO versionar) ===
+.audit_local/
+# === exports (generated artifacts, NO versionar) ===
+/exports/releases/
+/exports/demo_*/
+/exports/*.sha256
+/exports/**/*.sha256
+# === exports (generated artifacts) ===
+/exports/**
+!/exports/
+!/exports/secrets_template.env
+# pipeline outputs (generated)
+/data/pipeline/
+# Byte-compiled / optimized / DLL files
+*$py.class
 # C extensions
 *.so
-
 # Distribution / packaging
 .Python
-build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -19,20 +72,14 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
-*.egg-info/
 .installed.cfg
-*.egg
 MANIFEST
-
 # PyInstaller
 *.manifest
 *.spec
-
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
-
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -44,146 +91,56 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
-.hypothesis/
-.pytest_cache/
-
 # Environments
-.env
 .venv
-env/
-venv/
 ENV/
 env.bak/
 venv.bak/
-
 # IDEs
-.vscode/
-.idea/
-
 # Logs
-*.log
-
 # Data files
 *.csv
 *.json
 *.db
 *.sqlite
-
 # Config files (except example)
 config/local.dev.yml
 data/bitacora/bitacora.jsonl
-
 # Python
-__pycache__/
 *.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
 # Local runtime outputs (NO versionar)
-data/ledger/
-data/backups/
-data/evidence/
-
 # CSVs reales (los tuyos), dejamos demos como plantillas
 data/catalog/candidates_real*.csv
-
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-data/ledger/
-data/backups/
-data/evidence/
-
-# CSVs reales (ruido); demos sÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ pueden vivir
-data/catalog/candidates_real*.csv
-
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-data/ledger/
-data/backups/
-data/evidence/
-
-# CSVs reales (ruido); demos sÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ pueden vivir
-data/catalog/candidates_real*.csv
+# CSVs reales (ruido); demos s├»┬┐┬¢ pueden vivir
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
 **/__pycache__/
-*.pyo
-# Python
-__pycache__/
-*.pyc
-.pytest_cache/
-.hypothesis/
-
 # Env & secrets
-.env
-.env.*
-
-# Data sensible / no determinÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­stica
+# Data sensible / no determin├â┬¡stica
 data/
-
 # OS
-.DS_Store
-Thumbs.db
 # === LOCAL / SECRETS ===
-.env
-_local_secrets/
-*.key
-*.pem
-
 # === PYTHON CACHE ===
-__pycache__/
-.pytest_cache/
-.hypothesis/
-
 # === DATA / OUTPUTS ===
-data/
-*.ndjson
-*.zip
-
-# === OS ===
-.DS_Store
-Thumbs.db
 # --- SYNAPSE SECRETS (DO NOT COMMIT) ---
-.env
-.env.*
 .env.local
 !.env.template
-
 exports/secrets_*.env
 !exports/secrets_template.env
-
 data/run/secrets_*.json
 data/run/secrets_*.txt
 # --- META PUBLISH LEDGER (local, avoid leaking IDs) ---
 data/ledger/meta_publish_map.json
 data/ledger/meta_publish_events.ndjson
-secrets/
-
 data/run/*.log
 data/run/*.pid
 data/run/pytest_*.log
 data/run/control_tower_snapshot_*.json
-_extracted/
-_extracted/
 exports/
 .githooks/
 
-!data/
-!data/catalog/
-!data/catalog/candidates_real.csv
-fixtures/shopify_webhooks/**/secret.txt
-# --- Shopify webhook fixtures ---
-fixtures/shopify_webhooks/**/out/
-# Allowlist tracked fixture artifacts
-!fixtures/shopify_webhooks/README.md
-!fixtures/shopify_webhooks/**/headers.json
-!fixtures/shopify_webhooks/**/body.bin
+.audit/
+
+
+data/pipeline/
+

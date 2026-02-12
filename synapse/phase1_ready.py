@@ -11,6 +11,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import logging
+logger = logging.getLogger(__name__)
 
 
 __MARKER__ = "PHASE1_READY_2026-01-13_V1"
@@ -49,8 +51,9 @@ def _rm(path: Path) -> Dict[str, Any]:
                         p.unlink()
                     elif p.is_dir():
                         p.rmdir()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("suppressed exception", exc_info=True)
+
             path.rmdir()
             return {"path": str(path), "removed": True, "type": "dir"}
         path.unlink()

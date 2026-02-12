@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import logging
+logger = logging.getLogger(__name__)
 
 __MARKER__ = "CREATIVE_FACTORY_ULTRA_2026-01-14_V1"
 
@@ -356,8 +358,8 @@ def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_
         if meta.get("width") and meta.get("height"):
             if int(meta["width"]) != ew or int(meta["height"]) != eh:
                 issues.append(f"bad_resolution:{meta.get('width')}x{meta.get('height')}")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("suppressed exception", exc_info=True)
 
     ok = len(issues) == 0
     return ok, issues, meta

@@ -1,9 +1,10 @@
-from __future__ import annotations
 
+from __future__ import annotations
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
+from synapse.infra.time_utc import now_utc, isoformat_z
 
 # --- Bootstrap de path: asegurar que la raíz del proyecto esté en sys.path ---
 
@@ -100,7 +101,7 @@ def _demo_early_warning() -> None:
     """
     _print_header("EARLY WARNING — ROAS SIMULADO")
 
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    now = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
     values = [1.8, 1.6, 1.4, 1.2, 0.9]
 
     series = [

@@ -1,14 +1,19 @@
-﻿#!/usr/bin/env python3
+from __future__ import annotations
+
+from datetime import timezone
+
+from infra.time_utils import now_utc
+
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 dropi_enrich_dump_with_catalog.py
-- Enriquecer dump (v2 items[] o v3 candidates[]) usando un catálogo CSV.
+- Enriquecer dump (v2 items[] o v3 candidates[]) usando un catÃ¡logo CSV.
 - Auto-detect encoding/delimiter.
-- Auto-mapea headers del CSV a schema canónico.
+- Auto-mapea headers del CSV a schema canÃ³nico.
 - Output: dump v3 con candidates[].source dict completo.
 """
 
-from __future__ import annotations
 
 import argparse
 import csv
@@ -23,14 +28,14 @@ CANON_KEYS = ["product_id", "title", "description", "price", "compare_at_price",
 SYNONYMS: Dict[str, List[str]] = {
     "product_id": [
         "product_id", "productid", "id", "producto_id", "producto", "product", "sku", "product_sku",
-        "variant_sku", "codigo", "código", "codigo_producto", "codigo_de_producto", "code", "item_id"
+        "variant_sku", "codigo", "cÃ³digo", "codigo_producto", "codigo_de_producto", "code", "item_id"
     ],
     "title": [
-        "title", "name", "product_name", "nombre", "nombre_producto", "producto", "titulo", "título",
+        "title", "name", "product_name", "nombre", "nombre_producto", "producto", "titulo", "tÃ­tulo",
         "product_title"
     ],
     "description": [
-        "description", "desc", "body", "body_html", "descripcion", "descripción", "detalle", "details",
+        "description", "desc", "body", "body_html", "descripcion", "descripciÃ³n", "detalle", "details",
         "long_description", "short_description", "product_description"
     ],
     "price": [
@@ -45,13 +50,13 @@ SYNONYMS: Dict[str, List[str]] = {
         "thumbnail", "main_image", "featured_image", "images", "imagenes"
     ],
     "tags": [
-        "tags", "etiquetas", "categories", "category", "categoria", "categoría", "collections", "collection"
+        "tags", "etiquetas", "categories", "category", "categoria", "categorÃ­a", "collections", "collection"
     ],
 }
 
 
 def _now_iso() -> str:
-    return _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return _dt.datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z")
 
 
 def _norm_header(h: str) -> str:
@@ -236,7 +241,7 @@ def read_catalog_index(path: str, encoding: str, delimiter: Optional[str]) -> Tu
         reader = csv.DictReader(f, delimiter=used_delim)
         headers = reader.fieldnames or []
         if not headers:
-            raise SystemExit("ERROR: catálogo CSV sin headers (fieldnames vacíos).")
+            raise SystemExit("ERROR: catÃ¡logo CSV sin headers (fieldnames vacÃ­os).")
 
         header_map = pick_header_map(headers)
 
@@ -272,7 +277,7 @@ def read_catalog_index(path: str, encoding: str, delimiter: Optional[str]) -> Tu
                 base = title
                 if tags:
                     base += f". Tags: {', '.join(tags[:8])}"
-                desc = base + ". Producto de catálogo Dropi."
+                desc = base + ". Producto de catÃ¡logo Dropi."
 
             record = {
                 "product_id": pid,
@@ -360,7 +365,7 @@ def main() -> int:
             if not title:
                 title = f"Unknown Product {idx}"
             if not src.get("description"):
-                src["description"] = f"{title}. Producto sin match en catálogo."
+                src["description"] = f"{title}. Producto sin match en catÃ¡logo."
             src.setdefault("product_id", pid)
             src.setdefault("title", title)
             item_out = dict(item)
@@ -427,3 +432,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

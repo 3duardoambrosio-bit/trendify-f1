@@ -1,2 +1,2 @@
-product_id,title,price,source_url
-SAMPLE-0001,SYNAPSE_SAMPLE,0.00,https://example.com
+product_id,title,price,currency,source
+seed,Seed Product,0,USD,fixpack_vFINAL

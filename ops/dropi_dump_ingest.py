@@ -14,19 +14,21 @@ from synapse.infra.cli_logging import cli_print
 # Nota: No depende de libs externas. Solo stdlib.
 
 
+from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
 import os
 from pathlib import Path
 from urllib.parse import quote
+from synapse.infra.time_utc import now_utc, isoformat_z
 
 
 # ----------------------------
 # Helpers
 # ----------------------------
 def _now_stamp() -> str:
-    return _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return now_utc().strftime("%Y%m%d_%H%M%S")
 
 
 def _to_decimal(x):
@@ -247,7 +249,7 @@ def main() -> int:
     evidence_path = Path(args.evidence)
     evidence = {
         "meta": {
-            "created_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "created_at": isoformat_z(now_utc(), microsecond_precision=False),
             "dump": str(dump_path),
             "ndjson_path": str(ndjson_path),
             "total_in_dump": len(products),

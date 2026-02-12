@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import json
 import uuid
+import os
 
 
 @dataclass(frozen=True)
@@ -65,5 +66,5 @@ class LedgerNDJSON:
         with self.path.open("a", encoding="utf-8", newline="\n") as f:
             f.write(line)
             f.flush()
-
+            os.fsync(f.fileno())
         return ev

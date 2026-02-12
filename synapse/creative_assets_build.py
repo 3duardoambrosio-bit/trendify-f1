@@ -10,6 +10,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import logging
+logger = logging.getLogger(__name__)
 
 
 __MARKER__ = "CREATIVE_ASSETS_BUILD_2026-01-14_V2"
@@ -64,8 +66,9 @@ def _find_ffmpeg() -> Optional[str]:
         exe2 = imageio_ffmpeg.get_ffmpeg_exe()
         if exe2 and Path(exe2).exists():
             return exe2
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("suppressed exception", exc_info=True)
+
     return None
 
 

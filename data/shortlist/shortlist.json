@@ -1,0 +1,15 @@
+{
+  "isSuccess": true,
+  "meta": {
+    "source": "shortlist_seed",
+    "note": "Optional shortlist placeholder for dev"
+  },
+  "items": [
+    {
+      "product_id": "seed",
+      "title": "Seed Product",
+      "score": 0.01,
+      "source": "shortlist_seed"
+    }
+  ]
+}

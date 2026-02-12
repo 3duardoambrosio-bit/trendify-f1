@@ -21,6 +21,8 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
+import logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -81,8 +83,8 @@ def query_events(ledger_dir: str, q: AuditQuery) -> List[Dict[str, Any]]:
                 else:
                     out.append(ev)  # already dict?
             return out[: q.limit]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("suppressed exception", exc_info=True)
 
     out2 = []
     for ev in _read_ndjson_files(ledger_dir):
