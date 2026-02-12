@@ -1,4 +1,5 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+from infra.network_guard import enforce_url_policy
 
 import json
 import os
@@ -53,12 +54,14 @@ class DropiClient:
 
     def get(self, path: str) -> Dict[str, Any]:
         self._throttle()
+        enforce_url_policy(self._url(path))
         req = urllib.request.Request(self._url(path), headers=self._headers(), method="GET")
         return self._do(req)
 
     def post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
         self._throttle()
         data = json.dumps(body).encode("utf-8")
+        enforce_url_policy(self._url(path))
         req = urllib.request.Request(self._url(path), data=data, headers=self._headers(), method="POST")
         return self._do(req)
 

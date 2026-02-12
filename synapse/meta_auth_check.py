@@ -1,4 +1,5 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+from infra.network_guard import enforce_url_policy
 
 from synapse.infra.cli_logging import cli_print
 
@@ -41,6 +42,8 @@ def main() -> int:
         return 0
 
     u = "https://graph.facebook.com/v22.0/me?" + urllib.parse.urlencode({
+
+    enforce_url_policy(u)
         "fields": "id,name",
         "access_token": t.strip(),
     })
