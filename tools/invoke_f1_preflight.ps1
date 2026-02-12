@@ -16,12 +16,16 @@ if ($dirty -ne 0) { throw "F1 STOP: working tree no está limpio" }
 
 Write-Host "`n[2] EOL truth (git ls-files --eol) critical set"
 $paths = @(
+  ".gitattributes",
+  ".gitignore",
+  ".github/workflows/f1.yml",
   "ops/dropi_dump_ingest.py",
   "synapse/meta_auth_check.py",
   "synapse/creative_assets_build.py",
   "tests/p0/test_repo_compiles_p0.py",
   "tests/p0/test_eol_lf_gate_p0.py"
 )
+
 
 $eol = git ls-files --eol -- $paths
 $eol | ForEach-Object { $_ }

@@ -5,10 +5,16 @@ from pathlib import Path
 
 # Gate ultra-específico: archivos críticos que ya tocaron EOL.
 CRITICAL_PATHS = (
+    ".gitattributes",
+    ".gitignore",
+    ".github/workflows/f1.yml",
     "ops/dropi_dump_ingest.py",
     "synapse/meta_auth_check.py",
+    "synapse/creative_assets_build.py",
     "tests/p0/test_repo_compiles_p0.py",
+    "tests/p0/test_eol_lf_gate_p0.py",
 )
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
