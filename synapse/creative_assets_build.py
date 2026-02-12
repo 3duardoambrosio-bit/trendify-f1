@@ -183,7 +183,7 @@ def _ffmpeg_escape_path(p: Path) -> str:
     ffmpeg filter args use ':' as separators (drawtext opts), so Windows drive 'C:' can break parsing.
     Best strategy:
       1) prefer relative path (no drive letter)
-      2) else escape ':' as '\:'
+      2) else escape ':' as '\\:'
     """
     try:
         rel = p.resolve().relative_to(Path.cwd().resolve())
@@ -192,7 +192,7 @@ def _ffmpeg_escape_path(p: Path) -> str:
         s = p.resolve().as_posix()
 
     # escape colon for ffmpeg filter parsing
-    s = s.replace(":", r"\:")
+    s = s.replace(":", r"\\:")
     # escape single quote if any (rare but possible)
     s = s.replace("'", r"\'")
     return s
