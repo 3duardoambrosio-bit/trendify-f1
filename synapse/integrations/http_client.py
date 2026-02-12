@@ -1,4 +1,4 @@
-"""
+﻿"""
 HTTP Client (stdlib) para SYNAPSE (Integrations layer).
 
 ACERO, NO HUMO:
@@ -9,6 +9,7 @@ ACERO, NO HUMO:
 """
 
 from __future__ import annotations
+from infra.network_guard import enforce_url_policy
 
 import json
 import socket
@@ -84,6 +85,7 @@ class SimpleHttpClient:
         self.user_agent = user_agent
 
     def request(self, req: HttpRequest) -> HttpResponse:
+        enforce_url_policy(req.url)
         if self.dry_run:
             body = _encode_json({"dry_run": True, "method": req.method.upper(), "url": req.url})
             return HttpResponse(status=200, headers={"x-dry-run": "1"}, body=body)
