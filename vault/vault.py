@@ -121,6 +121,12 @@ class Vault:
         if self.state_file is not None and not isinstance(self.state_file, Path):
             self.state_file = Path(str(self.state_file))
 
+
+        # 2b) state_file por ENV (OPT-IN)
+        if self.state_file is None:
+            env_path = os.getenv("SYNAPSE_VAULT_STATE_FILE")
+            if env_path:
+                self.state_file = Path(env_path)
         # 3) Validación base de budgets
         for name, value in [
             ("total_budget", self.total_budget),

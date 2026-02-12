@@ -78,3 +78,27 @@ def test_vault_persistence_corrupt_state_fail_closed(tmp_path: Path) -> None:
             state_file=sf,
         )
     assert "VAULT_STATE_CORRUPTED" in str(ex.value)
+def test_vault_env_state_file_roundtrip(tmp_path: Path, monkeypatch) -> None:
+    sf = tmp_path / "vault_env_state.json"
+    monkeypatch.setenv("SYNAPSE_VAULT_STATE_FILE", str(sf))
+
+    v = Vault(
+        total_budget=Decimal("100.00"),
+        learning_budget=Decimal("30.00"),
+        operational_budget=Decimal("55.00"),
+        reserve_budget=Decimal("15.00"),
+        # state_file OMITIDO a propósito: debe venir por ENV
+    )
+    assert sf.exists() is False
+
+    r = v.request_spend(Decimal("2.00"), "learning")
+    assert r.is_ok() is True
+    assert sf.exists() is True
+
+    v2 = Vault(
+        total_budget=Decimal("100.00"),
+        learning_budget=Decimal("30.00"),
+        operational_budget=Decimal("55.00"),
+        reserve_budget=Decimal("15.00"),
+    )
+    assert v2.learning_spent == Decimal("2.00")
