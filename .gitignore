@@ -147,3 +147,6 @@ data/pipeline/
 
 .tmp/
 
+
+# F1: local build/control tower artifacts
+artifacts/
