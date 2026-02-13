@@ -150,3 +150,8 @@ data/pipeline/
 
 # F1: local build/control tower artifacts
 artifacts/
+
+# F1: local hooks dir (ignore all; whitelist tracked hooks)
+.githooks/*
+!.githooks/pre-commit
+!.githooks/pre-push

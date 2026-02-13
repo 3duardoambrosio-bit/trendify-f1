@@ -1,4 +1,4 @@
-﻿* text=auto
+* text=auto
 
 # Python / docs = LF
 *.py   text eol=lf
@@ -19,3 +19,32 @@ fixtures/shopify_webhooks/**/body.bin -text -diff
 .gitignore text eol=lf
 *.yml text eol=lf
 *.sh text eol=lf
+
+# F1: EOL contract (repo stores LF; Windows scripts explicit)
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.sh  text eol=lf
+*.py  text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.csv text eol=lf
+*.ts  text eol=lf
+*.js  text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# F1: binaries
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.webp -text
+*.ico -text
+*.pdf -text
+*.zip -text
+*.7z  -text
+*.exe -text
