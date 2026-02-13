@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# F1 PRE-PUSH: enforce full control tower before pushing.
+# Drain stdin (refs list) to avoid weirdness; Git will close it.
+cat >/dev/null || true
+
+echo "=== F1 PRE-PUSH: RUN CONTROL TOWER ==="
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_f1_control_tower.ps1 < /dev/null
