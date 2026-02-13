@@ -10,34 +10,25 @@ $ErrorActionPreference="Stop"
 
 Write-Host "=== SYNAPSE F1 CONTROL TOWER: START ===" -ForegroundColor Cyan
 
-# ----------------
-# [0] SNAPSHOT
-# ----------------
-Write-Host "`n[0] SNAPSHOT" -ForegroundColor Cyan
-$root  = (git rev-parse --show-toplevel).Trim()
-$branch= (git rev-parse --abbrev-ref HEAD).Trim()
-$head  = (git rev-parse --short HEAD).Trim()
-$dirty = (git status --porcelain | Measure-Object).Count
+function Ensure-Dir {
+  param([string]$Path)
+  if ([string]::IsNullOrWhiteSpace($Path)) { return }
+  New-Item -Force -ItemType Directory -Path $Path | Out-Null
+}
 
-"root=$root"
-"branch=$branch"
-"head_short=$head"
-"dirty_lines=$dirty"
-
-# Hard gate: must be clean
-if ($dirty -ne 0) { git status --porcelain; throw "F1 STOP: dirty_lines must be 0" }
-
-# Report object
-$r = [ordered]@{
-  meta = [ordered]@{
-    ts_utc = (Get-Date).ToUniversalTime().ToString("o")
-    root = $root
-    branch = $branch
-    head_short = $head
+function Ensure-LocalIgnore {
+  param([string]$RelPath)
+  # Ensures report doesn't dirty git status (local-only, not tracked)
+  $root = (git rev-parse --show-toplevel).Trim()
+  $ex = Join-Path $root ".git\info\exclude"
+  $rel = ($RelPath -replace "\\","/").Trim()
+  if ([string]::IsNullOrWhiteSpace($rel)) { return }
+  Ensure-Dir -Path (Split-Path $ex -Parent)
+  if (-not (Test-Path $ex)) { Set-Content -LiteralPath $ex -Value "" -Encoding UTF8 }
+  $cur = Get-Content $ex -ErrorAction SilentlyContinue
+  if (@($cur | Where-Object { $_.Trim() -eq $rel }).Count -eq 0) {
+    Add-Content -LiteralPath $ex -Value $rel -Encoding UTF8
   }
-  gates = [ordered]@{}
-  accept = [ordered]@{}
-  errors = @()
 }
 
 function Run-Step {
@@ -52,21 +43,49 @@ function Run-Step {
   $exit = $LASTEXITCODE
   $ErrorActionPreference=$old
 
-  # store truncated output for json readability
   $outShort = @($out | Select-Object -First 120 | ForEach-Object { "$_" })
-  $r.gates[$Name] = [ordered]@{
-    exit = $exit
-    lines = $out.Count
-    head = $outShort
-  }
+  $script:r.gates[$Name] = [ordered]@{ exit = $exit; lines = $out.Count; head = $outShort }
 
   "step_exit=$exit"
   if ($exit -ne 0) {
-    $r.errors += "step_failed=$Name exit=$exit"
+    $script:r.errors += "step_failed=$Name exit=$exit"
     $outShort | Out-Host
     throw "F1 STOP: step failed => $Name (exit=$exit)"
   }
 }
+
+# ----------------
+# [0] SNAPSHOT
+# ----------------
+Write-Host "`n[0] SNAPSHOT" -ForegroundColor Cyan
+$root  = (git rev-parse --show-toplevel).Trim()
+$branch= (git rev-parse --abbrev-ref HEAD).Trim()
+$head  = (git rev-parse --short HEAD).Trim()
+$dirty = (git status --porcelain | Measure-Object).Count
+
+"root=$root"
+"branch=$branch"
+"head_short=$head"
+"dirty_lines=$dirty"
+if ($dirty -ne 0) { git status --porcelain; throw "F1 STOP: dirty_lines must be 0" }
+
+# Report object
+$script:r = [ordered]@{
+  meta = [ordered]@{
+    ts_utc = (Get-Date).ToUniversalTime().ToString("o")
+    root = $root
+    branch = $branch
+    head_short = $head
+  }
+  gates = [ordered]@{}
+  accept = [ordered]@{}
+  errors = @()
+}
+
+# Ensure artifacts dir exists + ensure report is locally ignored
+$outDir = Split-Path (Join-Path $root $OutJson) -Parent
+Ensure-Dir -Path $outDir
+Ensure-LocalIgnore -RelPath $OutJson
 
 # ----------------
 # [1] LOCAL HOOKS VERIFY
@@ -74,7 +93,7 @@ function Run-Step {
 if (Test-Path "tools/verify_local_hooks_f1.ps1") {
   Run-Step -Name "local_hooks_verify" -Cmd { powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify_local_hooks_f1.ps1 }
 } else {
-  $r.gates["local_hooks_verify"] = [ordered]@{ exit = 2; lines = 0; head = @("MISSING: tools/verify_local_hooks_f1.ps1") }
+  $script:r.gates["local_hooks_verify"] = [ordered]@{ exit = 2; lines = 0; head = @("MISSING: tools/verify_local_hooks_f1.ps1") }
   throw "F1 STOP: missing tools/verify_local_hooks_f1.ps1"
 }
 
@@ -84,7 +103,7 @@ if (Test-Path "tools/verify_local_hooks_f1.ps1") {
 if (Test-Path "scripts/gate_f1.ps1") {
   Run-Step -Name "gate_f1_precommit" -Cmd { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate_f1.ps1 precommit }
 } else {
-  $r.gates["gate_f1_precommit"] = [ordered]@{ exit = 2; lines = 0; head = @("MISSING: scripts/gate_f1.ps1") }
+  $script:r.gates["gate_f1_precommit"] = [ordered]@{ exit = 2; lines = 0; head = @("MISSING: scripts/gate_f1.ps1") }
   throw "F1 STOP: missing scripts/gate_f1.ps1"
 }
 
@@ -138,7 +157,7 @@ if ($null -ne $full -and $null -ne $full.rules) {
   ).Count
 }
 
-$r.gates["ruleset_audit"] = [ordered]@{
+$script:r.gates["ruleset_audit"] = [ordered]@{
   exit = 0
   rulesets_count = $rulesetsCount
   ruleset_id = $rulesetId
@@ -161,33 +180,32 @@ $r.gates["ruleset_audit"] = [ordered]@{
 "rule_non_fast_forward_count=$hasNFF"
 
 # ----------------
-# [6] FINAL ACCEPTANCE (NUMERIC HARD)
+# [6] FINAL ACCEPTANCE (NUMERIC HARD)  BEFORE REPORT WRITE
 # ----------------
 Write-Host "`n=== ACCEPTANCE (NUMERIC) ===" -ForegroundColor Green
 $ok = 1
-
 $ok = $ok -band [int](((git status --porcelain | Measure-Object).Count) -eq 0)
-$r.accept["repo_clean"] = $ok
+$script:r.accept["repo_clean_before_report"] = [int](((git status --porcelain | Measure-Object).Count) -eq 0)
 
 $ok = $ok -band [int]($enfOk -eq 1)
-$r.accept["ruleset_enforcement_active"] = [int]($enfOk -eq 1)
+$script:r.accept["ruleset_enforcement_active"] = [int]($enfOk -eq 1)
 
 $ok = $ok -band [int]($incHits -eq 1)
-$r.accept["ruleset_include_main_hits_eq_1"] = [int]($incHits -eq 1)
+$script:r.accept["ruleset_include_main_hits_eq_1"] = [int]($incHits -eq 1)
 
 $ok = $ok -band [int]($hasPR -eq 1)
-$r.accept["ruleset_pull_request_rule_eq_1"] = [int]($hasPR -eq 1)
+$script:r.accept["ruleset_pull_request_rule_eq_1"] = [int]($hasPR -eq 1)
 
 $ok = $ok -band [int]($hasRSC -eq 1)
-$r.accept["ruleset_required_status_checks_rule_eq_1"] = [int]($hasRSC -eq 1)
+$script:r.accept["ruleset_required_status_checks_rule_eq_1"] = [int]($hasRSC -eq 1)
 
 $ok = $ok -band [int]($ctxHits -eq 1)
-$r.accept["ruleset_required_context_hits_eq_1"] = [int]($ctxHits -eq 1)
+$script:r.accept["ruleset_required_context_hits_eq_1"] = [int]($ctxHits -eq 1)
 
 $ok = $ok -band [int]($hasNFF -eq 1)
-$r.accept["ruleset_non_fast_forward_rule_eq_1"] = [int]($hasNFF -eq 1)
+$script:r.accept["ruleset_non_fast_forward_rule_eq_1"] = [int]($hasNFF -eq 1)
 
-"RULE_1 repo_clean => " + [int](((git status --porcelain | Measure-Object).Count) -eq 0)
+"RULE_1 repo_clean_before_report => " + [int](((git status --porcelain | Measure-Object).Count) -eq 0)
 "RULE_2 ruleset_enforcement_active => " + [int]($enfOk -eq 1)
 "RULE_3 include_main_hits_eq_1 => " + [int]($incHits -eq 1)
 "RULE_4 pull_request_rule_eq_1 => " + [int]($hasPR -eq 1)
@@ -196,21 +214,41 @@ $r.accept["ruleset_non_fast_forward_rule_eq_1"] = [int]($hasNFF -eq 1)
 "RULE_7 non_fast_forward_rule_eq_1 => " + [int]($hasNFF -eq 1)
 
 "ACCEPTANCE_OK=$ok"
-if ($ok -ne 1) { throw "F1 STOP: acceptance != 1" }
+if ($ok -ne 1) { throw "F1 STOP: acceptance != 1 (policy/ruleset)" }
 
 # ----------------
-# [7] WRITE JSON REPORT
+# [7] WRITE JSON REPORT + POSTCHECK (NUMERIC)
 # ----------------
-$r.meta["acceptance_ok"] = $ok
-$json = ($r | ConvertTo-Json -Depth 8)
-[System.IO.File]::WriteAllText((Join-Path $root $OutJson), $json, (New-Object System.Text.UTF8Encoding($false)))
+$script:r.meta["acceptance_ok"] = $ok
+$json = ($script:r | ConvertTo-Json -Depth 8)
+$targetPath = (Join-Path $root $OutJson)
+[System.IO.File]::WriteAllText($targetPath, $json, (New-Object System.Text.UTF8Encoding($false)))
+
+Write-Host "`n=== REPORT WRITE POSTCHECK ===" -ForegroundColor Cyan
+"report_path=$targetPath"
+"report_exists=" + [int](Test-Path $targetPath)
+$raw = Get-Content $targetPath -Raw
+$hit = ([regex]::Matches($raw, '"acceptance_ok"\s*:\s*1')).Count
+"acceptance_ok_hits=$hit"
+
+$dirtyAfter = (git status --porcelain | Measure-Object).Count
+"dirty_lines_after_report=$dirtyAfter"
+
+Write-Host "`n=== ACCEPTANCE (NUMERIC) POST ===" -ForegroundColor Green
+"RULE_P1 report_exists == 1 => " + [int](Test-Path $targetPath)
+"RULE_P2 acceptance_ok_hits >= 1 => " + [int]($hit -ge 1)
+"RULE_P3 dirty_lines_after_report == 0 => " + [int]($dirtyAfter -eq 0)
+
+if (-not (Test-Path $targetPath)) { throw "F1 STOP: report no existe" }
+if ($hit -lt 1) { throw "F1 STOP: report sin acceptance_ok=1" }
+if ($dirtyAfter -ne 0) { throw "F1 STOP: report ensució git status (falta ignore)" }
 
 Write-Host "`n=== SYNAPSE F1 CONTROL TOWER: PASS ===" -ForegroundColor Green
 Write-Host "report_json=$OutJson" -ForegroundColor Green
 
 Write-Host "`n=== ESTADO COMPLETO ===" -ForegroundColor Cyan
 "root=$root"
-"branch=" + (git rev-parse --abbrev-ref HEAD).Trim()
-"head_short=" + (git rev-parse --short HEAD).Trim()
-"dirty_lines=" + ((git status --porcelain | Measure-Object).Count)
+"branch=$branch"
+"head_short=$head"
+"dirty_lines=$dirtyAfter"
 "hooksPath_effective=" + ((git config --get core.hooksPath) | ForEach-Object { $_.Trim() })
