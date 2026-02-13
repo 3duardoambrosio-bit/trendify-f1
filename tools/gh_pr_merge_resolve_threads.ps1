@@ -1,6 +1,3 @@
-$ErrorActionPreference="Stop"
-Set-StrictMode -Version Latest
-
 param(
   [Parameter(Mandatory=$true)][string]$Owner,
   [Parameter(Mandatory=$true)][string]$Repo,
@@ -9,6 +6,9 @@ param(
   [switch]$Admin,
   [switch]$DeleteBranch
 )
+
+$ErrorActionPreference="Stop"
+Set-StrictMode -Version Latest
 
 function Fail([string]$msg) { throw "F1 STOP: $msg" }
 
@@ -79,6 +79,7 @@ if ($mergeExit -ne 0) { Fail "merge falló" }
 Write-Host "`n[6] VERIFY MERGED (mergedAt != null)" -ForegroundColor Cyan
 $prAfter = gh pr view -R "$Owner/$Repo" $Pr --json state,mergedAt,mergeCommit,url | ConvertFrom-Json
 $merged = [int]([bool]$prAfter.mergedAt)
+"state_after=$($prAfter.state)"
 "merged_after=$merged"
 "mergedAt_after=$($prAfter.mergedAt)"
 if ($merged -ne 1) { Fail "merge no aplicado" }
