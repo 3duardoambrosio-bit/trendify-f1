@@ -24,3 +24,12 @@ Notes:
 If push fails:
 - Read the Control Tower output; it prints the failing rule and ACCEPTANCE_OK=0.
 - Fix the underlying issue, then rerun Control Tower locally before retrying push.
+
+## PR Merge Rescue (resolve conversations)
+
+If PR merge is BLOCKED by "A conversation must be resolved":
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/gh_pr_merge_resolve_threads.ps1 `
+  -Owner "3duardoambrosio-bit" -Repo "trendify-f1" -Pr <PR_NUMBER> -MergeMethod squash -Admin -DeleteBranch
+```
