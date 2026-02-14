@@ -22,13 +22,13 @@ Write-Host "=== F1 PR MERGE-RESCUE: START ===" -ForegroundColor Cyan
 
 Write-Host "`n[0] GH AUTH STATUS" -ForegroundColor Cyan
 gh auth status | Out-Host
-if ($LASTEXITCODE -ne 0) { Fail "gh auth status falló (no autenticado)" }
+if ($LASTEXITCODE -ne 0) { Fail "gh auth status failed (not authenticated)" }
 
-Write-Host "`n[1] REQUIRED CHECKS (must be PASS)" -ForegroundColor Cyan
-gh pr checks -R "$Owner/$Repo" $Pr --required | Out-Host
+Write-Host "`n[1] CHECKS (WATCH ALL) must PASS" -ForegroundColor Cyan
+gh pr checks -R "$Owner/$Repo" $Pr --watch | Out-Host
 $checksExit=$LASTEXITCODE
 "checks_exit=$checksExit"
-if ($checksExit -ne 0) { Fail "required checks NO están en PASS" }
+if ($checksExit -ne 0) { Fail "checks not PASS (gh pr checks --watch exit != 0)" }
 
 Write-Host "`n[2] FIND UNRESOLVED THREADS (GraphQL)" -ForegroundColor Cyan
 $q = @(
@@ -41,7 +41,7 @@ $q = @(
   "}"
 ) -join "`n"
 $j = gh api graphql -f query="$q" -F owner="$Owner" -F name="$Repo" -F number="$Pr" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or -not $j) { Fail "gh api graphql (query threads) falló" }
+if ($LASTEXITCODE -ne 0 -or -not $j) { Fail "graphql query threads failed" }
 $threads = @($j.data.repository.pullRequest.reviewThreads.nodes)
 $unresolved = @($threads | Where-Object { -not $_.isResolved })
 "threads_total=$($threads.Count)"
@@ -54,35 +54,44 @@ $m = @(
   "  resolveReviewThread(input:{threadId:$threadId}) { thread { id isResolved } }",
   "}"
 ) -join "`n"
+$resolvedOk=0
 foreach ($t in $unresolved) {
-  "resolving_thread=$($t.id)"
-  gh api graphql -f query="$m" -F threadId="$($t.id)" | Out-Null
-  if ($LASTEXITCODE -ne 0) { Fail "no pude resolver thread=$($t.id)" }
+  $tid=$t.id
+  "resolving_thread=$tid"
+  gh api graphql -f query="$m" -F threadId="$tid" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Fail "cannot resolve thread=$tid" }
+  $resolvedOk++
 }
+"resolved_threads_count=$resolvedOk"
 
 Write-Host "`n[4] RECHECK UNRESOLVED COUNT" -ForegroundColor Cyan
 $j2 = gh api graphql -f query="$q" -F owner="$Owner" -F name="$Repo" -F number="$Pr" | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $j2) { Fail "graphql recheck failed" }
 $threads2 = @($j2.data.repository.pullRequest.reviewThreads.nodes)
 $unresolved2 = @($threads2 | Where-Object { -not $_.isResolved })
 "threads_unresolved_after=$($unresolved2.Count)"
-if ($unresolved2.Count -ne 0) { Fail "todavía hay conversaciones sin resolver" }
+if ($unresolved2.Count -ne 0) { Fail "still unresolved threads" }
 
 Write-Host "`n[5] MERGE PR" -ForegroundColor Yellow
 $mergeFlag = if ($MergeMethod -eq "squash") { "--squash" } elseif ($MergeMethod -eq "merge") { "--merge" } else { "--rebase" }
 $adminFlag = if ($Admin.IsPresent) { "--admin" } else { "" }
 $delFlag   = if ($DeleteBranch.IsPresent) { "--delete-branch" } else { "" }
+"selected_merge_flag=$mergeFlag"
+"selected_admin_flag=$adminFlag"
+"selected_delete_flag=$delFlag"
 gh pr merge -R "$Owner/$Repo" $Pr $mergeFlag $adminFlag $delFlag | Out-Host
 $mergeExit=$LASTEXITCODE
 "merge_exit=$mergeExit"
-if ($mergeExit -ne 0) { Fail "merge falló" }
+if ($mergeExit -ne 0) { Fail "merge failed (gh pr merge exit != 0)" }
 
 Write-Host "`n[6] VERIFY MERGED (mergedAt != null)" -ForegroundColor Cyan
 $prAfter = gh pr view -R "$Owner/$Repo" $Pr --json state,mergedAt,mergeCommit,url | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $prAfter) { Fail "cannot read PR post-merge" }
 $merged = [int]([bool]$prAfter.mergedAt)
 "state_after=$($prAfter.state)"
 "merged_after=$merged"
 "mergedAt_after=$($prAfter.mergedAt)"
-if ($merged -ne 1) { Fail "merge no aplicado" }
+if ($merged -ne 1) { Fail "merge not applied (merged_after != 1)" }
 
 Write-Host "`n=== ACCEPTANCE (NUMERIC) ===" -ForegroundColor Green
 "RULE_1 checks_exit == 0 => " + [int]($checksExit -eq 0)
