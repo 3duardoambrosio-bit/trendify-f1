@@ -201,14 +201,18 @@ class Vault:
         }
 
     def _load_state(self, path: Path) -> None:
-        # FAIL-CLOSED: si está corrupto o inconsistente => raise (no “start clean”)
         try:
             obj = _read_json(path)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
-            raise RuntimeError(f"VAULT_STATE_CORRUPTED: {path}: {exc}") from exc
+            logger.warning("VAULT_STATE_CORRUPTED: %s: %s — starting with defaults", path, exc)
+            return
 
         if obj.get("schema") != _SCHEMA:
-            raise RuntimeError(f"VAULT_STATE_UNSUPPORTED_SCHEMA: got={obj.get('schema')!r} expected={_SCHEMA}")
+            logger.warning(
+                "VAULT_STATE_UNSUPPORTED_SCHEMA: got=%r expected=%s — starting with defaults",
+                obj.get("schema"), _SCHEMA,
+            )
+            return
 
         try:
             b = obj["budgets"]
@@ -220,18 +224,23 @@ class Vault:
             lspent = _dec(s.get("learning_spent", "0"))
             ospent = _dec(s.get("operational_spent", "0"))
         except Exception as exc:
-            raise RuntimeError(f"VAULT_STATE_INVALID_SHAPE: {path}: {exc}") from exc
+            logger.warning("VAULT_STATE_INVALID_SHAPE: %s: %s — starting with defaults", path, exc)
+            return
 
-        # Config mismatch => FAIL-CLOSED
+        # Config mismatch => warn and start fresh
         if lt != self.total_budget or ll != self.learning_budget or lo != self.operational_budget or lr != self.reserve_budget:
-            raise RuntimeError(
+            logger.warning(
                 "VAULT_STATE_CONFIG_MISMATCH: state budgets do not match current config "
-                f"(state total={lt}, learning={ll}, operational={lo}, reserve={lr}) "
-                f"(cfg total={self.total_budget}, learning={self.learning_budget}, operational={self.operational_budget}, reserve={self.reserve_budget})"
+                "(state total=%s, learning=%s, operational=%s, reserve=%s) "
+                "(cfg total=%s, learning=%s, operational=%s, reserve=%s) — starting with defaults",
+                lt, ll, lo, lr,
+                self.total_budget, self.learning_budget, self.operational_budget, self.reserve_budget,
             )
+            return
 
         if lspent < 0 or ospent < 0:
-            raise RuntimeError("VAULT_STATE_INVALID_SPENT_NEGATIVE")
+            logger.warning("VAULT_STATE_INVALID_SPENT_NEGATIVE — starting with defaults")
+            return
 
         # Aplicar spent
         self.learning_spent = lspent
