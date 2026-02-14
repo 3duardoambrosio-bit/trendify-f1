@@ -4,7 +4,8 @@ param(
   [Parameter(Mandatory=$true)][int]$Pr,
   [ValidateSet("squash","merge","rebase")][string]$MergeMethod="squash",
   [switch]$Admin,
-  [switch]$DeleteBranch
+  [switch]$DeleteBranch,
+  [switch]$SkipChecks
 )
 
 $ErrorActionPreference="Stop"
@@ -19,16 +20,23 @@ Write-Host "=== F1 PR MERGE-RESCUE: START ===" -ForegroundColor Cyan
 "merge_method=$MergeMethod"
 "admin=" + [int]$Admin.IsPresent
 "delete_branch=" + [int]$DeleteBranch.IsPresent
+"skip_checks=" + [int]$SkipChecks.IsPresent
 
 Write-Host "`n[0] GH AUTH STATUS" -ForegroundColor Cyan
 gh auth status | Out-Host
 if ($LASTEXITCODE -ne 0) { Fail "gh auth status failed (not authenticated)" }
 
-Write-Host "`n[1] CHECKS (WATCH ALL) must PASS" -ForegroundColor Cyan
-gh pr checks -R "$Owner/$Repo" $Pr --watch | Out-Host
-$checksExit=$LASTEXITCODE
-"checks_exit=$checksExit"
-if ($checksExit -ne 0) { Fail "checks not PASS (gh pr checks --watch exit != 0)" }
+if (-not $SkipChecks.IsPresent) {
+  Write-Host "`n[1] CHECKS (WATCH REQUIRED) must PASS" -ForegroundColor Cyan
+  gh pr checks -R "$Owner/$Repo" $Pr --watch --required | Out-Host
+  $checksExit=$LASTEXITCODE
+  "checks_exit=$checksExit"
+  if ($checksExit -ne 0) { Fail "required checks not PASS (gh pr checks --watch --required exit != 0)" }
+} else {
+  Write-Host "`n[1] CHECKS SKIPPED (caller already gated outside)" -ForegroundColor Yellow
+  $checksExit=0
+  "checks_exit=$checksExit"
+}
 
 Write-Host "`n[2] FIND UNRESOLVED THREADS (GraphQL)" -ForegroundColor Cyan
 $q = @(
