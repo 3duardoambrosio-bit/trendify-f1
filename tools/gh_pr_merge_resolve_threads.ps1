@@ -5,7 +5,10 @@ param(
   [ValidateSet("squash","merge","rebase")][string]$MergeMethod="squash",
   [switch]$Admin,
   [switch]$DeleteBranch,
-  [switch]$SkipChecks
+  [switch]$SkipChecks,
+  [switch]$Auto,
+  [int]$PollMax=60,
+  [int]$PollSleepSec=5
 )
 
 $ErrorActionPreference="Stop"
@@ -21,6 +24,9 @@ Write-Host "=== F1 PR MERGE-RESCUE: START ===" -ForegroundColor Cyan
 "admin=" + [int]$Admin.IsPresent
 "delete_branch=" + [int]$DeleteBranch.IsPresent
 "skip_checks=" + [int]$SkipChecks.IsPresent
+"auto=" + [int]$Auto.IsPresent
+"poll_max=$PollMax"
+"poll_sleep_sec=$PollSleepSec"
 
 Write-Host "`n[0] GH AUTH STATUS" -ForegroundColor Cyan
 gh auth status | Out-Host
@@ -31,7 +37,7 @@ if (-not $SkipChecks.IsPresent) {
   gh pr checks -R "$Owner/$Repo" $Pr --watch --required | Out-Host
   $checksExit=$LASTEXITCODE
   "checks_exit=$checksExit"
-  if ($checksExit -ne 0) { Fail "required checks not PASS (gh pr checks --watch --required exit != 0)" }
+  if ($checksExit -ne 0) { Fail "required checks not PASS" }
 } else {
   Write-Host "`n[1] CHECKS SKIPPED (caller already gated outside)" -ForegroundColor Yellow
   $checksExit=0
@@ -84,22 +90,31 @@ Write-Host "`n[5] MERGE PR" -ForegroundColor Yellow
 $mergeFlag = if ($MergeMethod -eq "squash") { "--squash" } elseif ($MergeMethod -eq "merge") { "--merge" } else { "--rebase" }
 $adminFlag = if ($Admin.IsPresent) { "--admin" } else { "" }
 $delFlag   = if ($DeleteBranch.IsPresent) { "--delete-branch" } else { "" }
+$autoFlag  = if ($Auto.IsPresent) { "--auto" } else { "" }
 "selected_merge_flag=$mergeFlag"
 "selected_admin_flag=$adminFlag"
 "selected_delete_flag=$delFlag"
-gh pr merge -R "$Owner/$Repo" $Pr $mergeFlag $adminFlag $delFlag | Out-Host
+"selected_auto_flag=$autoFlag"
+gh pr merge -R "$Owner/$Repo" $Pr $mergeFlag $autoFlag $adminFlag $delFlag | Out-Host
 $mergeExit=$LASTEXITCODE
 "merge_exit=$mergeExit"
-if ($mergeExit -ne 0) { Fail "merge failed (gh pr merge exit != 0)" }
+if ($mergeExit -ne 0) { Fail "merge command failed (gh pr merge exit != 0)" }
 
-Write-Host "`n[6] VERIFY MERGED (mergedAt != null)" -ForegroundColor Cyan
-$prAfter = gh pr view -R "$Owner/$Repo" $Pr --json state,mergedAt,mergeCommit,url | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or -not $prAfter) { Fail "cannot read PR post-merge" }
-$merged = [int]([bool]$prAfter.mergedAt)
-"state_after=$($prAfter.state)"
-"merged_after=$merged"
-"mergedAt_after=$($prAfter.mergedAt)"
-if ($merged -ne 1) { Fail "merge not applied (merged_after != 1)" }
+Write-Host "`n[6] VERIFY MERGED (poll mergedAt)" -ForegroundColor Cyan
+$attempt=0
+$merged=0
+$mergedAt=$null
+while ($attempt -lt $PollMax) {
+  $attempt++
+  $prAfter = gh pr view -R "$Owner/$Repo" $Pr --json state,mergedAt,url | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0 -or -not $prAfter) { Fail "cannot read PR during poll" }
+  $merged = [int]([bool]$prAfter.mergedAt)
+  $mergedAt = $prAfter.mergedAt
+  "poll_attempt=$attempt state=$($prAfter.state) merged=$merged mergedAt=$mergedAt"
+  if ($merged -eq 1) { break }
+  Start-Sleep -Seconds $PollSleepSec
+}
+if ($merged -ne 1) { Fail "auto-merge not completed (mergedAt still null) poll_max=$PollMax" }
 
 Write-Host "`n=== ACCEPTANCE (NUMERIC) ===" -ForegroundColor Green
 "RULE_1 checks_exit == 0 => " + [int]($checksExit -eq 0)
