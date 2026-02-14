@@ -38,11 +38,13 @@ class RiskLimits:
     daily_loss_limit: Decimal = Decimal("0.05")          # 5% of monthly budget
     spend_rate_anomaly_mult: Decimal = Decimal("3.0")    # 3x expected spend-rate in window
     max_single_campaign_share: Decimal = Decimal("0.25") # reserved for future concentration cap
+    auto_killswitch_threshold: Decimal = Decimal("0.80") # 80% of budget in 24h → auto-killswitch
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "daily_loss_limit", _q_ratio(_d(self.daily_loss_limit)))
         object.__setattr__(self, "spend_rate_anomaly_mult", _q_ratio(_d(self.spend_rate_anomaly_mult)))
         object.__setattr__(self, "max_single_campaign_share", _q_ratio(_d(self.max_single_campaign_share)))
+        object.__setattr__(self, "auto_killswitch_threshold", _q_ratio(_d(self.auto_killswitch_threshold)))
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,11 @@ class RiskDecision:
 
 
 def evaluate_risk(limits: RiskLimits, snap: RiskSnapshot) -> RiskDecision:
+    # Auto-killswitch: 24h spend >= 80% of budget (checked first — highest severity)
+    if snap.monthly_budget > 0:
+        if snap.daily_loss >= (snap.monthly_budget * limits.auto_killswitch_threshold):
+            return RiskDecision(False, "AUTO_KILLSWITCH_THRESHOLD_EXCEEDED")
+
     if snap.monthly_budget > 0:
         if snap.daily_loss > (snap.monthly_budget * limits.daily_loss_limit):
             return RiskDecision(False, "DAILY_LOSS_LIMIT_EXCEEDED")
