@@ -1,0 +1,67 @@
+{
+  "data": {
+    "products": {
+      "edges": [
+        {
+          "node": {
+            "id": "gid://shopify/Product/1001",
+            "title": "Camiseta Básica Negra",
+            "handle": "camiseta-basica-negra",
+            "status": "ACTIVE",
+            "vendor": "Trendify",
+            "productType": "Camiseta",
+            "createdAt": "2024-01-15T10:30:00Z",
+            "updatedAt": "2024-02-01T08:00:00Z",
+            "variants": {
+              "edges": [
+                {
+                  "node": {
+                    "id": "gid://shopify/ProductVariant/2001",
+                    "title": "M / Negro",
+                    "sku": "CB-M-001",
+                    "price": "299.00",
+                    "inventoryQuantity": 50
+                  }
+                },
+                {
+                  "node": {
+                    "id": "gid://shopify/ProductVariant/2002",
+                    "title": "L / Negro",
+                    "sku": "CB-L-001",
+                    "price": "299.00",
+                    "inventoryQuantity": 30
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "gid://shopify/Product/1002",
+            "title": "Sudadera Oversize Gris",
+            "handle": "sudadera-oversize-gris",
+            "status": "ACTIVE",
+            "vendor": "Trendify",
+            "productType": "Sudadera",
+            "createdAt": "2024-01-20T14:00:00Z",
+            "updatedAt": "2024-02-05T09:30:00Z",
+            "variants": {
+              "edges": [
+                {
+                  "node": {
+                    "id": "gid://shopify/ProductVariant/2003",
+                    "title": "L / Gris",
+                    "sku": "SOG-L-001",
+                    "price": "599.00",
+                    "inventoryQuantity": 20
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

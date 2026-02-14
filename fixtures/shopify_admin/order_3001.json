@@ -1,0 +1,33 @@
+{
+  "data": {
+    "order": {
+      "id": "gid://shopify/Order/3001",
+      "name": "#1001",
+      "displayFinancialStatus": "PAID",
+      "displayFulfillmentStatus": "UNFULFILLED",
+      "createdAt": "2024-02-10T16:00:00Z",
+      "totalPriceSet": {
+        "shopMoney": {
+          "amount": "598.00",
+          "currencyCode": "MXN"
+        }
+      },
+      "lineItems": {
+        "edges": [
+          {
+            "node": {
+              "title": "Camiseta Básica Negra - M / Negro",
+              "quantity": 2,
+              "originalUnitPriceSet": {
+                "shopMoney": {
+                  "amount": "299.00",
+                  "currencyCode": "MXN"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
