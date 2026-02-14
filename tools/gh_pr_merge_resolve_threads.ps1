@@ -40,13 +40,13 @@ if (-not $SkipChecks.IsPresent) {
 
 Write-Host "`n[2] FIND UNRESOLVED THREADS (GraphQL)" -ForegroundColor Cyan
 $q = @(
-  "query($owner:String!, $name:String!, $number:Int!) {",
-  "  repository(owner:$owner, name:$name) {",
-  "    pullRequest(number:$number) {",
-  "      reviewThreads(first:100) { nodes { id isResolved } }",
-  "    }",
-  "  }",
-  "}"
+  'query($owner:String!, $name:String!, $number:Int!) {',
+  '  repository(owner:$owner, name:$name) {',
+  '    pullRequest(number:$number) {',
+  '      reviewThreads(first:100) { nodes { id isResolved } }',
+  '    }',
+  '  }',
+  '}'
 ) -join "`n"
 $j = gh api graphql -f query="$q" -F owner="$Owner" -F name="$Repo" -F number="$Pr" | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or -not $j) { Fail "graphql query threads failed" }
@@ -58,9 +58,9 @@ $unresolved | ForEach-Object -Begin { $i=0 } -Process { $i++; "  unresolved[$i]=
 
 Write-Host "`n[3] RESOLVE UNRESOLVED THREADS (GraphQL)" -ForegroundColor Yellow
 $m = @(
-  "mutation($threadId:ID!) {",
-  "  resolveReviewThread(input:{threadId:$threadId}) { thread { id isResolved } }",
-  "}"
+  'mutation($threadId:ID!) {',
+  '  resolveReviewThread(input:{threadId:$threadId}) { thread { id isResolved } }',
+  '}'
 ) -join "`n"
 $resolvedOk=0
 foreach ($t in $unresolved) {
