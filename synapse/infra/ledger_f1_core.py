@@ -38,6 +38,7 @@ class Ledger:
         idempotency_key: str,
         severity: str = "INFO",
         payload: Optional[Dict[str, Any]] = None,
+        critical: bool = False,
     ) -> None:
         rec = {
             "ts": _now_iso_utc(),
@@ -45,6 +46,7 @@ class Ledger:
             "correlation_id": str(correlation_id),
             "idempotency_key": str(idempotency_key),
             "severity": str(severity),
+            "critical": critical,
             "payload": payload or {},
         }
         line = json.dumps(rec, ensure_ascii=False)

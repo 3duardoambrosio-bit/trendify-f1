@@ -7,7 +7,7 @@ import subprocess
 import sys
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -188,7 +188,117 @@ class TestErrorPath:
 
 
 # ------------------------------------------------------------------
-# 5) Cockpit still works (regression)
+# 5) Pre-spend gates: capital_shield + safety_middleware
+# ------------------------------------------------------------------
+class TestPreSpendGates:
+    def test_gates_pass_by_default_mock_mode(self, tmp_path: Path) -> None:
+        """When modules are available and approve, campaign creation proceeds."""
+        client = _make_client(tmp_path, live=False)
+        result = client.create_campaign_safe(
+            payload={"name": "Gated Campaign", "budget_mxn": "50"},
+            idempotency_key="gate-pass-001",
+            correlation_id="corr-gate-pass",
+        )
+        assert result["ok"] is True
+        assert result["mode"] == "mock"
+
+    def test_capital_shield_blocks_campaign(self, tmp_path: Path) -> None:
+        """When capital_shield denies, campaign is blocked."""
+        client = _make_client(tmp_path, live=False)
+
+        mock_decision = MagicMock()
+        mock_decision.reason = "not_approved"
+        mock_decision.allocated = Decimal("0")
+
+        with patch(
+            "synapse.meta.safe_client._check_capital_shield",
+            return_value={
+                "gate": "capital_shield",
+                "allowed": False,
+                "allocated": "0",
+                "reason": "not_approved",
+                "correlation_id": "corr-cs-block",
+            },
+        ):
+            result = client.create_campaign_safe(
+                payload={"name": "Blocked Campaign", "budget_mxn": "200"},
+                idempotency_key="gate-block-001",
+                correlation_id="corr-cs-block",
+            )
+        assert result["ok"] is False
+        assert result["error_code"] == "pre_spend_gate_blocked"
+        assert "capital_shield" in result["blocked_by"]
+
+        events = _read_ledger_events(tmp_path)
+        blocked_events = [e for e in events if e["event_type"] == "meta.create_campaign.blocked"]
+        assert len(blocked_events) >= 1
+
+    def test_safety_middleware_blocks_campaign(self, tmp_path: Path) -> None:
+        """When safety_middleware denies, campaign is blocked."""
+        client = _make_client(tmp_path, live=False)
+
+        with patch(
+            "synapse.meta.safe_client._check_safety_middleware",
+            return_value={
+                "gate": "safety_middleware",
+                "allowed": False,
+                "reason": "KILLSWITCH_ACTIVE",
+                "correlation_id": "corr-sm-block",
+            },
+        ):
+            result = client.create_campaign_safe(
+                payload={"name": "SM Blocked", "budget_mxn": "50"},
+                idempotency_key="gate-block-002",
+                correlation_id="corr-sm-block",
+            )
+        assert result["ok"] is False
+        assert "safety_middleware" in result["blocked_by"]
+
+
+# ------------------------------------------------------------------
+# 6) Ledger critical=True in all writes
+# ------------------------------------------------------------------
+class TestLedgerCriticalFlag:
+    def test_create_campaign_ledger_has_critical_true(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+        client.create_campaign_safe(
+            payload={"name": "Critical Test"},
+            idempotency_key="crit-key-001",
+            correlation_id="corr-crit",
+        )
+        events = _read_ledger_events(tmp_path)
+        for event in events:
+            assert event.get("critical") is True, (
+                f"Ledger event {event['event_type']} missing critical=True"
+            )
+
+    def test_autopause_ledger_has_critical_true(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+        client.maybe_autopause(
+            spend_today_mxn=Decimal("85"),
+            cap_mxn=Decimal("100"),
+            campaign_id="camp-crit-ap",
+        )
+        events = _read_ledger_events(tmp_path)
+        for event in events:
+            assert event.get("critical") is True, (
+                f"Ledger event {event['event_type']} missing critical=True"
+            )
+
+    def test_error_path_ledger_has_critical_true(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=True)
+        client.create_campaign_safe(
+            payload={"name": "Will Fail"},
+            idempotency_key="crit-err-001",
+            correlation_id="corr-crit-err",
+        )
+        events = _read_ledger_events(tmp_path)
+        for event in events:
+            assert event.get("critical") is True
+
+
+# ------------------------------------------------------------------
+# 7) Cockpit still works (regression)
 # ------------------------------------------------------------------
 class TestCockpitRegression:
     def test_cockpit_health_json_parseable(self) -> None:

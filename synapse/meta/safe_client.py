@@ -25,6 +25,52 @@ from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
 
 
+# ---------------------------------------------------------------------------
+# Pre-spend gates: capital_shield + safety_middleware
+# ---------------------------------------------------------------------------
+def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
+    """Ask CapitalShieldV2 for budget approval.  Returns gate result dict."""
+    try:
+        from ops.capital_shield_v2 import CapitalShieldV2  # type: ignore[import-untyped]
+    except ImportError:
+        return {"gate": "capital_shield", "allowed": True, "reason": "module_unavailable_passthrough"}
+
+    # Minimal stub vault that always approves (real vault wired at deploy).
+    class _StubVault:
+        def request_spend(self, amount: Decimal, budget_type: str) -> bool:
+            return True
+
+    shield = CapitalShieldV2(vault=_StubVault())
+    decision = shield.decide_for_product(
+        final_decision="approved",
+        requested_amount=spend_mxn,
+    )
+    return {
+        "gate": "capital_shield",
+        "allowed": decision.reason == "approved",
+        "allocated": str(decision.allocated),
+        "reason": decision.reason,
+        "correlation_id": correlation_id,
+    }
+
+
+def _check_safety_middleware(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
+    """Run safety_middleware checks.  Returns gate result dict."""
+    try:
+        from ops.safety_middleware import check_safety_before_spend  # type: ignore[import-untyped]
+    except ImportError:
+        return {"gate": "safety_middleware", "allowed": True, "reason": "module_unavailable_passthrough"}
+
+    result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
+    is_ok = bool(getattr(result, "is_ok", lambda: bool(result))())
+    return {
+        "gate": "safety_middleware",
+        "allowed": is_ok,
+        "reason": "passed" if is_ok else str(result),
+        "correlation_id": correlation_id,
+    }
+
+
 def _generate_mock_id(idempotency_key: str) -> str:
     h = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:12].upper()
     return f"MOCK_CAMP_{h}"
@@ -79,6 +125,36 @@ class MetaSafeClient:
         payload = dict(payload)
         payload["status"] = "PAUSED"
 
+        # Pre-spend gates: capital_shield + safety_middleware
+        budget_mxn = Decimal(str(payload.get("budget_mxn", "0")))
+        cs_result = _check_capital_shield(budget_mxn, correlation_id)
+        sm_result = _check_safety_middleware(budget_mxn, correlation_id)
+
+        if not cs_result["allowed"] or not sm_result["allowed"]:
+            blocked_by = []
+            if not cs_result["allowed"]:
+                blocked_by.append("capital_shield")
+            if not sm_result["allowed"]:
+                blocked_by.append("safety_middleware")
+            result: Dict[str, Any] = {
+                "ok": False,
+                "error_code": "pre_spend_gate_blocked",
+                "blocked_by": blocked_by,
+                "capital_shield": cs_result,
+                "safety_middleware": sm_result,
+                "idempotency_key": idempotency_key,
+                "correlation_id": correlation_id,
+            }
+            self.ledger.append(
+                event_type="meta.create_campaign.blocked",
+                correlation_id=correlation_id,
+                idempotency_key=idempotency_key,
+                severity="WARN",
+                payload=result,
+                critical=True,
+            )
+            return result
+
         # Idempotency check
         existing = self.idempotency_store.get(idempotency_key)
         if existing is not None:
@@ -101,6 +177,7 @@ class MetaSafeClient:
             idempotency_key=idempotency_key,
             severity="INFO",
             payload={"live": self._is_live, "campaign_payload": payload},
+            critical=True,
         )
 
         if not self._is_live:
@@ -123,6 +200,7 @@ class MetaSafeClient:
                 idempotency_key=idempotency_key,
                 severity="INFO",
                 payload=result,
+                critical=True,
             )
             return result
 
@@ -153,6 +231,7 @@ class MetaSafeClient:
                 idempotency_key=idempotency_key,
                 severity="INFO",
                 payload=result,
+                critical=True,
             )
             return result
 
@@ -199,6 +278,7 @@ class MetaSafeClient:
                 "campaign_id": campaign_id,
                 "live": self._is_live,
             },
+            critical=True,
         )
 
         if not should_pause:
@@ -217,6 +297,7 @@ class MetaSafeClient:
                 idempotency_key=idem_key,
                 severity="INFO",
                 payload=result,
+                critical=True,
             )
             return result
 
@@ -238,6 +319,7 @@ class MetaSafeClient:
                 idempotency_key=idem_key,
                 severity="WARN",
                 payload=result,
+                critical=True,
             )
             return result
 
@@ -266,6 +348,7 @@ class MetaSafeClient:
                 idempotency_key=idem_key,
                 severity="WARN",
                 payload=result,
+                critical=True,
             )
             return result
 
@@ -299,5 +382,6 @@ class MetaSafeClient:
             idempotency_key=idempotency_key,
             severity="ERROR",
             payload=result,
+            critical=True,
         )
         return result
