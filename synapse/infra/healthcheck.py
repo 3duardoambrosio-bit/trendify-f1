@@ -6,11 +6,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--json", action="store_true")
-    args = ap.parse_args(argv)
 
+def run_checks() -> Dict[str, Any]:
+    """Run all health checks and return structured dict."""
     out: Dict[str, Any] = {"ok": True, "checks": {}}
     out["checks"]["cwd"] = str(Path(".").resolve())
 
@@ -30,6 +28,16 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as e:
         out["checks"]["doctor_import"] = False
         out["checks"]["doctor_error"] = str(e)
+
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv)
+
+    out = run_checks()
 
     if args.json:
         print(json.dumps(out, ensure_ascii=False))
