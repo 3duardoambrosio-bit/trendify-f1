@@ -26,7 +26,7 @@ Say $outJson
 $gitHead = (git rev-parse --short HEAD).Trim()
 $dirtyLines = @(git status --porcelain).Count
 
-# B) Pytest NUMERICO via JUnit XML (NO depende del summary)
+# B) Pytest NUMERICO via JUnit XML
 $pytestLog   = Join-Path $OutDir ("pytest_{0}.txt" -f $ts)
 $pytestJUnit = Join-Path $OutDir ("pytest_{0}.xml" -f $ts)
 
@@ -58,13 +58,12 @@ if (Test-Path $pytestJUnit) {
   } catch { $junitParsed = $false }
 }
 
-# C) Doctor
+# C) Doctor (DETERMINISTIC): capture -> write UTF8 -> parse from string
 $doctorLog = Join-Path $OutDir ("doctor_{0}.txt" -f $ts)
-& python -m synapse.infra.doctor | Tee-Object -FilePath $doctorLog | Out-Null
+$doctorLines = & python -m synapse.infra.doctor 2>&1
 $doctorExit = $LASTEXITCODE
-
-$doctorText = ""
-if (Test-Path $doctorLog) { $doctorText = Get-Content $doctorLog -Raw }
+$doctorText = ($doctorLines | Out-String)
+$doctorText | Set-Content -Path $doctorLog -Encoding UTF8
 
 $doctorOverall = "UNKNOWN"
 if ($doctorText -match '(?m)^\s*OVERALL:\s+([A-Z]+)') { $doctorOverall = $Matches[1] }
