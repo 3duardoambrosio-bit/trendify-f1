@@ -9,7 +9,6 @@ Set-StrictMode -Version Latest
 function Say([string]$s) { if (-not $Quiet) { Write-Host $s } }
 
 function CountLinesFromGitGrep([string[]]$args) {
-  # git grep devuelve exit 1 si no hay matches; NO queremos throw.
   $out = & git @args 2>$null
   return @($out).Count
 }
@@ -23,7 +22,7 @@ Say "=== SNAPSHOT OUT ==="
 Say $outTxt
 Say $outJson
 
-# A) Git state (en el momento de correr snapshot)
+# A) Git state
 $gitHead = (git rev-parse --short HEAD).Trim()
 $dirtyLines = @(git status --porcelain).Count
 
@@ -59,7 +58,7 @@ if (Test-Path $pytestJUnit) {
   } catch { $junitParsed = $false }
 }
 
-# C) Doctor (DETERMINISTA): python captura y parsea; PS solo recibe token
+# C) Doctor (determinista): python captura + parsea OVERALL; PS recibe token
 $doctorLog = Join-Path $OutDir ("doctor_{0}.txt" -f $ts)
 $env:SYNAPSE_SNAPSHOT_DOCTOR_LOG = $doctorLog
 
@@ -70,6 +69,15 @@ $doctorOverall = "UNKNOWN"
 if ($null -ne $doctorToken) {
   $s = ($doctorToken | Select-Object -First 1).ToString().Trim()
   if ($s -match '^[A-Z]+$') { $doctorOverall = $s }
+}
+
+# C2) Parse canonical_rows desde doctorLog (fallback)
+$canonicalRowsFromDoctor = -1
+if (Test-Path $doctorLog) {
+  $raw = Get-Content $doctorLog -Raw -Encoding UTF8
+  if ($raw -match '(?im)canonical_csv:\s+.*\((\d+)\s+row[s]?\)') {
+    $canonicalRowsFromDoctor = [int]$Matches[1]
+  }
 }
 
 # D) Canonical CSV auto-detect (best-effort)
@@ -84,6 +92,11 @@ if (Test-Path ".\data") {
 $canonicalRows = -1
 if ($null -ne $canonicalCsv -and (Test-Path $canonicalCsv)) {
   try { $canonicalRows = (Import-Csv $canonicalCsv | Measure-Object).Count } catch { $canonicalRows = -2 }
+}
+
+# Fallback final: si no encontramos CSV pero doctor sí sabe N rows, usa N
+if ($canonicalRows -lt 0 -and $canonicalRowsFromDoctor -ge 0) {
+  $canonicalRows = $canonicalRowsFromDoctor
 }
 
 $canonicalCsvText = "NOT_FOUND"
