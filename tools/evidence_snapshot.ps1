@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 function Say([string]$s) { if (-not $Quiet) { Write-Host $s } }
 
 function CountLinesFromGitGrep([string[]]$args) {
+  # git grep devuelve exit 1 si no hay matches; NO queremos throw.
   $out = & git @args 2>$null
   return @($out).Count
 }
@@ -22,7 +23,7 @@ Say "=== SNAPSHOT OUT ==="
 Say $outTxt
 Say $outJson
 
-# A) Git state
+# A) Git state (en el momento de correr snapshot)
 $gitHead = (git rev-parse --short HEAD).Trim()
 $dirtyLines = @(git status --porcelain).Count
 
@@ -58,26 +59,17 @@ if (Test-Path $pytestJUnit) {
   } catch { $junitParsed = $false }
 }
 
-# C) Doctor (LINE-BASED PARSE, deterministic)
+# C) Doctor (DETERMINISTA): python captura y parsea; PS solo recibe token
 $doctorLog = Join-Path $OutDir ("doctor_{0}.txt" -f $ts)
-$doctorLines = & python -m synapse.infra.doctor 2>&1
+$env:SYNAPSE_SNAPSHOT_DOCTOR_LOG = $doctorLog
+
+$doctorToken = & python -c "import os,subprocess,sys,re; log=os.environ.get('SYNAPSE_SNAPSHOT_DOCTOR_LOG','doctor.txt'); p=subprocess.run([sys.executable,'-m','synapse.infra.doctor'],capture_output=True,text=True,encoding='utf-8',errors='replace'); txt=(p.stdout or '')+(p.stderr or ''); open(log,'w',encoding='utf-8',newline='\n').write(txt); m=re.search(r'OVERALL:\s+([A-Z]+)',txt); print(m.group(1) if m else 'UNKNOWN'); sys.exit(p.returncode)"
 $doctorExit = $LASTEXITCODE
 
-# Guardar log UTF8 (siempre)
-($doctorLines | Out-String) | Set-Content -Path $doctorLog -Encoding UTF8
-
 $doctorOverall = "UNKNOWN"
-foreach ($ln in @($doctorLines)) {
-  $s = "$ln"
-  if ($s -match '^\s*OVERALL:\s+([A-Z]+)') {
-    $doctorOverall = $Matches[1]
-    break
-  }
-}
-# Fallback: intentar parsear del archivo si por alguna razón no vino en $doctorLines
-if ($doctorOverall -eq "UNKNOWN" -and (Test-Path $doctorLog)) {
-  $raw = Get-Content $doctorLog -Raw -Encoding UTF8
-  if ($raw -match '(?m)^\s*OVERALL:\s+([A-Z]+)') { $doctorOverall = $Matches[1] }
+if ($null -ne $doctorToken) {
+  $s = ($doctorToken | Select-Object -First 1).ToString().Trim()
+  if ($s -match '^[A-Z]+$') { $doctorOverall = $s }
 }
 
 # D) Canonical CSV auto-detect (best-effort)
