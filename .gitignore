@@ -158,3 +158,10 @@ artifacts/
 
 .claude/
 tmp_pytest_last.txt
+
+### CLAUDE_CODE_PROJECT_SKILLS ###
+# Keep .claude ignored except project skills (.claude/skills/**)
+!.claude/
+.claude/**
+!.claude/skills/
+!.claude/skills/**

@@ -1,13 +1,14 @@
-﻿# SYNAPSE / TrendifyHub — Claude Code Operating Manual (F1 / ACERO, NO HUMO)
+﻿# SYNAPSE / TrendifyHub  Claude Code Operating Manual (F1 / ACERO, NO HUMO)
 
 ## 0) Regla madre
-- NO improvises. NO dejes el repo sucio. NO declares “done” sin evidencia numérica.
+- NO improvises. NO dejes el repo sucio. NO declares done sin evidencia numérica.
 
 ## 1) Gates obligatorios (numéricos)
-Antes de commit/PR/merge, ejecuta:
+Antes de declarar GREEN / cerrar PR / merge, el repo DEBE estar limpio:
+- git status --porcelain  => 0 líneas
 
-- Snapshot:
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\evidence_snapshot.ps1
+Luego corre snapshot:
+- powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\evidence_snapshot.ps1
 
 Y valida en el ÚLTIMO `artifacts\evidence_snapshot_*.txt` que existan EXACTAMENTE estas líneas:
 - dirty_lines=0
@@ -18,24 +19,24 @@ Y valida en el ÚLTIMO `artifacts\evidence_snapshot_*.txt` que existan EXACTAMEN
 
 Si falta cualquiera: STOP y pide output completo.
 
-## 2) Workflow estándar
+## 2) Skill de proyecto (slash command)
+Este repo define `/f1-snapshot` en:
+- .claude/skills/f1-snapshot/SKILL.md
+
+Úsalo cuando quieras forzar el protocolo F1.
+
+## 3) Workflow estándar
 1) Crea branch
 2) Implementa cambios
-3) Corre snapshot y valida (5/5)
-4) Commit con mensaje claro
-5) Push + PR
-6) Espera checks en verde
-7) Merge (squash) + borrar branch
-8) Sync local main + snapshot final
-
-## 3) Comandos canónicos (Windows / PowerShell)
-- Snapshot:
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\evidence_snapshot.ps1
-
-- Repo limpio:
-  git status --porcelain | Measure-Object
+3) Commit (precommit gate debe pasar)
+4) Repo limpio (0 líneas)
+5) Snapshot + asserts 5/5
+6) Push + PR
+7) Checks en verde
+8) Merge (squash) + borrar branch
+9) Sync local main + snapshot final (5/5)
 
 ## 4) Estilo de trabajo
 - Cambios pequeños pero completos.
-- Siempre deja evidencia (snapshot) en artifacts (ignorados por git).
-- No “rollback por si acaso”: solo si algo falla y con output pegado.
+- Evidencia en artifacts/ (ignorados por git).
+- No rollback por si acaso: solo si algo falla y con output pegado.
