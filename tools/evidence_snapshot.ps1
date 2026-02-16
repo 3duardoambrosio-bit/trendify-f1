@@ -58,15 +58,27 @@ if (Test-Path $pytestJUnit) {
   } catch { $junitParsed = $false }
 }
 
-# C) Doctor (DETERMINISTIC): capture -> write UTF8 -> parse from string
+# C) Doctor (LINE-BASED PARSE, deterministic)
 $doctorLog = Join-Path $OutDir ("doctor_{0}.txt" -f $ts)
 $doctorLines = & python -m synapse.infra.doctor 2>&1
 $doctorExit = $LASTEXITCODE
-$doctorText = ($doctorLines | Out-String)
-$doctorText | Set-Content -Path $doctorLog -Encoding UTF8
+
+# Guardar log UTF8 (siempre)
+($doctorLines | Out-String) | Set-Content -Path $doctorLog -Encoding UTF8
 
 $doctorOverall = "UNKNOWN"
-if ($doctorText -match '(?m)^\s*OVERALL:\s+([A-Z]+)') { $doctorOverall = $Matches[1] }
+foreach ($ln in @($doctorLines)) {
+  $s = "$ln"
+  if ($s -match '^\s*OVERALL:\s+([A-Z]+)') {
+    $doctorOverall = $Matches[1]
+    break
+  }
+}
+# Fallback: intentar parsear del archivo si por alguna razón no vino en $doctorLines
+if ($doctorOverall -eq "UNKNOWN" -and (Test-Path $doctorLog)) {
+  $raw = Get-Content $doctorLog -Raw -Encoding UTF8
+  if ($raw -match '(?m)^\s*OVERALL:\s+([A-Z]+)') { $doctorOverall = $Matches[1] }
+}
 
 # D) Canonical CSV auto-detect (best-effort)
 $canonicalCsv = $null
