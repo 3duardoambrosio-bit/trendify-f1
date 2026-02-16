@@ -157,3 +157,4 @@ artifacts/
 !.githooks/pre-push
 
 .claude/
+tmp_pytest_last.txt
