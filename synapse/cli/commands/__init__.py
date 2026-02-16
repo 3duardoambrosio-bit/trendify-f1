@@ -10,6 +10,7 @@ __all__ = [
     "learning_cmd",
     "pulse_cmd",
     "snapshot_cmd",
+    "status_cmd",
     "triage_cmd",
     "debug_crash_cmd",
 ]

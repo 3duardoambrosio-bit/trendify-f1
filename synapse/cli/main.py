@@ -6,7 +6,7 @@ import argparse
 import os
 from typing import Sequence
 
-from synapse.cli.commands import doctor_cmd, learning_cmd, pulse_cmd, snapshot_cmd, triage_cmd, wave_cmd
+from synapse.cli.commands import doctor_cmd, learning_cmd, pulse_cmd, snapshot_cmd, status_cmd, triage_cmd, wave_cmd
 from synapse.infra.diagnostics import capture_exception, suggest_fix
 import logging
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     learning_cmd.register(sub)
     pulse_cmd.register(sub)
     snapshot_cmd.register(sub)
+    status_cmd.register(sub)
     triage_cmd.register(sub)
 
     if os.getenv("SYNAPSE_DEBUG_CLI") == "1":
