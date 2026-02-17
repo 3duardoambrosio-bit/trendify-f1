@@ -169,3 +169,7 @@ tmp_pytest_last.txt
 # Revenue Engineering: allowlist specific map
 !config/revenue_engineering/modules.json
 
+
+# Revenue Engineering allowlist
+!config/revenue_engineering/session_gaps.json
+

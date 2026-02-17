@@ -1,0 +1,116 @@
+{
+  "_meta": {
+    "description": "Maps each session to the v3 gaps that MUST be closed within it",
+    "usage": "ops_reality_gate.ps1 reads this to verify session acceptance",
+    "updated": "2026-02-17",
+    "principle": "No session is DONE until all mapped gaps have evidence (tests + code)"
+  },
+  "sessions": {
+    "S10": {
+      "title": "Pipeline E2E + Alertas",
+      "original_gaps": ["GAP-05"],
+      "v3_injections": ["B-04_warm_up_protocol", "B-05_advantage_plus_2025", "account_health_in_pipeline"],
+      "must_have_before_live": ["B-04_warm_up_protocol", "account_health_in_pipeline"],
+      "estimated_additional_tests": 8
+    },
+    "S11": {
+      "title": "Shopify Write Operations",
+      "original_gaps": ["GAP-02", "GAP-04"],
+      "v3_injections": ["A-02_oxxo_limit_validation", "E-02_checkout_mx_fields", "C-04_product_quality_gate", "cod_risk_scoring"],
+      "must_have_before_live": ["A-02_oxxo_limit_validation", "E-02_checkout_mx_fields"],
+      "estimated_additional_tests": 10
+    },
+    "S12": {
+      "title": "Monitor + Auto-Rules",
+      "original_gaps": ["GAP-03", "GAP-06"],
+      "v3_injections": [
+        "optimization_event_ladder",
+        "true_breakeven_roas_per_product",
+        "B-01_account_health_monitor",
+        "B-03_creative_fatigue_detector",
+        "D-04_spend_pacing_alert",
+        "A-05_msi_fee_adjustment"
+      ],
+      "must_have_before_live": [
+        "optimization_event_ladder",
+        "true_breakeven_roas_per_product",
+        "B-01_account_health_monitor"
+      ],
+      "estimated_additional_tests": 25
+    },
+    "S13": {
+      "title": "Financial Hardening",
+      "original_gaps": ["GAP-10", "GAP-12"],
+      "v3_injections": ["capital_shield_available_cash", "fee_schedule_per_payment_method"],
+      "must_have_before_live": ["capital_shield_available_cash"],
+      "estimated_additional_tests": 6
+    },
+    "S14": {
+      "title": "Scheduler + Resilience",
+      "original_gaps": ["GAP-11"],
+      "v3_injections": [],
+      "must_have_before_live": [],
+      "estimated_additional_tests": 2
+    },
+    "S15a": {
+      "title": "Dropi-Shopify Bridge + Inventory Sync",
+      "original_gaps": ["GAP-02"],
+      "v3_injections": ["C-03_shipping_time_tracker", "G-02_multi_order_consolidation", "auto_pause_zero_stock"],
+      "must_have_before_live": ["auto_pause_zero_stock"],
+      "estimated_additional_tests": 8
+    },
+    "S15b": {
+      "title": "Refund Handler + CFDI + COD",
+      "original_gaps": ["GAP-01", "GAP-09", "GAP-14", "GAP-15"],
+      "v3_injections": [
+        "A-01_oxxo_lifecycle_manager",
+        "A-03_oxxo_refund_alternative",
+        "A-04_cod_blacklist",
+        "C-02_dropi_guarantee_flow"
+      ],
+      "must_have_before_live": ["A-01_oxxo_lifecycle_manager", "A-04_cod_blacklist"],
+      "estimated_additional_tests": 15
+    },
+    "S16": {
+      "title": "Reporting + Analytics",
+      "original_gaps": [],
+      "v3_injections": [
+        "cashflow_timeline_per_payment_method",
+        "A-06_payment_method_distribution",
+        "C-01_dropi_payment_timing",
+        "D-02_cod_rejection_in_pnl",
+        "F-02_sat_monthly_report"
+      ],
+      "must_have_before_live": ["cashflow_timeline_per_payment_method", "D-02_cod_rejection_in_pnl"],
+      "estimated_additional_tests": 12
+    },
+    "S17": {
+      "title": "Autonomy + Self-Healing",
+      "original_gaps": [],
+      "v3_injections": [],
+      "must_have_before_live": [],
+      "estimated_additional_tests": 3
+    },
+    "S18": {
+      "title": "WhatsApp + CAPI + Cart Recovery",
+      "original_gaps": ["GAP-07", "GAP-08"],
+      "v3_injections": ["G-01_order_status_auto_reply", "oxxo_reminder_day3", "cod_pre_confirmation"],
+      "must_have_before_live": ["G-01_order_status_auto_reply"],
+      "estimated_additional_tests": 10
+    },
+    "PRE_LAUNCH": {
+      "title": "Pre-Launch Compliance Checklist",
+      "original_gaps": [],
+      "v3_injections": ["E-01_aviso_privacidad_mx", "F-01_profeco_complete", "F-03_nom_verification_flag", "creative_review_no_prohibited_claims", "warm_up_executed_10_days"],
+      "must_have_before_live": ["E-01_aviso_privacidad_mx", "F-01_profeco_complete", "warm_up_executed_10_days"],
+      "estimated_additional_tests": 0
+    }
+  },
+  "totals": {
+    "original_gaps_total": 15,
+    "v3_injections_total": 37,
+    "must_have_before_live_total": 17,
+    "estimated_additional_tests_total": 99,
+    "new_test_baseline_target": 735
+  }
+}
