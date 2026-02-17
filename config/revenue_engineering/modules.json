@@ -1,0 +1,25 @@
+{
+  "version":"revenue_engineering_v1",
+  "rules": {
+    "blocked_means": "NO IMPLEMENTAR (policy/engaño/evasión)",
+    "phase2_means": "requiere infraestructura/guardrails/datos reales",
+    "inject_means": "puede inyectarse en S10-S18 ya"
+  },
+  "modules": [
+    {"id":"M01","name":"Synthetic UGC Clone Factory","status":"BLOCKED","inject_session":null,"reason":"Testimonios falsos/engaño (alto riesgo policy)."},
+    {"id":"M02","name":"Pain-to-Power (1-star review mining)","status":"PHASE2","inject_session":"S10/S12","reason":"Útil si usas fuentes permitidas (no scraping prohibido)."},
+    {"id":"M03","name":"Trend Jacking Auto (meme->product->ads)","status":"PHASE2","inject_session":"S10","reason":"Riesgo IP + automatizar lanzamiento es bomba."},
+    {"id":"M04","name":"Voice Note Recovery (WhatsApp audio)","status":"INJECT","inject_session":"S18","reason":"Sube recovery si hay disclosure + consentimiento."},
+    {"id":"M05","name":"Behavioral Dynamic Pricing (geo/device)","status":"BLOCKED","inject_session":null,"reason":"Discriminación/engaño; riesgo legal/brand/policy."},
+    {"id":"M06","name":"Competitor Sniper (stock monitor -> budget up)","status":"PHASE2","inject_session":"S12","reason":"Datos externos frágiles/ToS; usar fuentes permitidas."},
+    {"id":"M07","name":"COD Risk Scoring Gate","status":"INJECT","inject_session":"S11+S15b","reason":"Mitiga pérdidas COD; implementar elegibilidad clara (no CSS hack)."},
+    {"id":"M08","name":"Programmatic SEO (city pages at scale)","status":"PHASE2","inject_session":"POST_S18","reason":"Riesgo doorway/thin content si es masivo sin valor."},
+    {"id":"M09","name":"PID Budget Controller","status":"INJECT","inject_session":"PR-B","reason":"Ingeniería de control real aplicada a presupuesto."},
+    {"id":"M10","name":"FX Guard / Hedging","status":"INJECT","inject_session":"PR-B","reason":"Protección real contra FX drift."},
+    {"id":"M11","name":"Merchant Routing (multi accounts rotation)","status":"BLOCKED","inject_session":null,"reason":"Evasión/anti-fraude; riesgo extremo con PSPs."},
+    {"id":"M12","name":"Vision AI Light (velocity index)","status":"PHASE2","inject_session":"PR-A/S10","reason":"Buen edge si hay data estable."},
+    {"id":"M13","name":"LTV Prediction (RFM)","status":"PHASE2","inject_session":"POST_S18","reason":"Necesita histórico real y limpieza de datos."},
+    {"id":"M14","name":"The Nudge (exit intent incentives)","status":"PHASE2","inject_session":"POST_S18","reason":"CRO OK si transparente; dark patterns NO."}
+  ]
+}
+
