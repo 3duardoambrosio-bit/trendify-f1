@@ -42,6 +42,10 @@ packages = ["buyer", "infra", "shared"]
 # ===========================
 # MYPY F1 GATE (AUTO-GENERATED)
 # ===========================
+
+# ===========================
+# MYPY F1 GATE (AUTO-GENERATED)
+# ===========================
 [tool.mypy]
 show_error_codes = true
 warn_unused_configs = true
@@ -58,6 +62,7 @@ disable_error_code = [
 exclude = [
   '(^|/|\\)tests(/|\\)',
   '(^|/|\\)infra(/|\\)tests(/|\\)',
+  '(^|/|\\)scripts(/|\\)',  # avoid duplicate sitecustomize.py mapping
 ]
 
 [[tool.mypy.overrides]]
