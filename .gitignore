@@ -30,7 +30,7 @@ dist/
 *.egg-info/
 *.egg
 wheels/
-# === Runtime / data NO determinística ===
+# === Runtime / data NO determinÃ­stica ===
 data/ledger/
 data/backups/
 data/evidence/
@@ -111,12 +111,12 @@ data/bitacora/bitacora.jsonl
 # Local runtime outputs (NO versionar)
 # CSVs reales (los tuyos), dejamos demos como plantillas
 data/catalog/candidates_real*.csv
-# CSVs reales (ruido); demos s├»┬┐┬¢ pueden vivir
+# CSVs reales (ruido); demos sâ”œÂ»â”¬â”â”¬Â¢ pueden vivir
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
 **/__pycache__/
 # Env & secrets
-# Data sensible / no determin├â┬¡stica
+# Data sensible / no determinâ”œÃ¢â”¬Â¡stica
 data/
 # OS
 # === LOCAL / SECRETS ===
@@ -173,3 +173,8 @@ tmp_pytest_last.txt
 # Revenue Engineering allowlist
 !config/revenue_engineering/session_gaps.json
 
+out/
+out/forecast/
+out/forecast/*.json
+out/forecast/*.csv
+out/forecast/*.md
