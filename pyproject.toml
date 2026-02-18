@@ -38,3 +38,67 @@ packages = ["buyer", "infra", "shared"]
 
 [tool.setuptools.package-data]
 # Por ahora nada especial
+
+# ===========================
+# MYPY F1 GATE (AUTO-GENERATED)
+# ===========================
+[tool.mypy]
+show_error_codes = true
+warn_unused_configs = true
+warn_unused_ignores = false
+ignore_missing_imports = true
+
+disable_error_code = [
+  "no-untyped-def",
+  "no-untyped-call",
+  "type-arg",
+  "var-annotated",
+]
+
+exclude = [
+  '(^|/|\\)tests(/|\\)',
+  '(^|/|\\)infra(/|\\)tests(/|\\)',
+]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "synapse.marketing_os.*",
+  "synapse.legacy.*",
+  "synapse.pulse.*",
+  "synapse.reporting.*",
+  "synapse.discovery.*",
+  "synapse.cli.*",
+  "synapse.integrations.*",
+  "synapse.infra.*",
+  "synapse.learning.*",
+  "ops.*",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "synapse.infra.meta_publish_ledger",
+  "synapse.marketing_os.exporters.meta_bundle",
+  "synapse.meta.meta_control_tower_snapshot",
+  "synapse.meta.meta_payloads",
+  "synapse.meta_api_day_meta",
+  "synapse.meta_auth_check",
+  "synapse.meta_autopilot",
+  "synapse.meta_control_tower_snapshot",
+  "synapse.meta_history_index",
+  "synapse.meta_policy",
+  "synapse.meta_publish_execute",
+  "synapse.meta_publish_plan",
+  "synapse.meta_publish_preflight",
+  "synapse.meta_publish_validate",
+  "synapse.meta_run_report",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["synapse.safety.integrations.vault_gate"]
+disable_error_code = ["arg-type"]
