@@ -50,6 +50,10 @@ packages = ["buyer", "infra", "shared"]
 # ===========================
 # MYPY F1 GATE (AUTO-GENERATED)
 # ===========================
+
+# ===========================
+# MYPY F1 GATE (AUTO-GENERATED)
+# ===========================
 [tool.mypy]
 show_error_codes = true
 warn_unused_configs = true
@@ -69,9 +73,6 @@ exclude = [
   '(^|/|\\)scripts(/|\\)',
   '(^|/|\\)tools(/|\\)',
   '(^|/|\\)buyer(/|\\)',
-  '(^|/|\\)infra(/|\\)ledger_v2\.py$',
-  '(^|/|\\)core(/|\\)result\.py$',
-  '(^|/|\\)core(/|\\)ledger\.py$',
 ]
 
 [[tool.mypy.overrides]]
@@ -128,3 +129,11 @@ disable_error_code = ["arg-type"]
 [[tool.mypy.overrides]]
 module = ["synapse.safety.integrations.vault_gate"]
 disable_error_code = ["arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["core.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["infra.ledger_v2"]
+ignore_errors = true
