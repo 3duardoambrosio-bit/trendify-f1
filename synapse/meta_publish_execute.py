@@ -368,7 +368,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if _safe_str(args.daily_budget, ""):
         try:
             daily_budget_int = int(_safe_str(args.daily_budget, ""))
-        except Exception:
+        except (ValueError, TypeError):
             raise ValueError("--daily-budget must be an integer (minor units)")
 
     rt = RuntimeInputs(

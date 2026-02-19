@@ -83,7 +83,7 @@ def parse_utm_content(utm: str | None) -> Dict[str, Any]:
         elif head in ("V", "v"):
             try:
                 out["version"] = int(tail)
-            except Exception:
+            except (ValueError, TypeError):
                 out["version"] = tail
 
     return out if out else {}

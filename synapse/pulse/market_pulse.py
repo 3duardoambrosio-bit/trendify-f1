@@ -179,7 +179,7 @@ def validate_signal(raw: Dict[str, Any]) -> Tuple[Optional[PulseSignal], List[st
 
     try:
         metric_value_f = float(metric_value)
-    except Exception:
+    except (ValueError, TypeError):
         metric_value_f = 0.0
         errs.append("metric_value debe ser numérico")
 

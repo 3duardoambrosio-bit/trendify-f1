@@ -50,7 +50,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         for ln in sample:
             try:
                 ev = json.loads(ln)
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 out_rows.append({"_error": "bad_json"})
                 continue
             row: Dict[str, Any] = {}

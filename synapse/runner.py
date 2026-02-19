@@ -62,7 +62,7 @@ class NdjsonLedger:
                 continue
             try:
                 obj = json.loads(ln)
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 continue
             if isinstance(obj, dict):
                 out.append(obj)

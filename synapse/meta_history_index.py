@@ -14,7 +14,7 @@ def _read_json(p: Path) -> Dict[str, Any]:
         return {}
     try:
         obj = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
     return obj if isinstance(obj, dict) else {}
 

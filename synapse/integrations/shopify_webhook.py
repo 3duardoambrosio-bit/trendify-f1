@@ -69,7 +69,7 @@ def process_shopify_webhook(
     if body:
         try:
             payload = json.loads(body.decode("utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             payload = {"_parse_error": "invalid_json"}
 
     ev = ShopifyWebhookEvent(
