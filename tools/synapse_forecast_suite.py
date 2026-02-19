@@ -1,6 +1,11 @@
 ﻿import argparse, json, subprocess, sys
 from pathlib import Path
 
+# Ensure repo root is on sys.path when running as tools/*.py
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 def run(cmd):
     p = subprocess.run(cmd, capture_output=True, text=True)
     out = (p.stdout or "") + (p.stderr or "")
@@ -47,7 +52,7 @@ def main():
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
     plans = []
     for lab in labels:
-        rc3, o3 = run([sys.executable, str(plan_py), "--injson", str(out_json), "--label", lab, "--months", str(args.months)])
+        rc3, o3 = run([sys.executable, str(plan_py), "--injson", str(out_json), "--label", lab, "--months", str(args.months), "--quiet"])
         plan_ok = must_hit(o3, "PLAN_OK=1")
         first_profit = 0
         first_cum0 = 0
@@ -64,7 +69,6 @@ def main():
             "first_cum_net_ge_0_month": first_cum0,
         })
 
-    # Numeric acceptance for plans
     gates["plans_count_ge_1"] = int(len(plans) >= 1)
     gates["plans_all_exit_0"] = int(all(p["exit_0"] == 1 for p in plans))
     gates["plans_all_ok"] = int(all(p["plan_ok"] == 1 for p in plans))
@@ -104,5 +108,21 @@ def main():
     print(f"RULE_suite_report_written={int(out_suite.exists())}")
     print(f"OUT_SUITE_JSON={out_suite}")
 
+    if suite_ok != 1:
+        bad = [(k, v) for k, v in gates.items() if v != 1]
+        for k, v in sorted(bad):
+            print(f"BAD_GATE {k}={v}")
+
+        # Show what labels report actually contains
+        try:
+            from synapse.forecast.model import load_report
+            if out_json.exists():
+                rep = load_report(out_json)
+                print("LABELS_AVAILABLE=" + ",".join(rep.labels()))
+        except Exception as e:
+            print(f"LABELS_AVAILABLE_ERROR={type(e).__name__}")
+
+    return 0 if suite_ok == 1 else 2
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
