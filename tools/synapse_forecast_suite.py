@@ -47,7 +47,7 @@ def main():
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
     plans = []
     for lab in labels:
-        rc3, o3 = run([sys.executable, str(plan_py), "--injson", str(out_json), "--label", lab, "--months", str(args.months)])
+        rc3, o3 = run([sys.executable, str(plan_py), "--injson", str(out_json), "--label", lab, "--months", str(args.months), "--quiet"])
         plan_ok = must_hit(o3, "PLAN_OK=1")
         first_profit = 0
         first_cum0 = 0
@@ -104,5 +104,7 @@ def main():
     print(f"RULE_suite_report_written={int(out_suite.exists())}")
     print(f"OUT_SUITE_JSON={out_suite}")
 
+    return 0 if suite_ok == 1 else 2
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
