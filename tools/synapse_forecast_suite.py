@@ -1,6 +1,11 @@
 ﻿import argparse, json, subprocess, sys
 from pathlib import Path
 
+# Ensure repo root is on sys.path when running as tools/*.py
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 def run(cmd):
     p = subprocess.run(cmd, capture_output=True, text=True)
     out = (p.stdout or "") + (p.stderr or "")
@@ -103,12 +108,12 @@ def main():
     print(f"RULE_suite_report_written={int(out_suite.exists())}")
     print(f"OUT_SUITE_JSON={out_suite}")
 
-    # Debug visibility when failing
     if suite_ok != 1:
         bad = [(k, v) for k, v in gates.items() if v != 1]
         for k, v in sorted(bad):
             print(f"BAD_GATE {k}={v}")
-        # Try to show labels available
+
+        # Show what labels report actually contains
         try:
             from synapse.forecast.model import load_report
             if out_json.exists():

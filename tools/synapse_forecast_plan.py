@@ -4,6 +4,11 @@ import argparse
 import sys
 from pathlib import Path
 
+# Ensure repo root is on sys.path when running as tools/*.py
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from synapse.forecast.model import (
     load_report,
     extend_plateau,
@@ -13,7 +18,7 @@ from synapse.forecast.model import (
 
 
 def _die(code: int, msg: str) -> int:
-    print(f"PLAN_OK=0")
+    print("PLAN_OK=0")
     print(f"ERROR={msg}")
     return code
 
@@ -47,7 +52,6 @@ def main() -> int:
     fp = first_profitable_month(ext)
     fc = first_cum_net_ge_0_month(ext)
 
-    # Minimal stable API for suite parsing
     print("=== FORECAST PLAN (v13.2) ===")
     print(f"injson={injson.as_posix()}")
     print(f"label={args.label}")
@@ -56,17 +60,16 @@ def main() -> int:
     print(f"first_profitable_month={fp}")
     print(f"first_cum_net_ge_0_month={fc}")
 
-    # Optional month dump (human inspection)
     if not args.quiet:
         print("--- months ---")
         for r in ext:
-            # Keep it grep-friendly and stable
-            print(f"m={r.m} net_mxn={r.net_mxn:.2f} cum_mxn={r.cum_mxn:.2f} roas={r.roas:.4f} collect={r.collect:.4f} unit={r.unit:.2f} thr={r.thr:.2f}")
+            print(
+                f"m={r.m} net_mxn={r.net_mxn:.2f} cum_mxn={r.cum_mxn:.2f} "
+                f"roas={r.roas:.4f} collect={r.collect:.4f} unit={r.unit:.2f} thr={r.thr:.2f}"
+            )
 
-    # Gate: plan is structurally valid if rows match months and indexes are monotonic
     ok = int(len(ext) == args.months and ext[0].m == 1 and ext[-1].m == args.months)
     print(f"PLAN_OK={ok}")
-
     return 0 if ok == 1 else 2
 
 
