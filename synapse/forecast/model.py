@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 import json
 
 
@@ -11,8 +11,10 @@ class MonthRow:
     """
     Canonical monthly row.
 
-    Fields map 1:1 with v13.2 report JSON 'path' rows when present.
-    Unknown keys are ignored by parse_month_row.
+    Goal: be resilient to upstream JSON schema drift.
+    We normalize a "month index" + the economics fields we care about.
+
+    Any missing numeric fields default safely.
     """
     m: int
     ads_usd: float = 0.0
@@ -73,22 +75,32 @@ def _as_float(v: Any, key: str, default: float = 0.0) -> float:
         raise ValueError(f"BAD_FLOAT key={key} value={v!r}") from e
 
 
+def _pick(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
+    for k in keys:
+        if k in d and d.get(k) is not None:
+            return d.get(k)
+    return default
+
+
 def parse_month_row(d: Dict[str, Any]) -> MonthRow:
-    if "m" not in d:
-        raise ValueError("MISSING_KEY: m")
+    # Month key can drift: m | month | t
+    m_raw = _pick(d, ["m", "month", "t"], None)
+    if m_raw is None:
+        raise ValueError("MISSING_MONTH_KEY: expected one of [m, month, t]")
+
     return MonthRow(
-        m=_as_int(d.get("m"), "m"),
-        ads_usd=_as_float(d.get("ads_usd"), "ads_usd", 0.0),
-        roas=_as_float(d.get("roas"), "roas", 0.0),
-        ltv=_as_float(d.get("ltv"), "ltv", 1.0),
-        eff=_as_float(d.get("eff"), "eff", 0.0),
-        collect=_as_float(d.get("collect"), "collect", 1.0),
-        unit=_as_float(d.get("unit"), "unit", 0.0),
-        thr=_as_float(d.get("thr"), "thr", 0.0),
-        net_mxn=_as_float(d.get("net_mxn"), "net_mxn", 0.0),
-        cum_mxn=_as_float(d.get("cum_mxn"), "cum_mxn", 0.0),
-        orders=_as_int(d.get("orders", 0), "orders"),
-        rev_mxn=_as_float(d.get("rev_mxn"), "rev_mxn", 0.0),
+        m=_as_int(m_raw, "m"),
+        ads_usd=_as_float(_pick(d, ["ads_usd", "ads", "spend_usd", "spend", "ad_spend_usd"], 0.0), "ads_usd", 0.0),
+        roas=_as_float(_pick(d, ["roas", "paid_roas"], 0.0), "roas", 0.0),
+        ltv=_as_float(_pick(d, ["ltv", "ltv_mxn", "ltv_usd"], 1.0), "ltv", 1.0),
+        eff=_as_float(_pick(d, ["eff", "efficiency"], 0.0), "eff", 0.0),
+        collect=_as_float(_pick(d, ["collect", "collect_rate", "collected_rate"], 1.0), "collect", 1.0),
+        unit=_as_float(_pick(d, ["unit", "unit_mxn", "unit_contribution_mxn"], 0.0), "unit", 0.0),
+        thr=_as_float(_pick(d, ["thr", "threshold", "unit_threshold_mxn"], 0.0), "thr", 0.0),
+        net_mxn=_as_float(_pick(d, ["net_mxn", "net", "net_profit_mxn", "profit_mxn"], 0.0), "net_mxn", 0.0),
+        cum_mxn=_as_float(_pick(d, ["cum_mxn", "cum", "cum_net_mxn", "cum_profit_mxn"], 0.0), "cum_mxn", 0.0),
+        orders=_as_int(_pick(d, ["orders", "order_count"], 0), "orders"),
+        rev_mxn=_as_float(_pick(d, ["rev_mxn", "revenue_mxn", "rev"], 0.0), "rev_mxn", 0.0),
     )
 
 
@@ -158,14 +170,100 @@ def sum_range(rows: List[MonthRow], a: int, b: int) -> Dict[str, float]:
     }
 
 
+def _looks_like_scenario(d: Dict[str, Any]) -> bool:
+    if not isinstance(d, dict):
+        return False
+    has_label = any(k in d for k in ["label", "name", "scenario", "id"])
+    has_path = any(k in d for k in ["path", "months", "rows", "timeline"])
+    return bool(has_label and has_path)
+
+
+def _extract_path_list(s: Dict[str, Any]) -> Optional[List[Any]]:
+    # common direct keys
+    for k in ["path", "months", "rows", "timeline"]:
+        v = s.get(k)
+        if isinstance(v, list):
+            return v
+    # nested "data" / "report" fallback
+    for nest in ["data", "report", "payload", "result"]:
+        v = s.get(nest)
+        if isinstance(v, dict):
+            for k in ["path", "months", "rows", "timeline"]:
+                vv = v.get(k)
+                if isinstance(vv, list):
+                    return vv
+    return None
+
+
+def _extract_label(s: Dict[str, Any]) -> str:
+    return str(_pick(s, ["label", "name", "scenario", "id"], "")).strip()
+
+
+def _find_scenarios_anywhere(payload: Any) -> List[Dict[str, Any]]:
+    """
+    Heuristic: find the best list of scenario dicts inside an arbitrary JSON payload.
+    """
+    candidates: List[List[Dict[str, Any]]] = []
+
+    def walk(x: Any):
+        if isinstance(x, dict):
+            # direct "scenarios" key is the strongest signal
+            if isinstance(x.get("scenarios"), list) and all(isinstance(it, dict) for it in x["scenarios"]):
+                candidates.append(x["scenarios"])
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            if x and all(isinstance(it, dict) for it in x) and any(_looks_like_scenario(it) for it in x):
+                candidates.append(x)
+            for it in x:
+                walk(it)
+
+    walk(payload)
+
+    if not candidates:
+        return []
+
+    def score(lst: List[Dict[str, Any]]) -> int:
+        sc = 0
+        # more scenarios = better
+        sc += min(len(lst), 50)
+        # label/path signals
+        sc += sum(5 for it in lst if any(k in it for k in ["label", "name", "scenario", "id"]))
+        sc += sum(5 for it in lst if _extract_path_list(it) is not None)
+        # month key signal
+        for it in lst:
+            pl = _extract_path_list(it)
+            if isinstance(pl, list) and pl:
+                r0 = pl[0]
+                if isinstance(r0, dict) and any(k in r0 for k in ["m", "month", "t"]):
+                    sc += 10
+        return sc
+
+    best = sorted(candidates, key=score, reverse=True)[0]
+    return best
+
+
 def load_report(path: Path) -> ForecastReport:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    scenarios = []
-    for s in payload.get("scenarios", []):
-        label = str(s.get("label", "")).strip()
-        rows_raw = s.get("path", [])
+
+    scen_list = []
+    if isinstance(payload, dict) and isinstance(payload.get("scenarios"), list):
+        scen_list = payload.get("scenarios") or []
+    else:
+        scen_list = _find_scenarios_anywhere(payload)
+
+    scenarios: List[ForecastScenario] = []
+    for s in scen_list:
+        if not isinstance(s, dict):
+            continue
+        label = _extract_label(s)
+        rows_raw = _extract_path_list(s) or []
         if not label:
             continue
-        rows = [parse_month_row(r) for r in rows_raw]
+        rows: List[MonthRow] = []
+        for r in rows_raw:
+            if isinstance(r, dict):
+                rows.append(parse_month_row(r))
         scenarios.append(ForecastScenario(label=label, path=rows))
+
     return ForecastReport(scenarios=scenarios)

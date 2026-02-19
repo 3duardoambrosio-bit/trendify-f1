@@ -1,8 +1,12 @@
-﻿from synapse.forecast.model import (
+﻿from pathlib import Path
+import json
+
+from synapse.forecast.model import (
     MonthRow,
     extend_plateau,
     first_profitable_month,
     first_cum_net_ge_0_month,
+    load_report,
 )
 
 def test_roas_eff_collected_is_deterministic():
@@ -31,3 +35,30 @@ def test_first_profit_and_cum_break_even():
     ]
     assert first_profitable_month(rows) == 3
     assert first_cum_net_ge_0_month(rows) == 4
+
+def test_load_report_handles_nested_schema_and_alt_keys(tmp_path: Path):
+    # Simulates schema drift: scenarios nested + month key is "month", net/cum keys are "net"/"cum"
+    payload = {
+        "meta": {"v": "13.2"},
+        "report": {
+            "scenarios": [
+                {
+                    "name": "FINISHED_BASE",
+                    "months": [
+                        {"month": 1, "net": -10.0, "cum": -10.0},
+                        {"month": 2, "net": 5.0, "cum": -5.0},
+                    ],
+                }
+            ]
+        },
+    }
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    rep = load_report(p)
+    sc = rep.get("FINISHED_BASE")
+    assert len(sc.path) == 2
+    assert sc.path[0].m == 1
+    assert sc.path[1].m == 2
+    assert sc.path[0].net_mxn == -10.0
+    assert sc.path[1].cum_mxn == -5.0
