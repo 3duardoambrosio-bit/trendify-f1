@@ -21,7 +21,6 @@ def test_extend_plateau_updates_m_and_cum():
     ext = extend_plateau(rows, 5)
     assert len(ext) == 5
     assert [x.m for x in ext] == [1,2,3,4,5]
-    # plateau repeats last net_mxn=5.0, cum starts at -5.0
     assert ext[2].cum_mxn == 0.0
     assert ext[3].cum_mxn == 5.0
     assert ext[4].cum_mxn == 10.0
@@ -37,7 +36,6 @@ def test_first_profit_and_cum_break_even():
     assert first_cum_net_ge_0_month(rows) == 4
 
 def test_load_report_handles_nested_schema_and_alt_keys(tmp_path: Path):
-    # Simulates schema drift: scenarios nested + month key is "month", net/cum keys are "net"/"cum"
     payload = {
         "meta": {"v": "13.2"},
         "report": {
@@ -62,3 +60,22 @@ def test_load_report_handles_nested_schema_and_alt_keys(tmp_path: Path):
     assert sc.path[1].m == 2
     assert sc.path[0].net_mxn == -10.0
     assert sc.path[1].cum_mxn == -5.0
+
+def test_load_report_handles_scenario_map_paths(tmp_path: Path):
+    payload = {
+        "paths": {
+            "FINISHED_BASE": [
+                {"m": 1, "net_mxn": -10.0, "cum_mxn": -10.0},
+                {"m": 2, "net_mxn": 5.0, "cum_mxn": -5.0},
+            ],
+            "FINISHED_AGGRESSIVE": [
+                {"m": 1, "net_mxn": -20.0, "cum_mxn": -20.0},
+            ],
+        }
+    }
+    p = tmp_path / "m.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+    rep = load_report(p)
+    assert "FINISHED_BASE" in rep.labels()
+    assert "FINISHED_AGGRESSIVE" in rep.labels()
+    assert rep.get("FINISHED_BASE").path[1].m == 2

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import json
 
 
@@ -31,7 +31,6 @@ class MonthRow:
 
     @property
     def roas_eff_collected(self) -> float:
-        # paid_roas * collected_rate (realizable)
         return float(self.roas) * float(self.collect)
 
     @property
@@ -82,6 +81,14 @@ def _pick(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
     return default
 
 
+def _looks_like_month_row_dict(x: Any) -> bool:
+    return isinstance(x, dict) and any(k in x for k in ["m", "month", "t"])
+
+
+def _looks_like_path_list(x: Any) -> bool:
+    return isinstance(x, list) and len(x) >= 1 and _looks_like_month_row_dict(x[0])
+
+
 def parse_month_row(d: Dict[str, Any]) -> MonthRow:
     # Month key can drift: m | month | t
     m_raw = _pick(d, ["m", "month", "t"], None)
@@ -105,10 +112,6 @@ def parse_month_row(d: Dict[str, Any]) -> MonthRow:
 
 
 def extend_plateau(rows: List[MonthRow], months: int) -> List[MonthRow]:
-    """
-    Extend a scenario path to N months by repeating the last month economics (plateau),
-    updating m and cum_mxn deterministically.
-    """
     if months < 1:
         raise ValueError("MONTHS_LT_1")
     if not rows:
@@ -170,26 +173,38 @@ def sum_range(rows: List[MonthRow], a: int, b: int) -> Dict[str, float]:
     }
 
 
-def _looks_like_scenario(d: Dict[str, Any]) -> bool:
-    if not isinstance(d, dict):
-        return False
+def _looks_like_scenario_dict(d: Dict[str, Any]) -> bool:
     has_label = any(k in d for k in ["label", "name", "scenario", "id"])
     has_path = any(k in d for k in ["path", "months", "rows", "timeline"])
     return bool(has_label and has_path)
 
 
+def _extract_path_list_from_value(v: Any) -> Optional[List[Any]]:
+    # direct list
+    if isinstance(v, list):
+        return v
+    # dict wrapper containing a list
+    if isinstance(v, dict):
+        for k in ["path", "months", "rows", "timeline"]:
+            vv = v.get(k)
+            if isinstance(vv, list):
+                return vv
+    return None
+
+
 def _extract_path_list(s: Dict[str, Any]) -> Optional[List[Any]]:
-    # common direct keys
+    # direct keys
     for k in ["path", "months", "rows", "timeline"]:
         v = s.get(k)
-        if isinstance(v, list):
-            return v
-    # nested "data" / "report" fallback
+        vv = _extract_path_list_from_value(v)
+        if isinstance(vv, list):
+            return vv
+    # nested keys
     for nest in ["data", "report", "payload", "result"]:
         v = s.get(nest)
         if isinstance(v, dict):
             for k in ["path", "months", "rows", "timeline"]:
-                vv = v.get(k)
+                vv = _extract_path_list_from_value(v.get(k))
                 if isinstance(vv, list):
                     return vv
     return None
@@ -199,60 +214,116 @@ def _extract_label(s: Dict[str, Any]) -> str:
     return str(_pick(s, ["label", "name", "scenario", "id"], "")).strip()
 
 
-def _find_scenarios_anywhere(payload: Any) -> List[Dict[str, Any]]:
-    """
-    Heuristic: find the best list of scenario dicts inside an arbitrary JSON payload.
-    """
+def _find_scenario_list_anywhere(payload: Any) -> List[Dict[str, Any]]:
     candidates: List[List[Dict[str, Any]]] = []
 
     def walk(x: Any):
         if isinstance(x, dict):
-            # direct "scenarios" key is the strongest signal
             if isinstance(x.get("scenarios"), list) and all(isinstance(it, dict) for it in x["scenarios"]):
                 candidates.append(x["scenarios"])
             for v in x.values():
                 walk(v)
         elif isinstance(x, list):
-            if x and all(isinstance(it, dict) for it in x) and any(_looks_like_scenario(it) for it in x):
+            if x and all(isinstance(it, dict) for it in x) and any(_looks_like_scenario_dict(it) for it in x):
                 candidates.append(x)
             for it in x:
                 walk(it)
 
     walk(payload)
-
     if not candidates:
         return []
 
     def score(lst: List[Dict[str, Any]]) -> int:
         sc = 0
-        # more scenarios = better
         sc += min(len(lst), 50)
-        # label/path signals
         sc += sum(5 for it in lst if any(k in it for k in ["label", "name", "scenario", "id"]))
         sc += sum(5 for it in lst if _extract_path_list(it) is not None)
-        # month key signal
         for it in lst:
             pl = _extract_path_list(it)
             if isinstance(pl, list) and pl:
                 r0 = pl[0]
-                if isinstance(r0, dict) and any(k in r0 for k in ["m", "month", "t"]):
+                if _looks_like_month_row_dict(r0):
                     sc += 10
         return sc
 
-    best = sorted(candidates, key=score, reverse=True)[0]
-    return best
+    return sorted(candidates, key=score, reverse=True)[0]
+
+
+def _scenario_map_from_dict(d: Dict[str, Any]) -> Optional[Dict[str, List[Any]]]:
+    """
+    Detects a scenario MAP shape like:
+      {"FINISHED_BASE": [ {m:1...}, ...], "FINISHED_AGGRESSIVE": [...]}
+    or values wrapped:
+      {"FINISHED_BASE": {"path":[...]}, ...}
+    """
+    if not d:
+        return None
+
+    hits: Dict[str, List[Any]] = {}
+    for k, v in d.items():
+        if not isinstance(k, str) or not k.strip():
+            continue
+        vv = _extract_path_list_from_value(v)
+        if isinstance(vv, list) and _looks_like_path_list(vv):
+            hits[k.strip()] = vv
+
+    # heuristic: at least 1 scenario found (real-world can be 1+)
+    return hits if hits else None
+
+
+def _find_scenario_map_anywhere(payload: Any) -> Dict[str, List[Any]]:
+    candidates: List[Dict[str, List[Any]]] = []
+
+    def walk(x: Any):
+        if isinstance(x, dict):
+            m = _scenario_map_from_dict(x)
+            if m:
+                candidates.append(m)
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for it in x:
+                walk(it)
+
+    walk(payload)
+    if not candidates:
+        return {}
+
+    def score(m: Dict[str, List[Any]]) -> int:
+        sc = 0
+        sc += min(len(m), 50)
+        # prefer longer paths
+        sc += sum(min(len(v), 120) for v in m.values())
+        return sc
+
+    return sorted(candidates, key=score, reverse=True)[0]
 
 
 def load_report(path: Path) -> ForecastReport:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
 
-    scen_list = []
-    if isinstance(payload, dict) and isinstance(payload.get("scenarios"), list):
-        scen_list = payload.get("scenarios") or []
-    else:
-        scen_list = _find_scenarios_anywhere(payload)
+    # 1) direct known shapes
+    scen_list: List[Dict[str, Any]] = []
+    scen_map: Dict[str, List[Any]] = {}
+
+    if isinstance(payload, dict):
+        if isinstance(payload.get("scenarios"), list):
+            scen_list = payload.get("scenarios") or []
+        elif isinstance(payload.get("scenarios"), dict):
+            scen_map = _scenario_map_from_dict(payload.get("scenarios") or {}) or {}
+        elif isinstance(payload.get("paths"), dict):
+            scen_map = _scenario_map_from_dict(payload.get("paths") or {}) or {}
+
+    # 2) heuristic fallback
+    if not scen_list and not scen_map:
+        scen_list = _find_scenario_list_anywhere(payload)
+
+    if not scen_list and not scen_map:
+        scen_map = _find_scenario_map_anywhere(payload)
 
     scenarios: List[ForecastScenario] = []
+
+    # build from list
     for s in scen_list:
         if not isinstance(s, dict):
             continue
@@ -260,10 +331,14 @@ def load_report(path: Path) -> ForecastReport:
         rows_raw = _extract_path_list(s) or []
         if not label:
             continue
-        rows: List[MonthRow] = []
-        for r in rows_raw:
-            if isinstance(r, dict):
-                rows.append(parse_month_row(r))
+        rows: List[MonthRow] = [parse_month_row(r) for r in rows_raw if isinstance(r, dict)]
+        scenarios.append(ForecastScenario(label=label, path=rows))
+
+    # build from map
+    for label, rows_raw in scen_map.items():
+        if not isinstance(rows_raw, list):
+            continue
+        rows: List[MonthRow] = [parse_month_row(r) for r in rows_raw if isinstance(r, dict)]
         scenarios.append(ForecastScenario(label=label, path=rows))
 
     return ForecastReport(scenarios=scenarios)

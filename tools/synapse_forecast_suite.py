@@ -64,7 +64,6 @@ def main():
             "first_cum_net_ge_0_month": first_cum0,
         })
 
-    # Numeric acceptance for plans
     gates["plans_count_ge_1"] = int(len(plans) >= 1)
     gates["plans_all_exit_0"] = int(all(p["exit_0"] == 1 for p in plans))
     gates["plans_all_ok"] = int(all(p["plan_ok"] == 1 for p in plans))
@@ -103,6 +102,20 @@ def main():
     print(f"SUITE_OK={suite_ok}")
     print(f"RULE_suite_report_written={int(out_suite.exists())}")
     print(f"OUT_SUITE_JSON={out_suite}")
+
+    # Debug visibility when failing
+    if suite_ok != 1:
+        bad = [(k, v) for k, v in gates.items() if v != 1]
+        for k, v in sorted(bad):
+            print(f"BAD_GATE {k}={v}")
+        # Try to show labels available
+        try:
+            from synapse.forecast.model import load_report
+            if out_json.exists():
+                rep = load_report(out_json)
+                print("LABELS_AVAILABLE=" + ",".join(rep.labels()))
+        except Exception as e:
+            print(f"LABELS_AVAILABLE_ERROR={type(e).__name__}")
 
     return 0 if suite_ok == 1 else 2
 
