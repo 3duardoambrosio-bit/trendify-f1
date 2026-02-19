@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-# Ensure repo root is on sys.path when running as tools/*.py
+# Ensure repo root is on sys.path when running as tools/*.py from any CWD
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -17,6 +17,10 @@ from synapse.forecast.model import (
 )
 
 
+def _abs_from_root(p: Path) -> Path:
+    return p if p.is_absolute() else (ROOT / p).resolve()
+
+
 def _die(code: int, msg: str) -> int:
     print("PLAN_OK=0")
     print(f"ERROR={msg}")
@@ -24,14 +28,16 @@ def _die(code: int, msg: str) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Emit month-by-month plan from v13.2 forecast JSON using synapse.forecast core.")
+    ap = argparse.ArgumentParser(
+        description="Emit month-by-month plan from v13.2 forecast JSON using synapse.forecast core."
+    )
     ap.add_argument("--injson", default="./out/forecast/synapse_report_v13_2.json")
     ap.add_argument("--label", required=True)
     ap.add_argument("--months", type=int, default=36)
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
-    injson = Path(args.injson)
+    injson = _abs_from_root(Path(args.injson))
     if not injson.exists():
         return _die(2, f"INJSON_NOT_FOUND path={injson}")
 
