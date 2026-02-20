@@ -61,7 +61,7 @@ def _write_text(path: Path, text: str) -> None:
 def _safe_json_loads(s: str) -> Tuple[Optional[Any], Optional[str]]:
     try:
         return json.loads(s), None
-    except Exception as e:
+    except (json.JSONDecodeError, TypeError) as e:
         return None, str(e)
 
 
@@ -267,7 +267,7 @@ def cmd_stats(path: Path) -> int:
         payload_ok += 1
         try:
             spend_sum += float(p.get("spend") or 0.0)
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.debug("suppressed exception", exc_info=True)
 
     cli_print(json.dumps({

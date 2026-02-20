@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 from infra.network_guard import enforce_url_policy
 
 from synapse.infra.cli_logging import cli_print
@@ -26,7 +26,7 @@ def _get(url: str) -> dict:
         body = e.read().decode("utf-8", "replace")
         try:
             return {"error": json.loads(body), "http_status": e.code}
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {"error": body, "http_status": e.code}
 
 

@@ -27,7 +27,7 @@ def _safe_str(x: Any, default: str = "") -> str:
 def _safe_int(x: Any, default: int = 0) -> int:
     try:
         return int(x)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 def _summarize_run(obj: Dict[str, Any], path: Path) -> Dict[str, Any]:

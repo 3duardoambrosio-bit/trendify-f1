@@ -78,7 +78,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             try:
                 ev = json.loads(ln)
                 cli_print(json.dumps(ev, ensure_ascii=False, indent=2, default=str))
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 cli_print(ln)
         else:
             cli_print(ln)

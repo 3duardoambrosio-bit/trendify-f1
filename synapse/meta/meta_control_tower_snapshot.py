@@ -45,7 +45,7 @@ def read_json_safe(p: Path) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         if not raw.strip():
             return None, "empty"
         return json.loads(raw), None
-    except Exception as e:
+    except (json.JSONDecodeError, TypeError) as e:
         return None, f"invalid_json: {e}"
 
 

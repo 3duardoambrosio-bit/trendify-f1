@@ -240,7 +240,7 @@ def _get_roas(p: Dict[str, Any]) -> float:
         if k in p:
             try:
                 return float(p.get(k) or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 return 0.0
     return 0.0
 
@@ -250,7 +250,7 @@ def _get_hook_rate(p: Dict[str, Any]) -> float:
         if k in p:
             try:
                 return float(p.get(k) or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 return 0.0
     return 0.0
 
@@ -272,7 +272,7 @@ def _read_json_dict(path: Path) -> Dict[str, Any]:
     try:
         out = json.loads(path.read_text(encoding="utf-8"))
         return out if isinstance(out, dict) else {}
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
 
 
