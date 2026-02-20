@@ -43,7 +43,7 @@ def _read_lines(path: Path) -> List[str]:
         return []
     try:
         return path.read_text(encoding="utf-8").splitlines()
-    except Exception:
+    except (UnicodeDecodeError, FileNotFoundError):
         return []
 
 

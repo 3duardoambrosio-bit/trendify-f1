@@ -113,7 +113,7 @@ def check_canonical_csv() -> CheckResult:
 
         return CheckResult("canonical_csv", "GREEN", f"CSV OK ({len(lines) - 1} rows)")
 
-    except Exception as e:
+    except (UnicodeDecodeError, FileNotFoundError) as e:
         return CheckResult("canonical_csv", "RED", "Error leyendo CSV", str(e))
 
 
@@ -155,7 +155,7 @@ def check_shortlist() -> CheckResult:
         content = shortlist_path.read_text(encoding="utf-8")
         lines = [l for l in content.strip().split("\n") if l.strip()]
         return CheckResult("shortlist", "GREEN", f"Shortlist OK ({len(lines) - 1} productos)")
-    except Exception as e:
+    except (UnicodeDecodeError, FileNotFoundError) as e:
         return CheckResult("shortlist", "YELLOW", "Error leyendo shortlist", str(e))
 
 

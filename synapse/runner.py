@@ -51,7 +51,7 @@ class NdjsonLedger:
             return []
         try:
             return self.path.read_text(encoding="utf-8").splitlines()
-        except Exception:
+        except (UnicodeDecodeError, FileNotFoundError):
             return []
 
     def iter_events(self) -> List[Any]:

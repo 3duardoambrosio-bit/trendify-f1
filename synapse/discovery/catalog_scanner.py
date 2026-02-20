@@ -161,7 +161,7 @@ class CatalogScanner:
                 reader = csv.DictReader(f)
                 for row in reader:
                     products.append(row)
-        except Exception:
+        except (FileNotFoundError, PermissionError):
             pass
         return products
     
