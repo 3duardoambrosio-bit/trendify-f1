@@ -32,7 +32,7 @@ def _read_json(path: Path) -> Optional[Dict[str, Any]]:
             return None
         obj = json.loads(path.read_text(encoding="utf-8"))
         return obj if isinstance(obj, dict) else None
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
@@ -67,7 +67,7 @@ def _hook_num(hook_id: str) -> int:
 def _safe_int(x: Any, default: int = 0) -> int:
     try:
         return int(x)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 

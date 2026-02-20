@@ -89,7 +89,7 @@ def check_pack_exists() -> CheckResult:
 
     except json.JSONDecodeError as e:
         return CheckResult("pack_exists", "RED", "Pack no es JSON válido", str(e))
-    except Exception as e:
+    except (json.JSONDecodeError, TypeError) as e:
         return CheckResult("pack_exists", "RED", "Error leyendo pack", str(e))
 
 
@@ -135,7 +135,7 @@ def check_evidence_fanout() -> CheckResult:
         try:
             json.loads(f.read_text(encoding="utf-8"))
             valid += 1
-        except Exception as e:
+        except (json.JSONDecodeError, TypeError) as e:
             logger.debug("suppressed exception", exc_info=True)
 
     if valid == 0:

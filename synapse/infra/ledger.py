@@ -172,12 +172,12 @@ class Ledger:
                             
                             if len(events) >= limit:
                                 break
-                        except Exception:
+                        except (json.JSONDecodeError, TypeError):
                             continue
                 
                 if len(events) >= limit:
                     break
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 continue
         
         # Sort by timestamp descending

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,7 +61,7 @@ class ForecastReport:
 def _as_int(v: Any, key: str) -> int:
     try:
         return int(v)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise ValueError(f"BAD_INT key={key} value={v!r}") from e
 
 
@@ -70,7 +70,7 @@ def _as_float(v: Any, key: str, default: float = 0.0) -> float:
         return float(default)
     try:
         return float(v)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise ValueError(f"BAD_FLOAT key={key} value={v!r}") from e
 
 
