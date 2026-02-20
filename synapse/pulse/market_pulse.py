@@ -122,7 +122,7 @@ def _is_valid_http_url(u: str) -> bool:
 def _clamp01(x: float) -> float:
     try:
         return max(0.0, min(1.0, float(x)))
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 

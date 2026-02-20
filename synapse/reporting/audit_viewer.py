@@ -48,7 +48,7 @@ def _read_ndjson_files(ledger_dir: str) -> Iterable[Dict[str, Any]]:
                     continue
                 try:
                     yield json.loads(line)
-                except Exception:
+                except (json.JSONDecodeError, TypeError):
                     continue
 
 

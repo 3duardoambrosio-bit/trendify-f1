@@ -114,5 +114,5 @@ class AuditTrail:
             return None
         try:
             return json.loads(last).get("hash")
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return None

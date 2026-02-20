@@ -77,7 +77,7 @@ class QualityGateV2:
         try:
             revenue = float(sp)
             base_cost = float(cost)
-        except Exception:
+        except (ValueError, TypeError):
             return None
         if revenue <= 0:
             return None
