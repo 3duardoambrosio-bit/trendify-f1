@@ -27,7 +27,7 @@ def _read_json(path: Path) -> Optional[Dict[str, Any]]:
             return None
         obj = json.loads(path.read_text(encoding="utf-8"))
         return obj if isinstance(obj, dict) else None
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
@@ -41,7 +41,7 @@ def _safe_float(x: Any) -> float:
         if x is None:
             return 0.0
         return float(x)
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 
@@ -50,7 +50,7 @@ def _safe_int(x: Any) -> int:
         if x is None:
             return 0
         return int(x)
-    except Exception:
+    except (ValueError, TypeError):
         return 0
 
 

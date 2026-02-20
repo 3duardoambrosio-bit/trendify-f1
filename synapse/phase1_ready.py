@@ -82,7 +82,7 @@ def _ledger_contract_check(lines: List[str]) -> Dict[str, Any]:
             ts = (ev.get("ts_utc") or ev.get("ts") or "").strip()
             if not ts:
                 bad.append(f"missing_ts keys={sorted(ev.keys())}")
-        except Exception as e:
+        except (json.JSONDecodeError, TypeError) as e:
             bad.append(f"bad_json {repr(e)}")
 
     return {"ok": len(bad) == 0, "checked": len(sample), "bad": bad[:5]}

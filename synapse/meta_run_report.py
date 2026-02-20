@@ -27,7 +27,7 @@ def _safe_str(x: Any, default: str = "") -> str:
 def _safe_int(x: Any, default: int = 0) -> int:
     try:
         return int(x)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 def _pick(*vals: Any, default: Any = "") -> Any:

@@ -122,7 +122,7 @@ def _http_post(url: str, data: Dict[str, Any], access_token: str) -> Dict[str, A
         raw = e.read().decode("utf-8", errors="replace")
         try:
             return {"error": json.loads(raw), "http_status": e.code}
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {"error": raw, "http_status": e.code}
     except URLError as e:
         return {"error": str(e), "http_status": None}
@@ -158,7 +158,7 @@ def _http_post_multipart(
         raw = e.read().decode("utf-8", errors="replace")
         try:
             return {"error": json.loads(raw), "http_status": e.code}
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {"error": raw, "http_status": e.code}
     except URLError as e:
         return {"error": str(e), "http_status": None}
