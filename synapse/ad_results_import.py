@@ -54,7 +54,7 @@ def _safe_str(x: Any, default: str = "") -> str:
     try:
         s = str(x).strip()
         return s if s else default
-    except Exception:
+    except (AttributeError):
         return default
 
 

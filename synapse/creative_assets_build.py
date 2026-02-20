@@ -66,7 +66,7 @@ def _find_ffmpeg() -> Optional[str]:
         exe2 = imageio_ffmpeg.get_ffmpeg_exe()
         if exe2 and Path(exe2).exists():
             return exe2
-    except Exception as e:
+    except (AttributeError) as e:
         logger.debug("suppressed exception", exc_info=True)
 
     return None
@@ -228,7 +228,7 @@ def _run_ffmpeg_make_blank(
         if not out_mp4.exists() or out_mp4.stat().st_size <= 0:
             return False, "ffmpeg produced empty output (blank)"
         return True, "OK"
-    except Exception as e:
+    except (KeyError, IndexError, TypeError) as e:
         return False, f"exception: {e}"
 
 
@@ -275,7 +275,7 @@ def _run_ffmpeg_make_stub(
         if not out_mp4.exists() or out_mp4.stat().st_size <= 0:
             return False, "ffmpeg produced empty output"
         return True, "OK"
-    except Exception as e:
+    except (KeyError, IndexError, TypeError) as e:
         return False, f"exception: {e}"
 
 

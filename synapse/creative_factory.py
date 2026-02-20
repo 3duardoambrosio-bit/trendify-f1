@@ -323,7 +323,7 @@ def _render_ffmpeg(
             except Exception:
                 return False, "ffmpeg_failed"
         return False, "ffmpeg_failed"
-    except Exception:
+    except (AttributeError):
         return False, "ffmpeg_failed"
 
 def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_s: float) -> Tuple[bool, List[str], Dict[str, Any]]:
@@ -343,7 +343,7 @@ def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_
         sizeb = path.stat().st_size
         if sizeb < min_size_bytes:
             issues.append(f"too_small_bytes:{sizeb}")
-    except Exception:
+    except (AttributeError):
         issues.append("stat_failed")
 
     ffp = _ffprobe_json(path)

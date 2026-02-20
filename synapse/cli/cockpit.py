@@ -46,7 +46,7 @@ def _git_head_short() -> str | None:
         )
         if p.returncode == 0:
             return p.stdout.strip()
-    except Exception:
+    except (AttributeError):
         pass
     return None
 
@@ -160,7 +160,7 @@ def _cmd_health(envelope: Dict[str, Any]) -> None:
         envelope["checks"]["healthcheck"] = result
         if not result.get("ok", True):
             envelope["ok"] = False
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         envelope["ok"] = False
         envelope["errors"].append({
             "code": "healthcheck_import_error",
@@ -178,7 +178,7 @@ def _cmd_flags(envelope: Dict[str, Any]) -> None:
             "values": dict(flags.values),
             "prefix": "SYNAPSE_FLAG_",
         }
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         envelope["ok"] = False
         envelope["errors"].append({
             "code": "flags_load_error",
