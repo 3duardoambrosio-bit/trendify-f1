@@ -76,7 +76,7 @@ def _run_subprocess(
             "stderr_tail": "timeout after {}s".format(timeout_s),
             "duration_ms": duration_ms,
         }
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         duration_ms = int((time.monotonic() - t0) * 1000)
         return {
             "returncode": -1,
@@ -255,7 +255,7 @@ def _cmd_last_ledger(
         envelope["checks"]["ledger"] = {
             "available": True, "path": str(p), "last_event": event,
         }
-    except Exception as exc:
+    except (json.JSONDecodeError, TypeError) as exc:
         envelope["checks"]["ledger"] = {"available": False, "path": str(p)}
         envelope["errors"].append({
             "code": "ledger_read_error",

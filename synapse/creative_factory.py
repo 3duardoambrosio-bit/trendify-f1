@@ -122,7 +122,7 @@ def _ffprobe_json(p: Path) -> Dict[str, Any]:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         obj = json.loads(out)
         return obj if isinstance(obj, dict) else {}
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
 
 def _extract_video_meta(ffp: Dict[str, Any]) -> Dict[str, Any]:
