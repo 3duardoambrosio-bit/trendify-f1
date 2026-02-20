@@ -304,7 +304,7 @@ def _ledger_write(ledger_obj: Any, *, event_type: str, status: str, input_hash: 
         writes = getattr(ledger_obj, "writes", None)
         if isinstance(writes, list):
             writes.append(ev)
-    except Exception:
+    except (AttributeError):
         pass
 
 

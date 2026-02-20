@@ -32,7 +32,7 @@ class CircuitBreaker:
             self._failures = 0
             self._opened_at = None
             return out
-        except Exception:
+        except (AttributeError):
             self._failures += 1
             if self._failures >= self.failure_threshold:
                 self._opened_at = time.time()

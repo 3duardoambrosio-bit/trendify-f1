@@ -17,7 +17,7 @@ def run_checks() -> Dict[str, Any]:
         flags = FeatureFlags.load()
         out["checks"]["flags_loaded"] = True
         out["checks"]["flags_count"] = len(flags.values)
-    except Exception as e:
+    except (KeyError, IndexError, TypeError) as e:
         out["ok"] = False
         out["checks"]["flags_loaded"] = False
         out["checks"]["flags_error"] = str(e)
@@ -25,7 +25,7 @@ def run_checks() -> Dict[str, Any]:
     try:
         import synapse.infra.doctor as _doctor  # noqa: F401
         out["checks"]["doctor_import"] = True
-    except Exception as e:
+    except (KeyError, IndexError, TypeError) as e:
         out["checks"]["doctor_import"] = False
         out["checks"]["doctor_error"] = str(e)
 

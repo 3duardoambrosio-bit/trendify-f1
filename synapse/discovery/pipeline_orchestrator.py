@@ -238,7 +238,7 @@ class PipelineOrchestrator:
                     if wave_result.kit_path:
                         kit_paths.append(wave_result.kit_path)
                         
-                except Exception:
+                except (AttributeError):
                     continue
                     
         except ImportError:
