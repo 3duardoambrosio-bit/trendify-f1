@@ -126,7 +126,7 @@ def _try_json_str(x: Any) -> Any:
         return None
     try:
         return json.loads(s)
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
@@ -230,7 +230,7 @@ def _get_spend(p: Dict[str, Any]) -> float:
         if k in p:
             try:
                 return float(p.get(k) or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 return 0.0
     return 0.0
 

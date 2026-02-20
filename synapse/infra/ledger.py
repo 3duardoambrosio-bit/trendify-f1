@@ -222,7 +222,7 @@ class Ledger:
                                 )
                         except json.JSONDecodeError:
                             errors.append(f"{file_path.name}:{i} - Invalid JSON")
-            except Exception as e:
+            except (json.JSONDecodeError, TypeError) as e:
                 errors.append(f"{file_path.name} - Read error: {e}")
         
         return errors
@@ -243,11 +243,11 @@ class Ledger:
                                 d = json.loads(line)
                                 if d.get("event_type") == event_type:
                                     count += 1
-                            except Exception:
+                            except (json.JSONDecodeError, TypeError):
                                 pass
                         else:
                             count += 1
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 pass
         
         return count
