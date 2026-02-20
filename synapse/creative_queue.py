@@ -60,7 +60,7 @@ def _hook_num(hook_id: str) -> int:
         return -1
     try:
         return int(s[1:])
-    except Exception:
+    except (ValueError, TypeError):
         return -1
 
 

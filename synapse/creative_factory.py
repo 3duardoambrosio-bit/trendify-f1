@@ -283,7 +283,7 @@ def _render_ffmpeg(
     try:
         w_str, h_str = size.lower().split("x")
         w, h = int(w_str), int(h_str)
-    except Exception:
+    except (ValueError, TypeError):
         return False, "bad_size"
 
     vf = _build_drawtext_filters(beats, fontfile=fontfile, w=w, h=h)
@@ -358,7 +358,7 @@ def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_
         if meta.get("width") and meta.get("height"):
             if int(meta["width"]) != ew or int(meta["height"]) != eh:
                 issues.append(f"bad_resolution:{meta.get('width')}x{meta.get('height')}")
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         logger.debug("suppressed exception", exc_info=True)
 
     ok = len(issues) == 0

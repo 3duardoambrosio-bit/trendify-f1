@@ -31,7 +31,7 @@ def _safe_float(x: Any) -> float:
             return 0.0
         s = s.replace(",", "")
         return float(s)
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 
@@ -44,7 +44,7 @@ def _safe_int(x: Any) -> int:
             return 0
         s = s.replace(",", "")
         return int(float(s))
-    except Exception:
+    except (ValueError, TypeError):
         return 0
 
 
