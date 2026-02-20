@@ -274,7 +274,7 @@ def _cmd_budget(envelope: Dict[str, Any]) -> None:
         try:
             importlib.import_module(mod_name)
             found.append(mod_name)
-        except Exception:
+        except (ImportError, SyntaxError):
             pass
 
     if found:
@@ -300,7 +300,7 @@ def _cmd_safety(envelope: Dict[str, Any]) -> None:
         try:
             importlib.import_module(mod_name)
             found.append(mod_name)
-        except Exception:
+        except (ImportError, SyntaxError):
             pass
 
     if found:

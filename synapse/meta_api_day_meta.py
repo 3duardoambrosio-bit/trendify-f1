@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import re
 
 __MARKER__ = "META_API_DAY_2026-01-19_V2"
 
@@ -54,7 +55,7 @@ def _token_sanity(token: str) -> Tuple[bool, Dict[str, Any]]:
     t = (token or "").strip()
     meta = {
         "len": len(t),
-        "has_whitespace": bool(__import__("re").search(r"\s", t)),
+        "has_whitespace": bool(re.search(r"\s", t)),
         "prefix": t[:4] if len(t) >= 4 else t,
     }
     if not t:

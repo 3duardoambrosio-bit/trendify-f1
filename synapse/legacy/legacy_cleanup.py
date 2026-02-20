@@ -159,7 +159,7 @@ def _try_import(module: str) -> Tuple[bool, str]:
     try:
         importlib.import_module(module)
         return True, ""
-    except Exception as e:
+    except (ImportError, SyntaxError) as e:
         return False, f"{type(e).__name__}: {e}"
 
 
