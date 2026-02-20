@@ -52,7 +52,7 @@ def _reason_from(res: Any, *, allowed: bool) -> str:
             try:
                 if isinstance(v, list) and v:
                     return str(v[0])
-            except Exception as e:
+            except (KeyError, IndexError, TypeError) as e:
                 logger.debug("suppressed exception", exc_info=True)
 
     return "OK" if allowed else "RISK_VIOLATION"

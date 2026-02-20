@@ -274,7 +274,7 @@ def _repo_root_from_plan(plan_path: Path) -> Path:
     # data/run/meta_publish_plan.json -> repo root is parents[2]
     try:
         return plan_path.parents[2]
-    except Exception:
+    except (KeyError, IndexError, TypeError):
         return Path.cwd().resolve()
 
 

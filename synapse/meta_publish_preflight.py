@@ -80,7 +80,7 @@ def _scan_placeholders(steps: List[Dict[str, Any]]) -> Dict[str, bool]:
 def _repo_root_from_plan(plan_path: Path) -> Path:
     try:
         return plan_path.parents[2]
-    except Exception:
+    except (KeyError, IndexError, TypeError):
         return Path.cwd().resolve()
 
 

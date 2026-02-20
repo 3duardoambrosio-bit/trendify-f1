@@ -295,7 +295,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 try:
                     if fp.stat().st_size <= 0:
                         missing_here.append(str(fp) + " (empty)")
-                except Exception as e:
+                except (AttributeError) as e:
                     logger.debug("suppressed exception", exc_info=True)
 
         if missing_here:

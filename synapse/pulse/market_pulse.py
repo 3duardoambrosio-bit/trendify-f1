@@ -115,7 +115,7 @@ def _is_valid_http_url(u: str) -> bool:
     try:
         p = urlparse(u)
         return bool(p.scheme and p.netloc)
-    except Exception:
+    except (AttributeError):
         return False
 
 
@@ -217,7 +217,7 @@ def _ledger_write(ledger_obj: Any, event_type: str, payload: Dict[str, Any]) -> 
     if hasattr(ledger_obj, "write"):
         try:
             ledger_obj.write(event_type=event_type, entity_type="system", entity_id="market_pulse", payload=payload)
-        except Exception:
+        except (AttributeError):
             return
 
 
