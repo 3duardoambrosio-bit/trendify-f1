@@ -172,10 +172,10 @@ class CircuitBreaker:
                 cd = self.config.max_cooldown_seconds
             self._current_cooldown = cd
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, ValueError, TypeError):
-            # Corrupted state file — start clean, don't crash
-            self.state = CircuitState.CLOSED
-            self.failures = 0
+            # FAIL-CLOSED: corrupted state -> OPEN with max cooldown (block execution)
+            self.state = CircuitState.OPEN
+            self.failures = self.config.failure_threshold
             self.successes = 0
-            self.last_failure_at = None
-            self._current_cooldown = self.config.cooldown_seconds
-            logger.error("circuit state corrupted at %s; reset to CLOSED", self._state_file, exc_info=True)
+            self.last_failure_at = datetime.now(timezone.utc)
+            self._current_cooldown = getattr(self.config, "max_cooldown_seconds")
+            logger.critical("circuit state corrupted at %s; FAIL-CLOSED -> OPEN", self._state_file, exc_info=True)

@@ -175,5 +175,6 @@ def test_circuit_breaker_corrupted_state_file_starts_clean(tmp_path: Path) -> No
     state_file.write_text("{broken", encoding="utf-8")
 
     cb = CircuitBreaker(state_file=state_file)
-    assert cb.state == CircuitState.CLOSED
-    assert cb.failures == 0
+    assert cb.state == CircuitState.OPEN
+    assert cb.can_execute() is False
+    assert cb.failures == cb.config.failure_threshold

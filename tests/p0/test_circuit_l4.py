@@ -116,5 +116,5 @@ def test_corrupted_state_does_not_crash() -> None:
         state_file = Path(td) / "circuit_state.json"
         state_file.write_text("{not valid json", encoding="utf-8")
         cb = CircuitBreaker(cfg, state_file=state_file)
-        assert cb.state == CircuitState.CLOSED
-        assert cb.can_execute() is True
+        assert cb.state == CircuitState.OPEN
+        assert cb.can_execute() is False
