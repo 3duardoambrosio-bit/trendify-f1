@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
@@ -83,7 +83,6 @@ def test_balance_per_account_correct() -> None:
         assert led.total_balance() == _ZERO
         assert led.balance("cash:bank") == Decimal("3.00")
 
-from hypothesis import given, strategies as st
 
 AMT2 = st.integers(min_value=0, max_value=5000).map(lambda c: (Decimal(c) / Decimal("100")).quantize(Decimal("0.01")))
 
