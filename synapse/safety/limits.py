@@ -1,9 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_EVEN
 from numbers import Real
 from typing import Optional, Union
+
+import deal
 
 Number = Union[Decimal, int, str, Real]
 
@@ -19,7 +21,7 @@ def _d(x: Number) -> Decimal:
     if isinstance(x, int):
         return Decimal(x)
     if isinstance(x, Real):
-        # Includes real without naming it; repr keeps precision for Decimal conversion.
+        # Real includes floats; repr preserves precision better than str for Decimal conversion.
         return Decimal(repr(x))
     return Decimal(str(x))
 
@@ -32,7 +34,7 @@ def _q_ratio(x: Decimal) -> Decimal:
     return x.quantize(_RATIO_Q, rounding=ROUND_HALF_EVEN)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RiskLimits:
     # Capital protection (fractions, not percents)
     daily_loss_limit: Decimal = Decimal("0.05")          # 5% of monthly budget
@@ -47,7 +49,7 @@ class RiskLimits:
         object.__setattr__(self, "auto_killswitch_threshold", _q_ratio(_d(self.auto_killswitch_threshold)))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RiskSnapshot:
     monthly_budget: Decimal
     expected_spend_rate_4h: Decimal  # currency per 4h
@@ -61,12 +63,16 @@ class RiskSnapshot:
         object.__setattr__(self, "daily_loss", _q_money(_d(self.daily_loss)))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RiskDecision:
     allowed: bool
     reason: Optional[str] = None
 
 
+@deal.pre(lambda limits, snap: limits is not None, message="limits required")
+@deal.pre(lambda limits, snap: snap is not None, message="snapshot required")
+@deal.post(lambda result: isinstance(result, RiskDecision), message="returns RiskDecision")
+@deal.raises(deal.PreContractError, deal.RaisesContractError)
 def evaluate_risk(limits: RiskLimits, snap: RiskSnapshot) -> RiskDecision:
     # Auto-killswitch: 24h spend >= 80% of budget (checked first — highest severity)
     if snap.monthly_budget > 0:

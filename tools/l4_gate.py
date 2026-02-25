@@ -1,4 +1,4 @@
-﻿# tools/l4_gate.py
+# tools/l4_gate.py
 from __future__ import annotations
 
 import argparse
@@ -28,7 +28,9 @@ class Report:
 
 
 def _read_text(p: Path) -> str:
-    return p.read_text(encoding="utf-8")
+    # Read raw text and strip UTF-8 BOM if present (ast.parse rejects U+FEFF at pos 0).
+    s = p.read_text(encoding="utf-8")
+    return s.lstrip("\ufeff")
 
 
 def _parse(p: Path) -> ast.AST:
@@ -114,14 +116,6 @@ class _FloatFinder(ast.NodeVisitor):
             self.ann_lines.append(int(getattr(node, "lineno", 1)))
 
 
-def _scan_except_exception(src: str) -> List[int]:
-    bad: List[int] = []
-    for i, line in enumerate(src.splitlines(), start=1):
-        if "except Exception" in line:
-            bad.append(i)
-    return bad
-
-
 def _tests_path_for(py_file: Path) -> Path:
     stem = py_file.name.replace(".py", "")
     return Path("tests") / "p0" / f"test_{stem}_l4.py"
@@ -170,6 +164,22 @@ class _TestCallIndex(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _broad_except_lines(tree: ast.AST) -> List[int]:
+    bad: List[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler):
+            t = node.type
+            if t is None:
+                bad.append(int(getattr(node, "lineno", 1)))
+                continue
+            if isinstance(t, ast.Name) and t.id == "Exception":
+                bad.append(int(getattr(node, "lineno", 1)))
+                continue
+            if isinstance(t, ast.Attribute) and t.attr == "Exception":
+                bad.append(int(getattr(node, "lineno", 1)))
+    return bad
+
+
 def _finalize(files: Sequence[Path], violations: List[Violation]) -> Report:
     reds = [v for v in violations if v.level == "RED"]
     yellows = [v for v in violations if v.level == "YELLOW"]
@@ -190,15 +200,14 @@ def _analyze_one(py_file: Path) -> Report:
         violations.append(Violation("RED", "FILE_MISSING", "target file missing", str(py_file), 1))
         return _finalize([py_file], violations)
 
-    src = _read_text(py_file)
     try:
         tree = _parse(py_file)
     except SyntaxError as e:
         violations.append(Violation("RED", "SYNTAX", "syntax error", str(py_file), int(e.lineno or 1)))
         return _finalize([py_file], violations)
 
-    for ln in _scan_except_exception(src):
-        violations.append(Violation("RED", "NO_EXCEPT_EXCEPTION", "except Exception is forbidden", str(py_file), ln))
+    for ln in _broad_except_lines(tree):
+        violations.append(Violation("RED", "NO_EXCEPT_EXCEPTION", "broad exception handler forbidden", str(py_file), ln))
 
     ff = _FloatFinder()
     ff.visit(tree)

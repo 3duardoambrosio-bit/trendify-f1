@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+import deal
+
 from synapse.safety.gate import SafetyGateDecision, SafetyGateTripped, run_safety_gate
 from synapse.safety.limits import RiskLimits, RiskSnapshot
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SafeExecuteResult:
     executed: bool
     gate: SafetyGateDecision
@@ -15,6 +17,12 @@ class SafeExecuteResult:
     error: Optional[str] = None
 
 
+@deal.pre(lambda snapshot, limits, action, on_trip=None: snapshot is not None, message="snapshot required")
+@deal.pre(lambda snapshot, limits, action, on_trip=None: limits is not None, message="limits required")
+@deal.pre(lambda snapshot, limits, action, on_trip=None: callable(action), message="action must be callable")
+@deal.pre(lambda snapshot, limits, action, on_trip=None: on_trip is None or callable(on_trip), message="on_trip must be callable or None")
+@deal.post(lambda result: isinstance(result, SafeExecuteResult), message="returns SafeExecuteResult")
+@deal.raises(deal.PreContractError, deal.RaisesContractError)
 def safe_execute(
     *,
     snapshot: RiskSnapshot,
