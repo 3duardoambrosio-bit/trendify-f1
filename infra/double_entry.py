@@ -1,4 +1,4 @@
-﻿"""
+"""
 Double-entry bookkeeping layer (NDJSON).
 
 Invariant (valid ledger): total_balance() == Decimal("0.00")
@@ -93,8 +93,10 @@ class DoubleEntryLedger:
                 s = line.strip()
                 if not s:
                     continue
-                yield self._from_obj(json.loads(s))
-
+                try:
+                    yield self._from_obj(json.loads(s))
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(f"LEDGER_CORRUPT_LINE_{n}") from exc
     @deal.pre(lambda self, entries: isinstance(entries, list) and len(entries) >= 2, message="entries must be a list (>=2)")
     @deal.pre(lambda self, entries: all(isinstance(e, LedgerEntry) for e in entries), message="entries must be LedgerEntry")
     @deal.pre(lambda self, entries: all(isinstance(e.amount, Decimal) for e in entries), message="amount must be Decimal")
@@ -112,6 +114,8 @@ class DoubleEntryLedger:
         with open(self._path, "a", encoding="utf-8") as f:
             for e in entries:
                 f.write(json.dumps(self._to_obj(e), sort_keys=True, separators=(",", ":")) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
         return Transaction(id=tx_id, entries=tuple(entries), created_at=created)
 
     @deal.pre(lambda self, account: isinstance(account, str) and account.strip() != "", message="account required")
