@@ -25,3 +25,17 @@ def test_evaluate_risk_is_deterministic(budget_i: int, loss_i: int, exp_i: int, 
     assert isinstance(d.allowed, bool)
     if d.allowed is False:
         assert d.reason is not None and str(d.reason) != ""
+
+
+def test_zero_or_negative_budget_blocks() -> None:
+    from decimal import Decimal
+    limits = RiskLimits()
+    for bad in [Decimal('0'), Decimal('-100')]:
+        snap = RiskSnapshot(
+            monthly_budget=bad,
+            expected_spend_rate_4h=Decimal('0'),
+            actual_spend_4h=Decimal('0'),
+            daily_loss=Decimal('9999'),
+        )
+        d = evaluate_risk(limits, snap)
+        assert d.allowed is False, f"budget={bad} should block"

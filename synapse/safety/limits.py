@@ -74,6 +74,9 @@ class RiskDecision:
 @deal.post(lambda result: isinstance(result, RiskDecision), message="returns RiskDecision")
 @deal.raises(deal.PreContractError, deal.RaisesContractError)
 def evaluate_risk(limits: RiskLimits, snap: RiskSnapshot) -> RiskDecision:
+    # FAIL-CLOSED: invalid budget disables limits -> block
+    if snap.monthly_budget <= 0:
+        return RiskDecision(allowed=False, reason="INVALID_BUDGET_FAIL_CLOSED")
     # Auto-killswitch: 24h spend >= 80% of budget (checked first — highest severity)
     if snap.monthly_budget > 0:
         if snap.daily_loss >= (snap.monthly_budget * limits.auto_killswitch_threshold):
