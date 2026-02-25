@@ -45,7 +45,7 @@ def read_json_safe(p: Path) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         if not raw.strip():
             return None, "empty"
         return json.loads(raw), None
-    except Exception as e:
+    except (json.JSONDecodeError, TypeError) as e:
         return None, f"invalid_json: {e}"
 
 
@@ -80,7 +80,7 @@ def git_info(repo: Path) -> Dict[str, Any]:
             if r.returncode != 0:
                 return "unknown"
             return (r.stdout or "").strip()
-        except Exception:
+        except (AttributeError):
             return "unknown"
 
     commit = run(["git", "rev-parse", "HEAD"])[:12]
@@ -113,7 +113,7 @@ def atomic_write_json(out_path: Path, data: Dict[str, Any]) -> None:
         try:
             if os.path.exists(tmp_name):
                 os.remove(tmp_name)
-        except Exception as e:
+        except (AttributeError) as e:
             logger.debug("suppressed exception", exc_info=True)
 
 def build_snapshot(repo_root: Path, include_raw: bool = True, trend_n: int = 10) -> Dict[str, Any]:

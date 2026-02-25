@@ -39,7 +39,7 @@ def safe_json_loads(payload: bytes) -> Dict[str, Any]:
         txt = payload.decode("utf-8", errors="replace")
         obj = json.loads(txt)
         return obj if isinstance(obj, dict) else {"_non_dict": obj}
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {"_invalid_json": True}
 
 

@@ -31,7 +31,7 @@ def _safe_float(x: Any) -> float:
             return 0.0
         s = s.replace(",", "")
         return float(s)
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 
@@ -44,7 +44,7 @@ def _safe_int(x: Any) -> int:
             return 0
         s = s.replace(",", "")
         return int(float(s))
-    except Exception:
+    except (ValueError, TypeError):
         return 0
 
 
@@ -54,7 +54,7 @@ def _safe_str(x: Any, default: str = "") -> str:
     try:
         s = str(x).strip()
         return s if s else default
-    except Exception:
+    except (AttributeError):
         return default
 
 
@@ -64,7 +64,7 @@ def _read_json(path: Path) -> Optional[Dict[str, Any]]:
             return None
         obj = json.loads(path.read_text(encoding="utf-8"))
         return obj if isinstance(obj, dict) else None
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return None
 
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 HTTP Client (stdlib) para SYNAPSE (Integrations layer).
 
 ACERO, NO HUMO:
@@ -125,7 +125,7 @@ class SimpleHttpClient:
             except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
                 last_err = e
 
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 last_err = e
 
             attempt += 1

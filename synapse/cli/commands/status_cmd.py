@@ -85,7 +85,7 @@ def _budget_info() -> Dict[str, str]:
             "learning_spent": str(raw.get("learning_spent", "unknown")),
             "operational_spent": str(raw.get("operational_spent", "unknown")),
         }
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {"learning_spent": "unknown", "operational_spent": "unknown"}
 
 
@@ -126,7 +126,7 @@ def _ledger_last() -> Dict[str, str]:
             "ts": str(last.get("ts", "none")),
             "type": str(last.get("event_type", "none")),
         }
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {"ts": "unknown", "type": "unknown"}
 
 

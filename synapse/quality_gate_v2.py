@@ -77,7 +77,7 @@ class QualityGateV2:
         try:
             revenue = float(sp)
             base_cost = float(cost)
-        except Exception:
+        except (ValueError, TypeError):
             return None
         if revenue <= 0:
             return None
@@ -103,7 +103,7 @@ class QualityGateV2:
                 imgs = 0
         try:
             imgs_i = int(imgs)
-        except Exception:
+        except (ValueError, TypeError):
             imgs_i = 0
 
         tm = self.true_margin(p)

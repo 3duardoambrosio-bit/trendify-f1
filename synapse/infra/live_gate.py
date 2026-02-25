@@ -26,7 +26,7 @@ def _try_parse_json(text: str) -> Dict[str, Any]:
         try:
             obj = json.loads(t)
             return obj if isinstance(obj, dict) else {}
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {}
     return {}
 

@@ -62,7 +62,7 @@ def _load_dedup_list(path: Path) -> list[str]:
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return []
     if isinstance(raw, list):
         return [str(x) for x in raw]

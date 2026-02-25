@@ -73,7 +73,7 @@ class WebhookRouter:
 
         try:
             payload = json.loads(raw_body.decode("utf-8"))
-        except Exception as e:
+        except (json.JSONDecodeError, TypeError) as e:
             raise WebhookError("invalid json body") from e
 
         key = (prov, et)

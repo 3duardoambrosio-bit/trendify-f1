@@ -38,5 +38,5 @@ def parse_utm_content(utm_content: str) -> Dict[str, str]:
         h_part, rest = s[1:].split("_A", 1)
         a_part, v_part = rest.split("_V", 1)
         return {"hook_id": h_part, "angle": a_part, "variant": v_part}
-    except Exception as e:
+    except (KeyError, IndexError, TypeError) as e:
         raise UTMError("Invalid utm_content parse") from e

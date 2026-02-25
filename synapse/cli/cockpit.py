@@ -46,7 +46,7 @@ def _git_head_short() -> str | None:
         )
         if p.returncode == 0:
             return p.stdout.strip()
-    except Exception:
+    except (AttributeError):
         pass
     return None
 
@@ -76,7 +76,7 @@ def _run_subprocess(
             "stderr_tail": "timeout after {}s".format(timeout_s),
             "duration_ms": duration_ms,
         }
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         duration_ms = int((time.monotonic() - t0) * 1000)
         return {
             "returncode": -1,
@@ -160,7 +160,7 @@ def _cmd_health(envelope: Dict[str, Any]) -> None:
         envelope["checks"]["healthcheck"] = result
         if not result.get("ok", True):
             envelope["ok"] = False
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         envelope["ok"] = False
         envelope["errors"].append({
             "code": "healthcheck_import_error",
@@ -178,7 +178,7 @@ def _cmd_flags(envelope: Dict[str, Any]) -> None:
             "values": dict(flags.values),
             "prefix": "SYNAPSE_FLAG_",
         }
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         envelope["ok"] = False
         envelope["errors"].append({
             "code": "flags_load_error",
@@ -255,7 +255,7 @@ def _cmd_last_ledger(
         envelope["checks"]["ledger"] = {
             "available": True, "path": str(p), "last_event": event,
         }
-    except Exception as exc:
+    except (json.JSONDecodeError, TypeError) as exc:
         envelope["checks"]["ledger"] = {"available": False, "path": str(p)}
         envelope["errors"].append({
             "code": "ledger_read_error",
@@ -274,7 +274,7 @@ def _cmd_budget(envelope: Dict[str, Any]) -> None:
         try:
             importlib.import_module(mod_name)
             found.append(mod_name)
-        except Exception:
+        except (ImportError, SyntaxError):
             pass
 
     if found:
@@ -300,7 +300,7 @@ def _cmd_safety(envelope: Dict[str, Any]) -> None:
         try:
             importlib.import_module(mod_name)
             found.append(mod_name)
-        except Exception:
+        except (ImportError, SyntaxError):
             pass
 
     if found:

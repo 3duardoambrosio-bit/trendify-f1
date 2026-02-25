@@ -178,7 +178,7 @@ class WaveRunner:
                     manifest = json.load(f)
                     if manifest.get("input_hash") == input_hash:
                         return True
-            except Exception:
+            except (FileNotFoundError, PermissionError):
                 continue
         return False
     

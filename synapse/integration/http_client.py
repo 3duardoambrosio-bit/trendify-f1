@@ -1,4 +1,4 @@
-﻿# synapse/integration/http_client.py
+# synapse/integration/http_client.py
 """
 HTTP Client (stdlib) para SYNAPSE.
 
@@ -121,7 +121,7 @@ class SimpleHttpClient:
                 last_err = e
             except TimeoutError as e:
                 last_err = e
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 last_err = e
 
             attempt += 1

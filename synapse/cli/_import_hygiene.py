@@ -26,7 +26,7 @@ def wrap_main(main_fn: Callable) -> Callable:
         rc = main_fn(argv, *args, **kwargs)
         try:
             cmd = (argv[0] if isinstance(argv, list) and len(argv) > 0 else None)
-        except Exception:
+        except (KeyError, IndexError, TypeError):
             cmd = None
 
         # If it's a dry-run-ish command (no --apply), enforce hygiene for tests

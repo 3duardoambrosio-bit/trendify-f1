@@ -122,7 +122,7 @@ def _ffprobe_json(p: Path) -> Dict[str, Any]:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         obj = json.loads(out)
         return obj if isinstance(obj, dict) else {}
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
 
 def _extract_video_meta(ffp: Dict[str, Any]) -> Dict[str, Any]:
@@ -283,7 +283,7 @@ def _render_ffmpeg(
     try:
         w_str, h_str = size.lower().split("x")
         w, h = int(w_str), int(h_str)
-    except Exception:
+    except (ValueError, TypeError):
         return False, "bad_size"
 
     vf = _build_drawtext_filters(beats, fontfile=fontfile, w=w, h=h)
@@ -323,7 +323,7 @@ def _render_ffmpeg(
             except Exception:
                 return False, "ffmpeg_failed"
         return False, "ffmpeg_failed"
-    except Exception:
+    except (AttributeError):
         return False, "ffmpeg_failed"
 
 def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_s: float) -> Tuple[bool, List[str], Dict[str, Any]]:
@@ -343,7 +343,7 @@ def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_
         sizeb = path.stat().st_size
         if sizeb < min_size_bytes:
             issues.append(f"too_small_bytes:{sizeb}")
-    except Exception:
+    except (AttributeError):
         issues.append("stat_failed")
 
     ffp = _ffprobe_json(path)
@@ -358,7 +358,7 @@ def _qa_asset(path: Path, min_size_bytes: int, expected_size: str, max_duration_
         if meta.get("width") and meta.get("height"):
             if int(meta["width"]) != ew or int(meta["height"]) != eh:
                 issues.append(f"bad_resolution:{meta.get('width')}x{meta.get('height')}")
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         logger.debug("suppressed exception", exc_info=True)
 
     ok = len(issues) == 0

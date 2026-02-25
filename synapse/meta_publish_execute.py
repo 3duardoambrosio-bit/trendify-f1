@@ -122,7 +122,7 @@ def _http_post(url: str, data: Dict[str, Any], access_token: str) -> Dict[str, A
         raw = e.read().decode("utf-8", errors="replace")
         try:
             return {"error": json.loads(raw), "http_status": e.code}
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {"error": raw, "http_status": e.code}
     except URLError as e:
         return {"error": str(e), "http_status": None}
@@ -158,7 +158,7 @@ def _http_post_multipart(
         raw = e.read().decode("utf-8", errors="replace")
         try:
             return {"error": json.loads(raw), "http_status": e.code}
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return {"error": raw, "http_status": e.code}
     except URLError as e:
         return {"error": str(e), "http_status": None}
@@ -274,7 +274,7 @@ def _repo_root_from_plan(plan_path: Path) -> Path:
     # data/run/meta_publish_plan.json -> repo root is parents[2]
     try:
         return plan_path.parents[2]
-    except Exception:
+    except (KeyError, IndexError, TypeError):
         return Path.cwd().resolve()
 
 
@@ -368,7 +368,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if _safe_str(args.daily_budget, ""):
         try:
             daily_budget_int = int(_safe_str(args.daily_budget, ""))
-        except Exception:
+        except (ValueError, TypeError):
             raise ValueError("--daily-budget must be an integer (minor units)")
 
     rt = RuntimeInputs(

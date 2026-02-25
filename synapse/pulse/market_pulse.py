@@ -115,14 +115,14 @@ def _is_valid_http_url(u: str) -> bool:
     try:
         p = urlparse(u)
         return bool(p.scheme and p.netloc)
-    except Exception:
+    except (AttributeError):
         return False
 
 
 def _clamp01(x: float) -> float:
     try:
         return max(0.0, min(1.0, float(x)))
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 
@@ -179,7 +179,7 @@ def validate_signal(raw: Dict[str, Any]) -> Tuple[Optional[PulseSignal], List[st
 
     try:
         metric_value_f = float(metric_value)
-    except Exception:
+    except (ValueError, TypeError):
         metric_value_f = 0.0
         errs.append("metric_value debe ser numérico")
 
@@ -217,7 +217,7 @@ def _ledger_write(ledger_obj: Any, event_type: str, payload: Dict[str, Any]) -> 
     if hasattr(ledger_obj, "write"):
         try:
             ledger_obj.write(event_type=event_type, entity_type="system", entity_id="market_pulse", payload=payload)
-        except Exception:
+        except (AttributeError):
             return
 
 

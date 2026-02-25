@@ -1,13 +1,16 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
-from datetime import datetime, timezone
+
 import hashlib
 import json
 import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+import deal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AuditEvent:
     event_type: str
     timestamp: str
@@ -31,10 +34,19 @@ class AuditTrail:
     Append-only NDJSON with hash chain.
     v1 uses local filesystem; later we can swap backend.
     """
+
     def __init__(self, path: str = "data/audit/events.ndjson") -> None:
         self.path = path
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
 
+    @deal.pre(lambda self, event_type="", data=None, actor="system", correlation_id="corr-unknown": isinstance(event_type, str) and bool(event_type.strip()), message="event_type required")
+    @deal.pre(lambda self, event_type="", data=None, actor="system", correlation_id="corr-unknown": isinstance(data, dict), message="data must be dict")
+    @deal.pre(lambda self, event_type="", data=None, actor="system", correlation_id="corr-unknown": isinstance(actor, str) and bool(actor.strip()), message="actor required")
+    @deal.pre(lambda self, event_type="", data=None, actor="system", correlation_id="corr-unknown": isinstance(correlation_id, str) and bool(correlation_id.strip()), message="correlation_id required")
+    @deal.post(lambda result: isinstance(result, AuditEvent) and bool(result.hash), message="returns AuditEvent with hash")
+    @deal.raises(deal.PreContractError, deal.RaisesContractError)
     def append(
         self,
         event_type: str,
@@ -45,7 +57,7 @@ class AuditTrail:
         prev = self._last_hash()
         payload = {
             "event_type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "actor": actor,
             "correlation_id": correlation_id,
             "data": data,
@@ -61,19 +73,24 @@ class AuditTrail:
             prev_hash=payload["prev_hash"],
             hash=h,
         )
-        line = _canonical({
-            "event_type": evt.event_type,
-            "timestamp": evt.timestamp,
-            "actor": evt.actor,
-            "correlation_id": evt.correlation_id,
-            "data": evt.data,
-            "prev_hash": evt.prev_hash,
-            "hash": evt.hash,
-        })
+        line = _canonical(
+            {
+                "event_type": evt.event_type,
+                "timestamp": evt.timestamp,
+                "actor": evt.actor,
+                "correlation_id": evt.correlation_id,
+                "data": evt.data,
+                "prev_hash": evt.prev_hash,
+                "hash": evt.hash,
+            }
+        )
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
         return evt
 
+    @deal.pre(lambda self: True, message="AuditTrail.verify contract")
+    @deal.post(lambda result: isinstance(result, bool), message="returns bool")
+    @deal.raises(deal.RaisesContractError)
     def verify(self) -> bool:
         prev: Optional[str] = None
         if not os.path.exists(self.path):
@@ -84,10 +101,8 @@ class AuditTrail:
                 if not raw:
                     continue
                 obj = json.loads(raw)
-                # verify chain link
                 if obj.get("prev_hash") != prev:
                     return False
-                # verify hash
                 payload = {
                     "event_type": obj["event_type"],
                     "timestamp": obj["timestamp"],
@@ -104,7 +119,7 @@ class AuditTrail:
     def _last_hash(self) -> Optional[str]:
         if not os.path.exists(self.path):
             return None
-        last = None
+        last: Optional[str] = None
         with open(self.path, "r", encoding="utf-8") as f:
             for raw in f:
                 raw = raw.strip()
@@ -113,6 +128,10 @@ class AuditTrail:
         if not last:
             return None
         try:
-            return json.loads(last).get("hash")
-        except Exception:
+            parsed = json.loads(last)
+        except json.JSONDecodeError:
             return None
+        if not isinstance(parsed, dict):
+            return None
+        h = parsed.get("hash")
+        return str(h) if isinstance(h, str) else None

@@ -159,7 +159,7 @@ def _try_import(module: str) -> Tuple[bool, str]:
     try:
         importlib.import_module(module)
         return True, ""
-    except Exception as e:
+    except (ImportError, SyntaxError) as e:
         return False, f"{type(e).__name__}: {e}"
 
 
@@ -192,7 +192,7 @@ def _ledger_write(ledger_obj: Any, event_type: str, payload: Dict[str, Any]) -> 
     if hasattr(ledger_obj, "write"):
         try:
             ledger_obj.write(event_type=event_type, entity_type="system", entity_id="legacy_cleanup", payload=payload)
-        except Exception:
+        except (AttributeError):
             return
 
 

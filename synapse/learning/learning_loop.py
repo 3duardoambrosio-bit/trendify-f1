@@ -83,7 +83,7 @@ def parse_utm_content(utm: str | None) -> Dict[str, Any]:
         elif head in ("V", "v"):
             try:
                 out["version"] = int(tail)
-            except Exception:
+            except (ValueError, TypeError):
                 out["version"] = tail
 
     return out if out else {}
@@ -126,7 +126,7 @@ def _try_json_str(x: Any) -> Any:
         return None
     try:
         return json.loads(s)
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
@@ -230,7 +230,7 @@ def _get_spend(p: Dict[str, Any]) -> float:
         if k in p:
             try:
                 return float(p.get(k) or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 return 0.0
     return 0.0
 
@@ -240,7 +240,7 @@ def _get_roas(p: Dict[str, Any]) -> float:
         if k in p:
             try:
                 return float(p.get(k) or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 return 0.0
     return 0.0
 
@@ -250,7 +250,7 @@ def _get_hook_rate(p: Dict[str, Any]) -> float:
         if k in p:
             try:
                 return float(p.get(k) or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 return 0.0
     return 0.0
 
@@ -272,7 +272,7 @@ def _read_json_dict(path: Path) -> Dict[str, Any]:
     try:
         out = json.loads(path.read_text(encoding="utf-8"))
         return out if isinstance(out, dict) else {}
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
 
 
@@ -304,7 +304,7 @@ def _ledger_write(ledger_obj: Any, *, event_type: str, status: str, input_hash: 
         writes = getattr(ledger_obj, "writes", None)
         if isinstance(writes, list):
             writes.append(ev)
-    except Exception:
+    except (AttributeError):
         pass
 
 

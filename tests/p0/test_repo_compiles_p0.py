@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 import py_compile
@@ -27,7 +27,7 @@ def test_repo_compiles_no_syntax_errors() -> None:
             continue
         try:
             py_compile.compile(str(p), doraise=True)
-        except Exception:
+        except py_compile.PyCompileError:
             offenders.append(s)
 
     assert offenders == [], f"SYNTAX_ERRORS_DETECTED count={len(offenders)} offenders={offenders}"

@@ -15,7 +15,7 @@ def _read_json(p: Path) -> Dict[str, Any]:
         return {}
     try:
         obj = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
     return obj if isinstance(obj, dict) else {}
 
@@ -28,7 +28,7 @@ def _safe_str(x: Any, default: str = "") -> str:
 def _safe_int(x: Any, default: int = 0) -> int:
     try:
         return int(x)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 @dataclass
