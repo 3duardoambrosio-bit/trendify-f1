@@ -34,3 +34,36 @@ def test_append_and_verify_hash_chain(events) -> None:
         for (et, data, actor, cid) in events:
             _ = at.append(et, data, actor=actor, correlation_id=cid)
         assert at.verify() is True
+
+def test_verify_detects_tampered_hash() -> None:
+    """Si se altera un hash en el archivo, verify debe retornar False."""
+    import json
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from synapse.safety.audit import AuditTrail
+
+    with TemporaryDirectory() as td:
+        p = Path(td) / "events.ndjson"
+        at = AuditTrail(str(p))
+        at.append("evt1", {"k": "v"}, actor="a", correlation_id="c1")
+        at.append("evt2", {"k": "v2"}, actor="a", correlation_id="c2")
+        # Tamper: change hash of first event
+        lines = p.read_text(encoding="utf-8").strip().split("\n")
+        obj = json.loads(lines[0])
+        obj["hash"] = "0" * 64
+        lines[0] = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        assert at.verify() is False
+
+
+def test_verify_empty_file_returns_true() -> None:
+    """Archivo vacío o inexistente → verify True (cadena vacía es válida)."""
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from synapse.safety.audit import AuditTrail
+
+    with TemporaryDirectory() as td:
+        at = AuditTrail(str(Path(td) / "nonexistent.ndjson"))
+        assert at.verify() is True

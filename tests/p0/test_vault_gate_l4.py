@@ -38,3 +38,18 @@ def test_request_spend_with_gate_executes_only_when_allowed(budget_i: int, amoun
     else:
         assert v.calls == 0
         assert r.error is not None
+
+def test_vault_gate_blocks_when_amount_exceeds_limit() -> None:
+    """Si amount es muy alto relativo al budget, debe bloquearse."""
+    from decimal import Decimal
+
+    from synapse.safety.integrations.vault_gate import VaultGateConfig, request_spend_with_gate
+    from synapse.safety.limits import RiskLimits
+
+    # FakeVault should exist in this test module already (used by earlier tests).
+    v = FakeVault(total_budget=Decimal("100"))  # type: ignore[name-defined]
+    cfg = VaultGateConfig(limits=RiskLimits())
+    # amount=99 como daily_loss → > 80% killswitch threshold
+    r = request_spend_with_gate(vault=v, amount=Decimal("99"), bucket="learning", cfg=cfg)
+    assert r.executed is False
+    assert v.calls == 0

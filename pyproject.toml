@@ -8,7 +8,7 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
     "click>=8.0.0",
-  "deal",
+  "deal>=4.24,<5",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +35,8 @@ python_functions = "test_*"
 
 [tool.setuptools]
 # Le decimos explícitamente qué paquetes Python existen
-packages = ["buyer", "infra", "shared"]
-
 [tool.setuptools.package-data]
 # Por ahora nada especial
+
+[tool.setuptools.packages.find]
+include = ["buyer*", "infra*", "shared*", "synapse*", "ops*", "core*", "vault*"]

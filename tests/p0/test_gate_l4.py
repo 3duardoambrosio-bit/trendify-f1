@@ -43,3 +43,47 @@ def test_run_safety_gate_matches_risk_rules(budget_i: int, loss_i: int, exp_i: i
     else:
         d = run_safety_gate(snapshot=snap, limits=limits)
         assert d.allowed is True
+
+def test_on_trip_callback_called_when_blocked() -> None:
+    """Cuando gate bloquea, on_trip callback debe ejecutarse."""
+    from decimal import Decimal
+
+    from synapse.safety.gate import SafetyGateTripped, run_safety_gate
+    from synapse.safety.limits import RiskLimits, RiskSnapshot
+
+    limits = RiskLimits()
+    snap = RiskSnapshot(
+        monthly_budget=Decimal("100"),
+        expected_spend_rate_4h=Decimal("10"),
+        actual_spend_4h=Decimal("0"),
+        daily_loss=Decimal("99"),  # > 80% = killswitch
+    )
+    called = {"n": 0}
+
+    def on_trip(decision):
+        called["n"] += 1
+
+    try:
+        run_safety_gate(snapshot=snap, limits=limits, on_trip=on_trip)
+    except SafetyGateTripped:
+        pass
+
+    assert called["n"] == 1
+
+
+def test_gate_allows_safe_snapshot() -> None:
+    """Snapshot seguro debe pasar sin raise."""
+    from decimal import Decimal
+
+    from synapse.safety.gate import run_safety_gate
+    from synapse.safety.limits import RiskLimits, RiskSnapshot
+
+    limits = RiskLimits()
+    snap = RiskSnapshot(
+        monthly_budget=Decimal("300"),
+        expected_spend_rate_4h=Decimal("10"),
+        actual_spend_4h=Decimal("5"),
+        daily_loss=Decimal("1"),
+    )
+    d = run_safety_gate(snapshot=snap, limits=limits)
+    assert d.allowed is True
