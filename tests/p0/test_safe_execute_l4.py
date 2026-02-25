@@ -41,3 +41,28 @@ def test_safe_execute_runs_action_only_when_allowed(budget_i: int, loss_i: int) 
         assert called["n"] == 0
         assert r.result is None
         assert r.error is not None
+
+def test_safe_execute_does_not_run_action_when_blocked() -> None:
+    """Cuando gate bloquea, action NO debe ejecutarse."""
+    from decimal import Decimal
+
+    from synapse.safety.limits import RiskLimits, RiskSnapshot
+    from synapse.safety.safe_execute import safe_execute
+
+    limits = RiskLimits()
+    snap = RiskSnapshot(
+        monthly_budget=Decimal("100"),
+        expected_spend_rate_4h=Decimal("10"),
+        actual_spend_4h=Decimal("0"),
+        daily_loss=Decimal("99"),  # blocked
+    )
+    called = {"n": 0}
+
+    def action():
+        called["n"] += 1
+        return "SHOULD_NOT_HAPPEN"
+
+    r = safe_execute(snapshot=snap, limits=limits, action=action)
+    assert r.executed is False
+    assert called["n"] == 0
+    assert r.error is not None
