@@ -1,4 +1,4 @@
-"""Canonical thresholds for Meta Safe Client. S7: meta safe client."""
+﻿"""Canonical thresholds for Meta Safe Client. S7: meta safe client."""
 
 from __future__ import annotations
 
@@ -32,3 +32,16 @@ HEALTH_VELOCITY_YELLOW = Decimal("3.0")
 ADVANTAGE_PLUS_MIN_CREATIVES = 3
 ADVANTAGE_PLUS_LEARNING_DAYS = 7
 ADVANTAGE_PLUS_MIN_DAILY_USD = Decimal("5")
+# === SESSION S11: SHOPIFY WRITE + OXXO + CHECKOUT MX + COD ===
+
+# OXXO limits
+OXXO_MAX_AMOUNT_MXN = Decimal("10000")
+OXXO_MIN_AMOUNT_MXN = Decimal("20")
+OXXO_EXPIRY_HOURS = 72
+OXXO_REMINDER_HOURS = 48
+
+# COD risk
+COD_MAX_AMOUNT_MXN = Decimal("2000")
+COD_HIGH_RISK_THRESHOLD = Decimal("0.70")
+COD_MEDIUM_RISK_THRESHOLD = Decimal("0.40")
+COD_RURAL_RISK_BOOST = Decimal("0.20")
