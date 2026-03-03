@@ -8,7 +8,12 @@ Hard rules:
 - 3 formatos: 1:1, 4:5, 9:16
 - min lado corto >= 1080px
 - peso <= 30MB
-- dHash distance >= 6 (anti-duplicados perceptuales)
+
+Duplicates policy (realista):
+- Duplicados dentro del MISMO formato (mismo bucket 1:1/4:5/9:16) => FAIL (porque es falsa diversidad)
+- Duplicados cross-format (1:1 vs 4:5, etc.) => WARNING (es normal reusar el mismo creativo en ratios distintos)
+
+dHash threshold: min_dhash_distance (default 6)
 
 Nota: requiere Pillow para leer píxeles y calcular dHash.
 Si Pillow no está, el gate FAIL-CLOSED con error claro.
@@ -71,7 +76,6 @@ def _bucket_ratio(w: int, h: int) -> str:
 
 
 def _get_pixels_flat(img) -> List[int]:
-    # Pillow 14 deprecates getdata; use get_flattened_data when available.
     if hasattr(img, "get_flattened_data"):
         return list(img.get_flattened_data())
     return list(img.getdata())
@@ -118,7 +122,8 @@ def validate_kit_dir(kit_path: str, cfg: Optional[CreativeGateConfig] = None) ->
         errors.append("pillow_missing:install_pillow_to_enable_dhash_and_dimensions")
         return CreativeGateResult(False, errors, warnings, total, buckets)
 
-    dhs: List[Tuple[Path, int]] = []
+    # store: (path, dhash, bucket)
+    dhs: List[Tuple[Path, int, str]] = []
 
     for p in files:
         sz = p.stat().st_size
@@ -136,18 +141,28 @@ def validate_kit_dir(kit_path: str, cfg: Optional[CreativeGateConfig] = None) ->
             if b in buckets:
                 buckets[b] += 1
 
-            dhs.append((p, _dhash_64(im)))
+            dhs.append((p, _dhash_64(im), b))
 
+    # coverage is hard
     missing = [k for k, v in buckets.items() if v < 1]
     if missing:
         errors.append(f"format_coverage_failed:missing={','.join(missing)}:buckets={buckets}")
         return CreativeGateResult(False, errors, warnings, total, buckets)
 
+    # duplicates: FAIL only within same bucket; WARN across buckets
     for i in range(len(dhs)):
         for j in range(i + 1, len(dhs)):
-            d = _hamming(dhs[i][1], dhs[j][1])
+            pi, hi, bi = dhs[i]
+            pj, hj, bj = dhs[j]
+            d = _hamming(hi, hj)
             if d < cfg.min_dhash_distance:
-                errors.append(f"duplicate_failed:dhash_distance={d}:min={cfg.min_dhash_distance}:a={dhs[i][0].name}:b={dhs[j][0].name}")
-                return CreativeGateResult(False, errors, warnings, total, buckets)
+                if bi == bj and bi in ("1:1", "4:5", "9:16"):
+                    errors.append(
+                        f"duplicate_failed_same_format:dhash_distance={d}:min={cfg.min_dhash_distance}:bucket={bi}:a={pi.name}:b={pj.name}"
+                    )
+                    return CreativeGateResult(False, errors, warnings, total, buckets)
+                # cross-format: warning
+                if bi in ("1:1", "4:5", "9:16") and bj in ("1:1", "4:5", "9:16") and bi != bj:
+                    warnings.append(f"cross_format_duplicate_warning:dhash_distance={d}:min={cfg.min_dhash_distance}:a={pi.name}:{bi}:b={pj.name}:{bj}")
 
     return CreativeGateResult(True, [], warnings, total, buckets)
