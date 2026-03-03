@@ -1,13 +1,13 @@
 ﻿from __future__ import annotations
 
 """
-Creative Pack Gate  enforcer numérico para evitar creativos basura.
+Creative Pack Gate — enforcer numérico para evitar creativos basura.
 
-Hard rules (SENTRIA deck):
+Hard rules:
 - >= 3 creativos
 - 3 formatos: 1:1, 4:5, 9:16
-- min lado corto >= 1080px (hard floor)
-- peso <= 30MB (Meta Help Center)
+- min lado corto >= 1080px
+- peso <= 30MB
 - dHash distance >= 6 (anti-duplicados perceptuales)
 
 Nota: requiere Pillow para leer píxeles y calcular dHash.
@@ -17,9 +17,7 @@ __MARKER__ embedded in module constant below.
 """
 
 import logging
-import math
 from dataclasses import dataclass
-from decimal import Decimal
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -56,7 +54,6 @@ def _import_pillow():
 
 
 def _bucket_ratio(w: int, h: int) -> str:
-    # tolerant bucketing around canonical ratios
     if h <= 0 or w <= 0:
         return "other"
     r = w / h
@@ -73,10 +70,16 @@ def _bucket_ratio(w: int, h: int) -> str:
     return "other"
 
 
+def _get_pixels_flat(img) -> List[int]:
+    # Pillow 14 deprecates getdata; use get_flattened_data when available.
+    if hasattr(img, "get_flattened_data"):
+        return list(img.get_flattened_data())
+    return list(img.getdata())
+
+
 def _dhash_64(img) -> int:
-    # dHash 8x8 -> 64-bit int
     img = img.convert("L").resize((9, 8))
-    px = list(img.getdata())
+    px = _get_pixels_flat(img)
     bits = 0
     for row in range(8):
         base = row * 9
@@ -135,13 +138,11 @@ def validate_kit_dir(kit_path: str, cfg: Optional[CreativeGateConfig] = None) ->
 
             dhs.append((p, _dhash_64(im)))
 
-    # format coverage
     missing = [k for k, v in buckets.items() if v < 1]
     if missing:
         errors.append(f"format_coverage_failed:missing={','.join(missing)}:buckets={buckets}")
         return CreativeGateResult(False, errors, warnings, total, buckets)
 
-    # duplicate detection
     for i in range(len(dhs)):
         for j in range(i + 1, len(dhs)):
             d = _hamming(dhs[i][1], dhs[j][1])
