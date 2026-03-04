@@ -30,17 +30,26 @@ from synapse.meta.publisher_adapter import call_create_campaign, call_pause_camp
 # ---------------------------------------------------------------------------
 def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
     """Ask CapitalShieldV2 for budget approval.  Returns gate result dict."""
+    # Zero spend = nothing to protect. Allow through.
+    if spend_mxn <= 0:
+        return {"gate": "capital_shield", "allowed": True, "reason": "zero_spend_allowed", "correlation_id": correlation_id}
+
     try:
         from ops.capital_shield_v2 import CapitalShieldV2  # type: ignore[import-untyped]
     except ImportError:
-        return {"gate": "capital_shield", "allowed": True, "reason": "module_unavailable_passthrough"}
+        return {"gate": "capital_shield", "allowed": False, "reason": "module_unavailable_BLOCKED"}
 
-    # Minimal stub vault that always approves (real vault wired at deploy).
-    class _StubVault:
-        def request_spend(self, amount: Decimal, budget_type: str) -> bool:
-            return True
+    # S13: Real file-backed vault.
+    # FAIL-CLOSED: if vault cannot load, spending is blocked.
+    try:
+        from vault.vault_file_backed import VaultFileBacked  # type: ignore[import-untyped]
+        vault = VaultFileBacked()
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).critical("VAULT_LOAD_FAILED: %s — blocking spend", exc)
+        return {"gate": "capital_shield", "allowed": False, "reason": f"vault_load_failed:{type(exc).__name__}"}
 
-    shield = CapitalShieldV2(vault=_StubVault())
+    shield = CapitalShieldV2(vault=vault)
     decision = shield.decide_for_product(
         final_decision="approved",
         requested_amount=spend_mxn,
@@ -56,10 +65,15 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
 
 def _check_safety_middleware(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
     """Run safety_middleware checks.  Returns gate result dict."""
+    # Zero spend = nothing to protect. Allow through.
+    if spend_mxn <= 0:
+        return {"gate": "safety_middleware", "allowed": True, "reason": "zero_spend_allowed", "correlation_id": correlation_id}
+
     try:
         from ops.safety_middleware import check_safety_before_spend  # type: ignore[import-untyped]
     except ImportError:
-        return {"gate": "safety_middleware", "allowed": True, "reason": "module_unavailable_passthrough"}
+        # S13: FAIL-CLOSED — if safety module unavailable, block spend
+        return {"gate": "safety_middleware", "allowed": False, "reason": "module_unavailable_BLOCKED"}
 
     result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
     is_ok = bool(getattr(result, "is_ok", lambda: bool(result))())

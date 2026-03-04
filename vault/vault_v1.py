@@ -17,6 +17,10 @@ class SpendResult:
     amount: Decimal
     product_id: str
 
+    def is_ok(self) -> bool:
+        """CapitalShieldV2 compatibility: checks .is_ok() first."""
+        return self.allowed
+
 
 @dataclass
 class BudgetPool:
