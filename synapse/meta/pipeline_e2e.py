@@ -38,6 +38,7 @@ class PipelineE2EConfig:
     enable_health_check: bool = True
     enable_warm_up: bool = True
     enable_publish: bool = True
+    enable_creative_gate: bool = True  # S14: validate creatives before publish
     max_products: int = 25
 
     default_budget_daily_usd: Decimal = Decimal("10")
@@ -141,6 +142,22 @@ class PipelineE2E:
                 product_obj = getattr(p, "product", p)
                 creatives = getattr(p, "creatives", getattr(product_obj, "creatives", []))
                 pixel_events = getattr(p, "pixel_events", getattr(product_obj, "pixel_events", ["Purchase"]))
+
+                # S14: Creative gate — validate kit BEFORE publishing
+                if self._config.enable_creative_gate:
+                    kit_dir = getattr(p, "kit_dir", None) or getattr(product_obj, "kit_dir", None)
+                    if kit_dir:
+                        from synapse.meta.creative_gate_middleware import check_creative_gate
+                        gate_check = check_creative_gate(product_obj, kit_dir=kit_dir)
+                        if not gate_check.allowed:
+                            blocked += 1
+                            errors.append({
+                                "stage": "creative_gate",
+                                "product": getattr(product_obj, "sku", None) or getattr(product_obj, "id", None) or str(product_obj),
+                                "reason": gate_check.reason,
+                                "gate_errors": gate_check.errors,
+                            })
+                            continue
 
                 ok, prereq_errors = self._advantage_plus.validate_prerequisites(
                     creatives_count=len(creatives),
