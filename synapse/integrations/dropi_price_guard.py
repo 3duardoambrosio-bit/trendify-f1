@@ -254,4 +254,5 @@ def evaluate_price_changes(
 
 def load_json(path: str) -> Any:
     p = Path(path)
-    return json.loads(p.read_text(encoding="utf-8"))
+    # PowerShell suele escribir UTF-8 con BOM; y JSON puede traer floats => parse_float=Decimal
+    return json.loads(p.read_text(encoding="utf-8-sig"), parse_float=Decimal)

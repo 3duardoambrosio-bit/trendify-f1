@@ -1,10 +1,11 @@
 ﻿from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
-from synapse.integrations.dropi_price_guard import PriceGuardConfig, evaluate_price_changes
+from synapse.integrations.dropi_price_guard import PriceGuardConfig, evaluate_price_changes, load_json
 
 
 def test_blocks_on_large_increase():
@@ -66,7 +67,7 @@ def test_curr_zero_fail_closed():
 
 
 def test_float_rejected_fail_closed_parse():
-    prev = {"SKU1": 100.0}  # float is forbidden
+    prev = {"SKU1": 100.0}  # float is forbidden in in-memory payloads
     curr = {"SKU1": "101"}
     r = evaluate_price_changes(prev, curr, None, PriceGuardConfig())
     assert r.allowed is False
@@ -80,3 +81,23 @@ def test_items_shape_supported():
     r = evaluate_price_changes(prev, curr, None, PriceGuardConfig(max_increase_pct=Decimal("0.20"), min_margin_pct=Decimal("0.10")))
     assert r.allowed is True
     assert len(r.items) == 1
+
+
+def test_load_json_handles_bom_and_floats(tmp_path: Path):
+    # Write BOM + float numbers (PowerShell-like UTF-8 BOM)
+    bom = b"\xef\xbb\xbf"
+    prev_path = tmp_path / "prev.json"
+    curr_path = tmp_path / "curr.json"
+
+    prev_path.write_bytes(bom + b'{"SKU1": 100.0}')
+    curr_path.write_bytes(bom + b'{"SKU1": 110.0}')
+
+    prev = load_json(str(prev_path))
+    curr = load_json(str(curr_path))
+
+    # After parse_float=Decimal, these are NOT floats.
+    assert isinstance(prev["SKU1"], Decimal)
+    assert isinstance(curr["SKU1"], Decimal)
+
+    r = evaluate_price_changes(prev, curr, None, PriceGuardConfig(max_increase_pct=Decimal("0.20"), min_margin_pct=Decimal("0.10")))
+    assert r.allowed is True
