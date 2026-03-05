@@ -1,4 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+"""
+Shopify ↔ Ledger Reconciliation CLI — S18 + S18.1 hotfix.
+
+Default: paid orders only (safe). Use --all-statuses to include all.
+"""
 
 import argparse
 import logging
@@ -21,7 +27,8 @@ def main() -> int:
     ap.add_argument("--orders", required=True, help="Shopify orders JSON (list or {orders:[...]})")
     ap.add_argument("--ledger", required=True, help="Ledger NDJSON/JSON (list or {entries:[...]})")
     ap.add_argument("--tolerance-mxn", default="0.50")
-    ap.add_argument("--require-paid-only", action="store_true", default=False, help="Only consider paid orders")
+    ap.add_argument("--all-statuses", action="store_true", default=False,
+                    help="Consider ALL orders, not just paid (default: paid only)")
     ap.add_argument("--block-on-extra-ledger", action="store_true", default=False)
     args = ap.parse_args()
 
@@ -30,7 +37,7 @@ def main() -> int:
 
     cfg = ReconcileConfig(
         tolerance_mxn=Decimal(args.tolerance_mxn),
-        require_shopify_paid_only=bool(args.require_paid_only),
+        require_shopify_paid_only=not args.all_statuses,
         block_on_extra_ledger_entries=bool(args.block_on_extra_ledger),
     )
     r = reconcile_shopify_vs_ledger(orders, ledger, cfg)
