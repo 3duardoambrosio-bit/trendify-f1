@@ -1,5 +1,5 @@
 """
-S17 — Alert Sinks (Telegram + Null).
+S17+S19 — Alert Sinks (Telegram + Null).
 
 Design:
 - AlertSink protocol: .send(text, level, dedupe_key) → AlertSendResult
@@ -10,6 +10,7 @@ CRITICAL:
   - Alerting NEVER raises. If Telegram is down, log + return ok=False.
   - NO urllib/requests in this module. All network via SimpleHttpClient.
   - Rate limiting: same dedupe_key within min_interval_s → skip.
+  - S19: _last_sent capped at max_rate_limit_keys (default 1000). FIFO eviction.
 
 __MARKER__ embedded in module constant below.
 """
@@ -23,9 +24,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol
 
-__MARKER__ = "SESSION_S17_telegram_alerts_2026-03-04"
+__MARKER__ = "SESSION_S19_telegram_alerts_2026-03-04"
 
 log = logging.getLogger(__name__)
+
+_DEFAULT_MAX_RATE_KEYS = 1000
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,8 @@ class TelegramAlertSink:
       client.post_json(url, payload, headers, timeout_s) → HttpResponse
       HttpResponse.status: int
       HttpResponse.body: bytes
+
+    S19: _last_sent capped at max_rate_limit_keys. When full, evicts oldest entries (FIFO).
     """
 
     def __init__(
@@ -64,12 +69,14 @@ class TelegramAlertSink:
         *,
         timeout_s: float = 10.0,
         min_interval_s: float = 15.0,
+        max_rate_limit_keys: int = _DEFAULT_MAX_RATE_KEYS,
         http_client: Optional[Any] = None,
     ) -> None:
         self._token = (token or "").strip()
         self._chat_id = (chat_id or "").strip()
         self._timeout_s = float(timeout_s)
         self._min_interval_s = float(min_interval_s)
+        self._max_keys = max(1, max_rate_limit_keys)
         self._last_sent: Dict[str, float] = {}
         self._http = http_client
 
@@ -82,6 +89,16 @@ class TelegramAlertSink:
 
     def _url(self) -> str:
         return f"https://api.telegram.org/bot{self._token}/sendMessage"
+
+    def _evict_oldest(self) -> None:
+        """Evict oldest entries when _last_sent exceeds max_keys."""
+        if len(self._last_sent) <= self._max_keys:
+            return
+        # Sort by timestamp, keep newest max_keys
+        sorted_keys = sorted(self._last_sent.keys(), key=lambda k: self._last_sent[k])
+        to_remove = len(self._last_sent) - self._max_keys
+        for k in sorted_keys[:to_remove]:
+            del self._last_sent[k]
 
     def send(self, text: str, *, level: str = "INFO", dedupe_key: Optional[str] = None) -> AlertSendResult:
         try:
@@ -106,6 +123,7 @@ class TelegramAlertSink:
             return AlertSendResult(ok=True, delivered=False, status=0, error="rate_limited")
 
         self._last_sent[key] = now
+        self._evict_oldest()
 
         # Build Telegram sendMessage payload
         tg_payload = {

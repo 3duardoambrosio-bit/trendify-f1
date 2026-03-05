@@ -1,4 +1,4 @@
-"""Meta Safe Client: PAUSED-by-default, spend caps, circuit breaker, ledger. S7."""
+"""Meta Safe Client: PAUSED-by-default, spend caps, circuit breaker, ledger. S7+S19."""
 
 from __future__ import annotations
 
@@ -167,6 +167,18 @@ class MetaSafeClient:
                 payload=result,
                 critical=True,
             )
+            # S19: Alert on spend block
+            try:
+                from synapse.infra.alert_wiring import get_alert_sink
+                sink = get_alert_sink()
+                sink.send(
+                    f"SPEND BLOCKED by {','.join(blocked_by)} "
+                    f"budget={budget_mxn} corr={correlation_id}",
+                    level="WARN",
+                    dedupe_key=f"spend_blocked:{correlation_id}",
+                )
+            except Exception:
+                pass  # best-effort
             return result
 
         # Idempotency check
@@ -398,4 +410,15 @@ class MetaSafeClient:
             payload=result,
             critical=True,
         )
+        # S19: Alert on error
+        try:
+            from synapse.infra.alert_wiring import get_alert_sink
+            sink = get_alert_sink()
+            sink.send(
+                f"META ERROR: {error_code} — {str(exc)[:100]}",
+                level="ERROR",
+                dedupe_key=f"meta_error:{error_code}:{correlation_id}",
+            )
+        except Exception:
+            pass  # best-effort
         return result

@@ -112,6 +112,18 @@ class PipelineE2E:
                 )
 
             if (health_status.risk_level == "red") or (health_status.can_publish is False):
+                # S19: Alert on health-check block
+                try:
+                    from synapse.infra.alert_wiring import get_alert_sink
+                    sink = get_alert_sink()
+                    sink.send(
+                        f"PIPELINE BLOCKED: account health={health_status.risk_level} "
+                        f"can_publish={health_status.can_publish} — {len(products)} product(s) blocked",
+                        level="CRITICAL",
+                        dedupe_key="pipeline_health_blocked",
+                    )
+                except Exception:
+                    pass
                 return PipelineE2EResult(
                     products_processed=0,
                     campaigns_created=0,
@@ -195,7 +207,7 @@ class PipelineE2E:
                 blocked += 1
                 errors.append({"stage": "pipeline", "error": str(e)})
 
-        return PipelineE2EResult(
+        result_out = PipelineE2EResult(
             products_processed=processed,
             campaigns_created=created,
             campaigns_blocked=blocked,
@@ -204,3 +216,20 @@ class PipelineE2E:
             warm_up_limit=warm_limit,
             live_api_enabled=live,
         )
+
+        # S19: Alert if any campaigns were blocked
+        if blocked > 0:
+            try:
+                from synapse.infra.alert_wiring import get_alert_sink
+                sink = get_alert_sink()
+                stages = list({e.get("stage", "unknown") for e in errors})
+                sink.send(
+                    f"PIPELINE: {blocked} campaign(s) blocked, {created} created. "
+                    f"Stages: {stages}",
+                    level="WARN",
+                    dedupe_key=f"pipeline_blocked:{blocked}:{created}",
+                )
+            except Exception:
+                pass  # best-effort
+
+        return result_out

@@ -2,6 +2,8 @@
 
 Orchestrates the Phase-1 loop end-to-end via subprocess calls.
 No direct money-path logic; delegates to specialised modules.
+
+S19: Added reconcile pre-flight gate + alert emission.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ import deal
 
 from synapse.infra.cli_logging import cli_print
 
-_MARKER = "OPS_TICK_2026-01-13_V3_SAFE_NOIMPORT_SKIP_RUNNER"
+_MARKER = "OPS_TICK_2026-03-04_V4_S19_RECONCILE_ALERT"
 _LEDGER_REL = Path("data/ledger/events.ndjson")
 
 
@@ -187,6 +189,60 @@ def _persist_report(report: Dict[str, Any]) -> None:
     ))
 
 
+# ── S19: Reconcile Pre-flight Gate ────────────────────────
+
+def _reconcile_preflight() -> Dict[str, Any]:
+    """
+    Pre-flight reconcile gate.
+
+    Reads SYNAPSE_RECONCILE_ORDERS and SYNAPSE_RECONCILE_LEDGER from env.
+    If both set, runs Shopify↔Ledger reconciliation.
+    If blocked → returns gate result with blocked=True + emits alert.
+    If env vars not set → skips (not mandatory, returns ok).
+    """
+    from synapse.infra.alert_wiring import get_alert_sink
+
+    orders_path = os.environ.get("SYNAPSE_RECONCILE_ORDERS", "").strip()
+    ledger_path = os.environ.get("SYNAPSE_RECONCILE_LEDGER", "").strip()
+
+    if not orders_path or not ledger_path:
+        return {"gate": "reconcile", "status": "skipped", "reason": "env_vars_not_set", "blocked": False}
+
+    try:
+        from synapse.infra.shopify_ledger_reconcile import (
+            ReconcileConfig,
+            load_json_any,
+            load_ledger_any,
+            reconcile_shopify_vs_ledger,
+        )
+
+        shop = load_json_any(orders_path)
+        led = load_ledger_any(ledger_path)
+        cfg = ReconcileConfig(require_shopify_paid_only=True)
+        result = reconcile_shopify_vs_ledger(shop, led, cfg)
+
+        if result.blocked:
+            sink = get_alert_sink()
+            top_items = result.items[:5]
+            msg = (
+                f"RECONCILE BLOCKED: missing={result.missing_count} "
+                f"mismatch={result.mismatch_count} extra={result.extra_count} "
+                f"top={[(i.order_id, i.kind) for i in top_items]}"
+            )
+            sink.send(msg, level="CRITICAL", dedupe_key="reconcile_blocked")
+            return {"gate": "reconcile", "status": "BLOCKED", "blocked": True, "detail": msg}
+
+        return {"gate": "reconcile", "status": "PASS", "blocked": False,
+                "missing": result.missing_count, "mismatch": result.mismatch_count}
+
+    except Exception as e:
+        # FAIL-CLOSED: if reconcile crashes, block the tick
+        sink = get_alert_sink()
+        msg = f"RECONCILE EXCEPTION: {type(e).__name__}: {e}"
+        sink.send(msg, level="CRITICAL", dedupe_key="reconcile_exception")
+        return {"gate": "reconcile", "status": "ERROR", "blocked": True, "error": str(e)}
+
+
 # ── Public Entry Point ────────────────────────────────────
 
 @deal.pre(
@@ -203,6 +259,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     repo = Path.cwd()
     ledger_path = repo / _LEDGER_REL
 
+    # S19: Reconcile pre-flight gate (before any spending steps)
+    reconcile_gate = _reconcile_preflight()
+    if reconcile_gate.get("blocked"):
+        report: Dict[str, Any] = {
+            "marker": _MARKER,
+            "ts": _utc_now_z(),
+            "repo": str(repo),
+            "inputs": asdict(config),
+            "reconcile_gate": reconcile_gate,
+            "steps": [],
+            "status": "FAIL",
+        }
+        _persist_report(report)
+        return 2
+
     hash_before = _sha256(ledger_path) if ledger_path.exists() else None
     steps = _execute_steps(config)
     checks = _readonly_checks(
@@ -210,11 +281,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     status = _compute_status(steps, checks)
 
-    report: Dict[str, Any] = {
+    # S19: Alert on tick failure
+    if status == "FAIL":
+        try:
+            from synapse.infra.alert_wiring import get_alert_sink
+            sink = get_alert_sink()
+            failed = [s for s in steps if s.returncode != 0]
+            msg = f"OPS_TICK FAILED: {len(failed)} step(s) failed"
+            sink.send(msg, level="ERROR", dedupe_key="ops_tick_fail")
+        except Exception:
+            pass  # best-effort alerting
+
+    report = {
         "marker": _MARKER,
         "ts": _utc_now_z(),
         "repo": str(repo),
         "inputs": asdict(config),
+        "reconcile_gate": reconcile_gate,
         "checks": checks,
         "steps": [asdict(s) for s in steps],
         "status": status,

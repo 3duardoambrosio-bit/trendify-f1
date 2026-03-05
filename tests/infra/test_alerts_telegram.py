@@ -203,3 +203,40 @@ class TestHttpErrors:
         assert r.ok is False
         assert r.delivered is False
         assert r.status == 500
+
+
+# ── 8. S19: LRU cap on _last_sent ───────────────────────────
+
+class TestRateLimitCap:
+    def test_last_sent_capped_at_max_keys(self):
+        """After 2000 unique sends, _last_sent should be <= 1000."""
+        fake = FakeHttpClient()
+        s = TelegramAlertSink(
+            token="T0K", chat_id="123",
+            http_client=fake,
+            min_interval_s=0,  # no rate limiting (every msg goes through)
+            max_rate_limit_keys=1000,
+        )
+        for i in range(2000):
+            s.send(f"msg_{i}", dedupe_key=f"key_{i}")
+
+        assert len(s._last_sent) <= 1000, f"Expected <= 1000, got {len(s._last_sent)}"
+        # Should have sent all 2000 (no rate limiting)
+        assert len(fake.calls) == 2000
+
+    def test_eviction_keeps_newest(self):
+        """After eviction, the newest keys should be retained."""
+        fake = FakeHttpClient()
+        s = TelegramAlertSink(
+            token="T0K", chat_id="123",
+            http_client=fake,
+            min_interval_s=0,
+            max_rate_limit_keys=5,
+        )
+        for i in range(10):
+            s.send(f"msg_{i}", dedupe_key=f"key_{i}")
+
+        assert len(s._last_sent) <= 5
+        # Most recent keys should be present
+        assert "key_9" in s._last_sent
+        assert "key_8" in s._last_sent
