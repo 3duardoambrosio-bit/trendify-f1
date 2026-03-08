@@ -1,4 +1,4 @@
-"""Simple circuit breaker. AUTO: F1_CORE_BOOTSTRAP_2026_02"""
+"""Simple circuit breaker. AUTO: F1_CORE_BOOTSTRAP_2026_02 + S19.1 P0 fix."""
 
 from __future__ import annotations
 import time
@@ -32,7 +32,10 @@ class CircuitBreaker:
             self._failures = 0
             self._opened_at = None
             return out
-        except (AttributeError):
+        except Exception:
+            # S19.1 P0 FIX: was `except (AttributeError)` which meant
+            # HTTP 500, timeouts, ConnectionError etc. never counted
+            # as failures. Now ANY exception trips the breaker.
             self._failures += 1
             if self._failures >= self.failure_threshold:
                 self._opened_at = time.time()
