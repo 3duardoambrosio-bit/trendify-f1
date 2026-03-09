@@ -37,9 +37,12 @@ def test_fixture_refunds_create_roundtrip(tmp_path: Path) -> None:
     r1 = _run_cli(fx, secret)
     assert r1.returncode == 0
     out_dir = fx / "out"
+
     assert (out_dir / "status_code.txt").read_text(encoding="utf-8").strip() == "200"
     assert (out_dir / "refund_event.json").exists()
     assert (out_dir / "refund_registry.ndjson").exists()
+    assert (out_dir / "refund_ledger.ndjson").exists()
+    assert (out_dir / "refund_ledger_idempotency.json").exists()
 
     meta1 = json.loads((out_dir / "processing_metadata.json").read_text(encoding="utf-8"))
     assert meta1["webhook_topic"] == "refunds/create"
@@ -47,9 +50,12 @@ def test_fixture_refunds_create_roundtrip(tmp_path: Path) -> None:
     assert meta1["dedup_result"] == "new"
     assert meta1["refund_processed"] is True
     assert meta1["refund_recorded"] is True
+    assert meta1["refund_ledger_recorded"] is True
+    assert meta1["refund_ledger_duplicate"] is False
+    assert meta1["refund_ledger_line_count"] == 1
 
-    lines1 = (out_dir / "refund_registry.ndjson").read_text(encoding="utf-8").splitlines()
-    assert len(lines1) == 1
+    ledger_lines_1 = (out_dir / "refund_ledger.ndjson").read_text(encoding="utf-8").splitlines()
+    assert len(ledger_lines_1) == 1
 
     r2 = _run_cli(fx, secret)
     assert r2.returncode == 3
@@ -60,5 +66,5 @@ def test_fixture_refunds_create_roundtrip(tmp_path: Path) -> None:
     assert meta2["shop_domain"] == "example.myshopify.com"
     assert meta2["dedup_result"] == "duplicate"
 
-    lines2 = (out_dir / "refund_registry.ndjson").read_text(encoding="utf-8").splitlines()
-    assert len(lines2) == 1
+    ledger_lines_2 = (out_dir / "refund_ledger.ndjson").read_text(encoding="utf-8").splitlines()
+    assert len(ledger_lines_2) == 1

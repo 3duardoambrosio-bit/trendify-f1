@@ -53,6 +53,10 @@ def test_fixture_refunds_create_invalid_payload_fails_closed(tmp_path: Path) -> 
     assert meta["webhook_topic"] == "refunds/create"
     assert meta["refund_processed"] is False
     assert meta["refund_recorded"] is False
+    assert meta["refund_ledger_recorded"] is False
+
+    assert not (out_dir / "refund_ledger.ndjson").exists()
+    assert not (out_dir / "refund_ledger_idempotency.json").exists()
 
     dedup = out_dir / "dedup.json"
     if dedup.exists():

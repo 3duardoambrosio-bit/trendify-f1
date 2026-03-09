@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -14,6 +15,7 @@ try:
 except Exception:  # pragma: no cover
     compute_shopify_hmac_sha256_base64 = None  # type: ignore
 
+from synapse.infra.refund_ledger_bridge import record_refund_in_ledger
 from synapse.infra.refund_normalizer import (
     RefundNormalizationError,
     normalize_shopify_refund_event,
@@ -100,9 +102,7 @@ def _compute_hmac(secret: str, body: bytes) -> str:
 
 
 def _parse_threshold_env() -> Decimal | None:
-    raw = str(Path.cwd())  # harmless line to keep py311 syntax context stable
-    _ = raw
-    env = __import__("os").environ.get("SYNAPSE_REFUND_ALERT_THRESHOLD_MXN", "").strip()
+    env = os.environ.get("SYNAPSE_REFUND_ALERT_THRESHOLD_MXN", "").strip()
     if env == "":
         return None
     try:
@@ -122,6 +122,15 @@ def _emit_alert(text: str) -> bool:
         return False
 
 
+def _resolve_refund_ledger_paths(out_dir: Path) -> tuple[Path, Path]:
+    ledger_env = os.environ.get("SYNAPSE_REFUND_LEDGER_PATH", "").strip()
+    idem_env = os.environ.get("SYNAPSE_REFUND_LEDGER_IDEMPOTENCY_PATH", "").strip()
+
+    ledger_path = Path(ledger_env) if ledger_env else (out_dir / "refund_ledger.ndjson")
+    idem_path = Path(idem_env) if idem_env else (out_dir / "refund_ledger_idempotency.json")
+    return ledger_path, idem_path
+
+
 def _process_refund_topic(body: bytes, out_dir: Path) -> Dict[str, Any]:
     try:
         payload = json.loads(body.decode("utf-8"), parse_float=Decimal)
@@ -133,9 +142,11 @@ def _process_refund_topic(body: bytes, out_dir: Path) -> Dict[str, Any]:
 
     event_path = out_dir / "refund_event.json"
     registry_path = out_dir / "refund_registry.ndjson"
+    ledger_path, idem_path = _resolve_refund_ledger_paths(out_dir)
 
     _write_json(event_path, event_dict)
     reg = record_refund_event(registry_path, event)
+    ledger_result = record_refund_in_ledger(ledger_path, idem_path, event)
 
     threshold = _parse_threshold_env()
     alert_emitted = False
@@ -156,6 +167,11 @@ def _process_refund_topic(body: bytes, out_dir: Path) -> Dict[str, Any]:
         "refund_line_items_count": len(event.line_items),
         "refund_event_path": str(event_path),
         "refund_registry_path": str(registry_path),
+        "refund_ledger_recorded": bool(ledger_result.recorded),
+        "refund_ledger_duplicate": bool(ledger_result.duplicate),
+        "refund_ledger_path": str(ledger_result.ledger_path),
+        "refund_ledger_idempotency_path": str(ledger_result.idempotency_path),
+        "refund_ledger_line_count": int(ledger_result.ledger_line_count),
         "refund_alert_emitted": bool(alert_emitted),
     }
 
@@ -164,7 +180,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="shopify_webhook_cli")
 
     p.add_argument("--fixture-dir", "--fixture", dest="fixture_dir", default="")
-
     p.add_argument("--headers", "--headers-path", "--headers_file", dest="headers", default="")
     p.add_argument("--body", "--body-path", "--body_file", dest="body", default="")
     p.add_argument("--secret", "--hmac-secret", "--shared-secret", dest="secret", required=True)
@@ -175,7 +190,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = p.parse_args(list(argv) if argv is not None else None)
 
     t0 = time.perf_counter()
-
     fixture_dir = Path(args.fixture_dir) if args.fixture_dir else None
 
     if fixture_dir is not None:
@@ -212,6 +226,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         "refund_processed": False,
         "refund_recorded": False,
         "refund_duplicate_by_refund_id": False,
+        "refund_ledger_recorded": False,
+        "refund_ledger_duplicate": False,
         "refund_alert_emitted": False,
     }
 
@@ -247,6 +263,14 @@ def main(argv: Iterable[str] | None = None) -> int:
                             "reason": f"refund_normalization_failed:{e}",
                             "dedup_key": dedup_key,
                         }
+                    except Exception as e:
+                        status_code = 500
+                        rc = EXIT_BAD_REQUEST
+                        body_json = {
+                            "ok": False,
+                            "reason": f"refund_processing_failed:{type(e).__name__}",
+                            "dedup_key": dedup_key,
+                        }
                     else:
                         dedup_entries.append(dedup_key)
                         _save_dedup_list(dedup_path, dedup_entries)
@@ -257,6 +281,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                             "ok": True,
                             "refund_id": refund_meta.get("refund_id"),
                             "refund_recorded": refund_meta.get("refund_recorded"),
+                            "refund_ledger_recorded": refund_meta.get("refund_ledger_recorded"),
                         }
                 else:
                     dedup_entries.append(dedup_key)
@@ -286,7 +311,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     processing_metadata.update(refund_meta)
 
     _write_json(out_dir / "processing_metadata.json", processing_metadata)
-
     return rc
 
 

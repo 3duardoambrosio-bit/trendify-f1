@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import json
+from decimal import Decimal
+
+from synapse.infra.refund_ledger_bridge import record_refund_in_ledger
+from synapse.infra.refund_normalizer import RefundEvent
+
+
+def _mk_event() -> RefundEvent:
+    return RefundEvent(
+        refund_id="rf_100",
+        order_id="ord_900",
+        amount=Decimal("49.90"),
+        currency="MXN",
+        reason="customer_request",
+        created_at="2026-03-09T00:00:00Z",
+        line_items=("SKU-1", "SKU-2"),
+        source="webhook",
+    )
+
+
+def test_refund_ledger_bridge_writes_event(tmp_path):
+    ledger_path = tmp_path / "refund_ledger.ndjson"
+    idem_path = tmp_path / "refund_ledger_idempotency.json"
+
+    result = record_refund_in_ledger(ledger_path, idem_path, _mk_event())
+
+    assert result.recorded is True
+    assert result.duplicate is False
+    assert result.ledger_line_count == 1
+
+    lines = ledger_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+
+    assert row["event_type"] == "SHOPIFY_REFUND_RECORDED"
+    assert row["correlation_id"] == "refund:rf_100"
+    assert row["idempotency_key"] == "refund:rf_100"
+    assert row["payload"]["refund_id"] == "rf_100"
+    assert row["payload"]["order_id"] == "ord_900"
+    assert row["payload"]["amount_mxn"] == "49.90"
+
+
+def test_refund_ledger_bridge_is_idempotent(tmp_path):
+    ledger_path = tmp_path / "refund_ledger.ndjson"
+    idem_path = tmp_path / "refund_ledger_idempotency.json"
+    event = _mk_event()
+
+    r1 = record_refund_in_ledger(ledger_path, idem_path, event)
+    r2 = record_refund_in_ledger(ledger_path, idem_path, event)
+
+    assert r1.recorded is True
+    assert r2.recorded is False
+    assert r2.duplicate is True
+
+    lines = ledger_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
