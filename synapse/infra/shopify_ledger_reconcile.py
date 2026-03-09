@@ -1,11 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """
-S18  Shopify  Ledger Reconciliation Guard
+S24 Shopify ↔ Ledger Reconciliation Guard (refund-aware)
 
 Objetivo:
 - Detectar drift entre cobros reales (Shopify orders) y registros internos (ledger).
 - FAIL-CLOSED: si falta una orden pagada en ledger, o hay mismatch de monto => BLOCK.
+- Aware de refunds grabados por S23 (`SHOPIFY_REFUND_RECORDED`) para netear monto por orden.
 
 Soporta inputs:
 - Shopify orders payload: list[dict] o {"orders":[...]}
@@ -13,15 +14,15 @@ Soporta inputs:
   - NDJSON (1 JSON por línea) o list[dict] o {"entries":[...]}
 
 Notas:
-- Tolerancia por default: 0.50 MXN (para redondeos/fees menores en datasets de prueba)
-- Solo considera órdenes "paid" por default (configurable)
+- Tolerancia por default: 0.50 MXN
+- Solo considera órdenes "paid" por default
+- Refund bridge S23 se interpreta como monto NEGATIVO para la orden correspondiente
 
 __MARKER__ embedded below.
 """
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -29,14 +30,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import deal
 
-__MARKER__ = "SESSION_S18_shopify_ledger_reconcile_2026-03-04"
+__MARKER__ = "SESSION_S24_shopify_ledger_reconcile_refund_aware_2026-03-09"
 
 log = logging.getLogger(__name__)
 
-
-# 
-# Models
-# 
 
 @dataclass(frozen=True)
 class ReconcileConfig:
@@ -77,17 +74,12 @@ class ReconcileResult:
     items: List[DriftItem]
 
 
-# 
-# Helpers
-# 
-
 def _dec(x: Any) -> Decimal:
     if isinstance(x, Decimal):
         return x
     if isinstance(x, int):
         return Decimal(x)
     if isinstance(x, float):
-        # fail-closed: floats in-memory are poison
         raise InvalidOperation("float_not_allowed")
     if isinstance(x, str):
         s = x.strip()
@@ -98,8 +90,7 @@ def _dec(x: Any) -> Decimal:
 
 
 def _norm_order_id(x: Any) -> str:
-    s = str(x).strip()
-    return s
+    return str(x).strip()
 
 
 def _first(d: Dict[str, Any], keys: Iterable[str]) -> Optional[Any]:
@@ -110,24 +101,20 @@ def _first(d: Dict[str, Any], keys: Iterable[str]) -> Optional[Any]:
 
 
 def _load_text(path: str) -> str:
-    # BOM-safe
     return Path(path).read_text(encoding="utf-8-sig")
 
 
 def load_json_any(path: str) -> Any:
-    # Also Decimal-safe for floats coming from JSON files
     return json.loads(_load_text(path), parse_float=Decimal)
 
 
 def load_ledger_any(path: str) -> Any:
     p = Path(path)
     txt = _load_text(str(p))
-    # NDJSON must return list even if single-line (common in smoke fixtures)
     suf = p.suffix.lower()
     lines = [ln for ln in txt.splitlines() if ln.strip() != ""]
     if suf in (".ndjson", ".jsonl"):
         return [json.loads(ln, parse_float=Decimal) for ln in lines]
-    # Heuristic fallback: multi-line payload that is not a JSON array
     if len(lines) >= 2 and not txt.lstrip().startswith("["):
         try:
             return [json.loads(ln, parse_float=Decimal) for ln in lines]
@@ -135,9 +122,6 @@ def load_ledger_any(path: str) -> Any:
             pass
     return json.loads(txt, parse_float=Decimal)
 
-# 
-# Parsers
-# 
 
 def parse_shopify_orders(payload: Any) -> List[OrderRow]:
     if isinstance(payload, dict) and isinstance(payload.get("orders"), list):
@@ -154,6 +138,7 @@ def parse_shopify_orders(payload: Any) -> List[OrderRow]:
         oid = _first(o, ("id", "order_id", "order_number", "name"))
         if oid is None:
             continue
+
         order_id = _norm_order_id(oid)
         if order_id == "":
             continue
@@ -171,7 +156,6 @@ def parse_shopify_orders(payload: Any) -> List[OrderRow]:
             ),
         )
 
-        # handle *_set shape: {"shop_money":{"amount":"123.45","currency_code":"MXN"}}
         if isinstance(total_raw, dict):
             shop_money = total_raw.get("shop_money") or total_raw.get("presentment_money") or {}
             if isinstance(shop_money, dict):
@@ -183,9 +167,40 @@ def parse_shopify_orders(payload: Any) -> List[OrderRow]:
 
         total = _dec(total_raw)
 
-        rows.append(OrderRow(order_id=order_id, total_mxn=total, currency=currency, financial_status=financial))
+        rows.append(
+            OrderRow(
+                order_id=order_id,
+                total_mxn=total,
+                currency=currency,
+                financial_status=financial,
+            )
+        )
 
     return rows
+
+
+def _parse_refund_bridge_entry(e: Dict[str, Any]) -> Optional[LedgerRow]:
+    event_type = str(e.get("event_type") or "").strip().upper()
+    if event_type != "SHOPIFY_REFUND_RECORDED":
+        return None
+
+    payload = e.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("refund_event_payload_not_dict")
+
+    oid = _first(payload, ("order_id", "shopify_order_id", "order", "orderNumber", "order_name"))
+    amt = _first(payload, ("amount_mxn", "amount", "mxn", "value", "total_mxn", "total"))
+
+    if oid is None or amt is None:
+        raise ValueError("refund_event_missing_order_or_amount")
+
+    order_id = _norm_order_id(oid)
+    if order_id == "":
+        raise ValueError("refund_event_empty_order_id")
+
+    amount = _dec(amt).copy_abs()
+
+    return LedgerRow(order_id=order_id, amount_mxn=-amount)
 
 
 def parse_ledger_entries(payload: Any) -> List[LedgerRow]:
@@ -200,6 +215,11 @@ def parse_ledger_entries(payload: Any) -> List[LedgerRow]:
         if not isinstance(e, dict):
             continue
 
+        refund_row = _parse_refund_bridge_entry(e)
+        if refund_row is not None:
+            rows.append(refund_row)
+            continue
+
         oid = _first(e, ("order_id", "shopify_order_id", "order", "orderNumber", "order_name"))
         amt = _first(e, ("amount_mxn", "amount", "mxn", "value", "total_mxn", "total"))
 
@@ -209,15 +229,12 @@ def parse_ledger_entries(payload: Any) -> List[LedgerRow]:
         order_id = _norm_order_id(oid)
         if order_id == "":
             continue
+
         amount = _dec(amt)
         rows.append(LedgerRow(order_id=order_id, amount_mxn=amount))
 
     return rows
 
-
-# 
-# Core reconcile
-# 
 
 @deal.pre(lambda shopify_payload, ledger_payload, cfg=None: shopify_payload is not None)
 @deal.pre(lambda shopify_payload, ledger_payload, cfg=None: ledger_payload is not None)
@@ -228,7 +245,6 @@ def reconcile_shopify_vs_ledger(
     cfg: Optional[ReconcileConfig] = None,
 ) -> ReconcileResult:
     cfg = cfg or ReconcileConfig()
-
     items: List[DriftItem] = []
 
     try:
@@ -244,8 +260,7 @@ def reconcile_shopify_vs_ledger(
             items=[DriftItem(order_id="*", kind="parse_error", detail=f"{type(e).__name__}:{e}")],
         )
 
-    # Only "paid" by default
-    considered = []
+    considered: List[OrderRow] = []
     for o in orders:
         if cfg.require_shopify_paid_only:
             if o.financial_status in cfg.paid_statuses:
@@ -255,7 +270,6 @@ def reconcile_shopify_vs_ledger(
 
     shop_map: Dict[str, OrderRow] = {o.order_id: o for o in considered}
 
-    # ledger aggregation per order
     led_sum: Dict[str, Decimal] = {}
     for r in ledger:
         led_sum[r.order_id] = led_sum.get(r.order_id, Decimal("0")) + r.amount_mxn
@@ -264,11 +278,16 @@ def reconcile_shopify_vs_ledger(
     mismatch = 0
     extra = 0
 
-    # Missing/mismatch
     for oid, o in shop_map.items():
         if oid not in led_sum:
             missing += 1
-            items.append(DriftItem(order_id=oid, kind="missing_in_ledger", detail="paid_order_not_in_ledger"))
+            items.append(
+                DriftItem(
+                    order_id=oid,
+                    kind="missing_in_ledger",
+                    detail="paid_order_not_in_ledger",
+                )
+            )
             continue
 
         diff = (led_sum[oid] - o.total_mxn).copy_abs()
@@ -282,12 +301,25 @@ def reconcile_shopify_vs_ledger(
                 )
             )
 
-    # Extra ledger entries
     for oid in led_sum.keys():
         if oid not in shop_map:
             extra += 1
-            items.append(DriftItem(order_id=oid, kind="extra_in_ledger", detail="ledger_has_order_not_in_shopify_paid_set"))
+            items.append(
+                DriftItem(
+                    order_id=oid,
+                    kind="extra_in_ledger",
+                    detail="ledger_has_order_not_in_shopify_paid_set",
+                )
+            )
 
     blocked = (missing > 0) or (mismatch > 0) or (cfg.block_on_extra_ledger_entries and extra > 0)
     ok = not blocked
-    return ReconcileResult(ok=ok, blocked=blocked, missing_count=missing, mismatch_count=mismatch, extra_count=extra, items=items)
+
+    return ReconcileResult(
+        ok=ok,
+        blocked=blocked,
+        missing_count=missing,
+        mismatch_count=mismatch,
+        extra_count=extra,
+        items=items,
+    )

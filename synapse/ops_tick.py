@@ -1,4 +1,4 @@
-"""ops_tick  Level 4 (NASA Power-of-Ten Grade).
+"""ops_tick Level 4 (NASA Power-of-Ten Grade).
 
 Orchestrates the Phase-1 loop end-to-end via subprocess calls.
 No direct money-path logic; delegates to specialised modules.
@@ -7,6 +7,8 @@ S19: Added reconcile pre-flight gate + alert emission.
 S20: Added inventory pre-flight gate (fail-closed in write mode).
 S22: In no-import + readonly mode, skip downstream creative steps that
 depend on runner/import artifacts, avoiding false FAIL in scheduler mode.
+S24: Reconcile pre-flight can merge an optional refund sidecar ledger and
+treat refund bridge events as net-negative amounts through refund-aware reconcile.
 """
 
 from __future__ import annotations
@@ -26,13 +28,9 @@ import deal
 
 from synapse.infra.cli_logging import cli_print
 
-_MARKER = "OPS_TICK_2026-03-09_V6_READONLY_SKIP_DOWNSTREAM"
+_MARKER = "OPS_TICK_2026-03-09_V7_REFUND_AWARE_RECONCILE"
 _LEDGER_REL = Path("data/ledger/events.ndjson")
 
-
-#
-# Value Objects
-#
 
 @dataclass(frozen=True, slots=True)
 class TickConfig:
@@ -55,10 +53,6 @@ class StepResult:
     stdout_tail: str
     stderr_tail: str
 
-
-#
-# Private Helpers
-#
 
 def _utc_now_z() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -140,17 +134,22 @@ def _execute_steps(config: TickConfig) -> List[StepResult]:
     steps.append(_run([py, "-m", "synapse.ledger_ndjson", "validate"], env))
 
     if not config.no_import:
-        steps.append(_run([
-            py,
-            "-m",
-            "synapse.ad_results_import",
-            "--csv",
-            config.csv,
-            "--platform",
-            config.platform,
-            "--product-id",
-            config.product_id,
-        ], env))
+        steps.append(
+            _run(
+                [
+                    py,
+                    "-m",
+                    "synapse.ad_results_import",
+                    "--csv",
+                    config.csv,
+                    "--platform",
+                    config.platform,
+                    "--product-id",
+                    config.product_id,
+                ],
+                env,
+            )
+        )
 
     if readonly_no_import:
         steps.append(_skip_step("synapse.runner", "no-import + readonly"))
@@ -250,13 +249,8 @@ def _emit_alert(text: str) -> None:
         sink = get_alert_sink()
         sink.send(text)
     except Exception:
-        # fail-closed for core gate logic, fail-open for alert transport
         pass
 
-
-#
-# S20: Inventory Pre-flight Gate
-#
 
 def _load_inventory_any(path: str) -> Any:
     p = Path(path)
@@ -442,21 +436,38 @@ def _inventory_preflight(product_id: str, effective_readonly: bool) -> Dict[str,
     }
 
 
-#
-# S19: Reconcile Pre-flight Gate
-#
+def _payload_to_list(payload: Any) -> List[Any]:
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        return list(payload)
+    if isinstance(payload, dict) and isinstance(payload.get("entries"), list):
+        return list(payload["entries"])
+    return [payload]
+
+
+def _merge_reconcile_ledgers(primary_payload: Any, refund_payload: Any) -> List[Any]:
+    merged = []
+    merged.extend(_payload_to_list(primary_payload))
+    merged.extend(_payload_to_list(refund_payload))
+    return merged
+
 
 def _reconcile_preflight() -> Dict[str, Any]:
     """
     Pre-flight reconcile gate.
 
-    Reads SYNAPSE_RECONCILE_ORDERS and SYNAPSE_RECONCILE_LEDGER from env.
-    If both set, runs ShopifyLedger reconciliation.
-    If blocked => returns gate result with blocked=True + emits alert.
-    If env vars not set => skips (not mandatory, returns ok).
+    Env:
+      SYNAPSE_RECONCILE_ORDERS
+      SYNAPSE_RECONCILE_LEDGER
+      SYNAPSE_RECONCILE_REFUND_LEDGER (optional sidecar)
+
+    If both ORDERS + LEDGER set, runs Shopify↔Ledger reconciliation.
+    If optional REFUND_LEDGER is set, it is merged into the ledger payload before reconcile.
     """
     orders_path = os.environ.get("SYNAPSE_RECONCILE_ORDERS", "").strip()
     ledger_path = os.environ.get("SYNAPSE_RECONCILE_LEDGER", "").strip()
+    refund_ledger_path = os.environ.get("SYNAPSE_RECONCILE_REFUND_LEDGER", "").strip()
 
     if not orders_path or not ledger_path:
         return {
@@ -477,6 +488,10 @@ def _reconcile_preflight() -> Dict[str, Any]:
         shop = load_json_any(orders_path)
         led = load_ledger_any(ledger_path)
 
+        if refund_ledger_path:
+            refund_led = load_ledger_any(refund_ledger_path)
+            led = _merge_reconcile_ledgers(led, refund_led)
+
         r = reconcile_shopify_vs_ledger(
             shop,
             led,
@@ -491,6 +506,7 @@ def _reconcile_preflight() -> Dict[str, Any]:
             "missing_count": int(r.missing_count),
             "mismatch_count": int(r.mismatch_count),
             "extra_count": int(r.extra_count),
+            "refund_ledger_merged": bool(refund_ledger_path),
         }
 
         if r.blocked:
@@ -507,16 +523,13 @@ def _reconcile_preflight() -> Dict[str, Any]:
             "status": "ERROR",
             "reason": f"exception:{type(e).__name__}",
             "blocked": True,
+            "refund_ledger_merged": bool(refund_ledger_path),
         }
         _emit_alert(
             f"RECONCILE BLOCKED reason=exception type={type(e).__name__}"
         )
         return result
 
-
-#
-# Public entrypoint
-#
 
 @deal.pre(lambda argv=None: argv is None or isinstance(argv, list))
 @deal.post(lambda result: result in (0, 2))
