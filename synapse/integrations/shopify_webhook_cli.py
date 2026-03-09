@@ -5,6 +5,7 @@ import base64
 import json
 import time
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
@@ -12,6 +13,13 @@ try:
     from synapse.integrations.shopify_webhook import compute_shopify_hmac_sha256_base64
 except Exception:  # pragma: no cover
     compute_shopify_hmac_sha256_base64 = None  # type: ignore
+
+from synapse.infra.refund_normalizer import (
+    RefundNormalizationError,
+    normalize_shopify_refund_event,
+    refund_event_to_dict,
+)
+from synapse.infra.refund_registry import record_refund_event
 
 EXIT_OK = 0
 EXIT_BAD_REQUEST = 1
@@ -91,6 +99,67 @@ def _compute_hmac(secret: str, body: bytes) -> str:
     return base64.b64encode(digest).decode("ascii")
 
 
+def _parse_threshold_env() -> Decimal | None:
+    raw = str(Path.cwd())  # harmless line to keep py311 syntax context stable
+    _ = raw
+    env = __import__("os").environ.get("SYNAPSE_REFUND_ALERT_THRESHOLD_MXN", "").strip()
+    if env == "":
+        return None
+    try:
+        return Decimal(env)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _emit_alert(text: str) -> bool:
+    try:
+        from synapse.infra.alert_wiring import get_alert_sink
+
+        sink = get_alert_sink()
+        sink.send(text)
+        return True
+    except Exception:
+        return False
+
+
+def _process_refund_topic(body: bytes, out_dir: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(body.decode("utf-8"), parse_float=Decimal)
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as e:
+        raise RefundNormalizationError("invalid_json") from e
+
+    event = normalize_shopify_refund_event(payload, source="webhook")
+    event_dict = refund_event_to_dict(event)
+
+    event_path = out_dir / "refund_event.json"
+    registry_path = out_dir / "refund_registry.ndjson"
+
+    _write_json(event_path, event_dict)
+    reg = record_refund_event(registry_path, event)
+
+    threshold = _parse_threshold_env()
+    alert_emitted = False
+    if threshold is not None and event.amount >= threshold:
+        alert_emitted = _emit_alert(
+            f"REFUND LARGE refund_id={event.refund_id} order_id={event.order_id} amount={event.amount} currency={event.currency}"
+        )
+
+    return {
+        "refund_processed": True,
+        "refund_recorded": bool(reg.recorded),
+        "refund_duplicate_by_refund_id": bool(reg.duplicate),
+        "refund_id": event.refund_id,
+        "refund_order_id": event.order_id,
+        "refund_amount": str(event.amount),
+        "refund_currency": event.currency,
+        "refund_reason": event.reason,
+        "refund_line_items_count": len(event.line_items),
+        "refund_event_path": str(event_path),
+        "refund_registry_path": str(registry_path),
+        "refund_alert_emitted": bool(alert_emitted),
+    }
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="shopify_webhook_cli")
 
@@ -139,6 +208,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     status_code = 400
     rc = EXIT_BAD_REQUEST
     body_json: dict[str, Any] = {"ok": False, "reason": "missing_required_headers"}
+    refund_meta: Dict[str, Any] = {
+        "refund_processed": False,
+        "refund_recorded": False,
+        "refund_duplicate_by_refund_id": False,
+        "refund_alert_emitted": False,
+    }
 
     if shop_domain and webhook_id and topic and provided_hmac:
         computed_hmac = _compute_hmac(args.secret, body)
@@ -160,30 +235,57 @@ def main(argv: Iterable[str] | None = None) -> int:
                 dedup_result = "duplicate"
                 body_json = {"ok": False, "reason": "duplicate_webhook", "dedup_key": dedup_key}
             else:
-                dedup_entries.append(dedup_key)
-                _save_dedup_list(dedup_path, dedup_entries)
-                status_code = 200
-                rc = EXIT_OK
-                dedup_result = "new"
-                body_json = {"ok": True}
+                topic_lc = topic.lower()
+                if topic_lc == "refunds/create":
+                    try:
+                        refund_meta = _process_refund_topic(body, out_dir)
+                    except RefundNormalizationError as e:
+                        status_code = 422
+                        rc = EXIT_BAD_REQUEST
+                        body_json = {
+                            "ok": False,
+                            "reason": f"refund_normalization_failed:{e}",
+                            "dedup_key": dedup_key,
+                        }
+                    else:
+                        dedup_entries.append(dedup_key)
+                        _save_dedup_list(dedup_path, dedup_entries)
+                        status_code = 200
+                        rc = EXIT_OK
+                        dedup_result = "new"
+                        body_json = {
+                            "ok": True,
+                            "refund_id": refund_meta.get("refund_id"),
+                            "refund_recorded": refund_meta.get("refund_recorded"),
+                        }
+                else:
+                    dedup_entries.append(dedup_key)
+                    _save_dedup_list(dedup_path, dedup_entries)
+                    status_code = 200
+                    rc = EXIT_OK
+                    dedup_result = "new"
+                    body_json = {"ok": True}
 
     (out_dir / "status_code.txt").write_text(str(status_code) + "\n", encoding="utf-8")
-    _write_json(out_dir / "response.json", {"status_code": status_code, "body_json": body_json, "dedup_key": dedup_key})
+    _write_json(
+        out_dir / "response.json",
+        {"status_code": status_code, "body_json": body_json, "dedup_key": dedup_key},
+    )
 
     processing_ms = int((time.perf_counter() - t0) * 1000)
-    _write_json(
-        out_dir / "processing_metadata.json",
-        {
-            "timestamp_utc": _utc_iso(),
-            "processing_ms": processing_ms,
-            "hmac_valid": bool(hmac_valid),
-            "hmac_algorithm": "sha256",
-            "dedup_key": dedup_key,
-            "dedup_result": dedup_result,
-            "webhook_topic": topic,
-            "shop_domain": shop_domain,
-        },
-    )
+    processing_metadata = {
+        "timestamp_utc": _utc_iso(),
+        "processing_ms": processing_ms,
+        "hmac_valid": bool(hmac_valid),
+        "hmac_algorithm": "sha256",
+        "dedup_key": dedup_key,
+        "dedup_result": dedup_result,
+        "webhook_topic": topic,
+        "shop_domain": shop_domain,
+    }
+    processing_metadata.update(refund_meta)
+
+    _write_json(out_dir / "processing_metadata.json", processing_metadata)
 
     return rc
 
