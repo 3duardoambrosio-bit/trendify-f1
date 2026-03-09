@@ -5,6 +5,8 @@ No direct money-path logic; delegates to specialised modules.
 
 S19: Added reconcile pre-flight gate + alert emission.
 S20: Added inventory pre-flight gate (fail-closed in write mode).
+S22: In no-import + readonly mode, skip downstream creative steps that
+depend on runner/import artifacts, avoiding false FAIL in scheduler mode.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ import deal
 
 from synapse.infra.cli_logging import cli_print
 
-_MARKER = "OPS_TICK_2026-03-08_V5_S20_INVENTORY_GATE"
+_MARKER = "OPS_TICK_2026-03-09_V6_READONLY_SKIP_DOWNSTREAM"
 _LEDGER_REL = Path("data/ledger/events.ndjson")
 
 
@@ -130,6 +132,8 @@ def _execute_steps(config: TickConfig) -> List[StepResult]:
     py = sys.executable
     steps: List[StepResult] = []
 
+    readonly_no_import = config.no_import and config.effective_readonly
+
     if config.prune:
         steps.append(_run([py, "-m", "synapse.phase1_ready", "--prune"], env))
 
@@ -148,14 +152,30 @@ def _execute_steps(config: TickConfig) -> List[StepResult]:
             config.product_id,
         ], env))
 
-    if config.no_import and config.effective_readonly:
+    if readonly_no_import:
         steps.append(_skip_step("synapse.runner", "no-import + readonly"))
     else:
         steps.append(_run([py, "-m", "synapse.runner"], env))
 
     steps.append(_run([py, "-m", "synapse.post_learning"], env))
-    steps.append(_run([py, "-m", "synapse.creative_queue"], env))
-    steps.append(_run([py, "-m", "synapse.creative_briefs"], env))
+
+    if readonly_no_import:
+        steps.append(
+            _skip_step(
+                "synapse.creative_queue",
+                "no-import + readonly => skip downstream creative queue",
+            )
+        )
+        steps.append(
+            _skip_step(
+                "synapse.creative_briefs",
+                "no-import + readonly => skip downstream creative briefs",
+            )
+        )
+    else:
+        steps.append(_run([py, "-m", "synapse.creative_queue"], env))
+        steps.append(_run([py, "-m", "synapse.creative_briefs"], env))
+
     return steps
 
 
@@ -252,7 +272,6 @@ def _load_inventory_any(path: str) -> Any:
     try:
         return json.loads(txt)
     except json.JSONDecodeError:
-        # fallback for newline-delimited json with no extension
         if len(lines) >= 1:
             return [json.loads(ln) for ln in lines]
         raise
@@ -433,8 +452,8 @@ def _reconcile_preflight() -> Dict[str, Any]:
 
     Reads SYNAPSE_RECONCILE_ORDERS and SYNAPSE_RECONCILE_LEDGER from env.
     If both set, runs ShopifyLedger reconciliation.
-    If blocked  returns gate result with blocked=True + emits alert.
-    If env vars not set  skips (not mandatory, returns ok).
+    If blocked => returns gate result with blocked=True + emits alert.
+    If env vars not set => skips (not mandatory, returns ok).
     """
     orders_path = os.environ.get("SYNAPSE_RECONCILE_ORDERS", "").strip()
     ledger_path = os.environ.get("SYNAPSE_RECONCILE_LEDGER", "").strip()
