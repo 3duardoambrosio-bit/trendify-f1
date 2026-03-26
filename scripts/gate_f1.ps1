@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateSet("dev","ops","release","precommit")] [string]$Mode = "dev"
 )
 
@@ -132,7 +132,7 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 "TEST_ROOTS_FOUND={0}" -f $existing.Count | Out-Host
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
-& pytest @($existing) -q --tb=no
+& python -B -m pytest @($existing) -q --tb=no
 $pytestExit = $LASTEXITCODE
 if ($pytestExit -ne 0) { Fail 3 ("PYTEST_EXIT={0}" -f $pytestExit) }
 
