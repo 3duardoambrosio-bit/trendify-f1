@@ -288,35 +288,19 @@ class ShopifyWriter:
 
     def _http_post(self, url: str, headers: Dict[str, str], body: bytes) -> Tuple[int, str]:
         """
-        Adapter defensivo: soporta distintas firmas del SimpleHttpClient sin usar libs de red directas aquí.
+        Adapter canónico: usa la interfaz REAL de SimpleHttpClient (post_json).
+        Esto SOLO corre en live mode.
         """
         client = self._http
+        payload = json.loads(body.decode("utf-8")) if body else {}
 
-        # Intentos en orden. Esto SOLO corre en live mode.
-        attempts = []
-
-        # post(url, body=..., headers=..., timeout_s=...)
-        attempts.append(lambda: client.post(url=url, body=body, headers=headers, timeout_s=self._config.timeout_s))
-        # post(url, body, headers, timeout_s)
-        attempts.append(lambda: client.post(url, body, headers, self._config.timeout_s))
-        # request(method, url, headers=..., body=..., timeout_s=...)
-        attempts.append(lambda: client.request(method="POST", url=url, headers=headers, body=body, timeout_s=self._config.timeout_s))
-        # request("POST", url, headers, body, timeout_s)
-        attempts.append(lambda: client.request("POST", url, headers, body, self._config.timeout_s))
-
-        last: Optional[Exception] = None
-        for fn in attempts:
-            try:
-                resp = fn()
-                return _coerce_http_response(resp)
-            except TypeError as e:
-                last = e
-                continue
-            except Exception as e:
-                # Errores reales de red / runtime
-                raise e
-
-        raise RuntimeError(f"SimpleHttpClient signature mismatch: {last}")
+        resp = client.post_json(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_s=self._config.timeout_s,
+        )
+        return _coerce_http_response(resp)
 
 
 def _coerce_http_response(resp: Any) -> Tuple[int, str]:
