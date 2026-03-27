@@ -59,18 +59,31 @@ class PipelineE2EResult:
 
 
 def _flag_enabled(flag_name: str) -> bool:
+    normalized = (flag_name or "").strip().lower()
+    if not normalized:
+        return False
+
     try:
-        if hasattr(_feature_flags, "is_enabled"):
-            return bool(_feature_flags.is_enabled(flag_name))
-        if hasattr(_feature_flags, "is_feature_enabled"):
-            return bool(_feature_flags.is_feature_enabled(flag_name))
-        if hasattr(_feature_flags, "enabled"):
-            return bool(_feature_flags.enabled(flag_name))
+        ff_cls = getattr(_feature_flags, "FeatureFlags", None)
+        if ff_cls is not None and hasattr(ff_cls, "load"):
+            flags = ff_cls.load()
+            if hasattr(flags, "is_on"):
+                return bool(flags.is_on(normalized, default=False))
     except Exception as e:
         log.warning("feature_flags lookup failed: %s", e)
 
-    v = os.getenv(flag_name, "").strip().lower()
-    return v in ("1", "true", "yes", "on")
+    env_candidates = (
+        f"SYNAPSE_FLAG_{normalized.upper()}",
+        normalized,
+    )
+    for env_name in env_candidates:
+        v = os.getenv(env_name, "").strip().lower()
+        if v in ("1", "true", "yes", "on"):
+            return True
+        if v in ("0", "false", "no", "off"):
+            return False
+
+    return False
 
 
 class PipelineE2E:
