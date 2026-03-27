@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ShopifyWriterConfig:
-    api_version: str = "2024-10"
+    api_version: str = "2026-01"
     timeout_s: float = 30.0
     max_retries: int = 2
 
@@ -364,3 +364,4 @@ def _update_single_variant_fields(variant_id: str, v: ShopifyVariantInput) -> Sh
     # Placeholder por seguridad: solo se usa en live mode desde create_product.
     # Se implementa inline en live cuando se necesite (S11 no exige live e2e).
     return ShopifyWriteResult(True, None, [], mock=False)
+
