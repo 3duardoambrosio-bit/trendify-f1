@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "click>=8.0.0",
   "deal>=4.24,<5",
+    "Pygments>=2.19.2",
 ]
 
 [project.optional-dependencies]
