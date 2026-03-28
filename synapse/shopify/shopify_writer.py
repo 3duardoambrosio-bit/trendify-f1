@@ -1,9 +1,9 @@
 ﻿from __future__ import annotations
 
 """
-Shopify Writer  Mutations para crear/actualizar productos y variants.
+Shopify Writer — Mutations para crear/actualizar productos y variants.
 
-Feature-flag gated: shopify_live=False  mock mode (retorna IDs simulados).
+Feature-flag gated: shopify_live=False → mock mode (retorna IDs simulados).
 IMPORTANTE P0: NO usar urllib/requests directo. Toda red debe pasar por synapse.integrations.http_client.
 
 __MARKER__ embedded in module constant below.
@@ -62,32 +62,41 @@ class ShopifyWriteResult:
     mock: bool
 
 
+def _fmt_money(v: Decimal) -> str:
+    return f"{v:.2f}"
+
+
+@deal.pre(lambda p: bool(p.title.strip()))
+@deal.pre(lambda p: len(p.variants) >= 1)
+def _validate_product_input(p: ShopifyProductInput) -> None:
+    return None
+
+
 class ShopifyWriter:
     def __init__(
         self,
         shop: str,
         access_token: str,
         flags: FeatureFlags,
-        config: Optional[ShopifyWriterConfig] = None,
-    ) -> None:
-        self._shop = shop.strip()
-        self._token = access_token.strip()
+        config: ShopifyWriterConfig = ShopifyWriterConfig(),
+        http_client: Optional[SimpleHttpClient] = None,
+    ):
+        self._shop = (shop or "").replace(".myshopify.com", "").strip()
+        self._token = access_token
         self._flags = flags
-        self._config = config or ShopifyWriterConfig()
-        self._http = SimpleHttpClient()
+        self._config = config
+        self._http = http_client or SimpleHttpClient(
+            dry_run=not bool(flags.shopify_live),
+            retry_max=config.max_retries,
+            backoff_s=0.25,
+        )
 
-    # ------------------------
-    # Public API (S11)
-    # ------------------------
+    def _endpoint(self) -> str:
+        return f"https://{self._shop}.myshopify.com/admin/api/{self._config.api_version}/graphql.json"
 
-    @deal.pre(lambda self, product: isinstance(product, ShopifyProductInput))
-    @deal.pre(lambda self, product: isinstance(product.title, str) and product.title.strip() != "")
-    @deal.pre(lambda self, product: isinstance(product.variants, list) and len(product.variants) >= 1)
-    @deal.post(lambda result: isinstance(result, ShopifyWriteResult))
     def create_product(self, product: ShopifyProductInput) -> ShopifyWriteResult:
-        """
-        REGLA: siempre crear como DRAFT. Activación explícita via set_product_status.
-        """
+        _validate_product_input(product)
+
         if not self._flags.shopify_live:
             return ShopifyWriteResult(
                 success=True,
@@ -96,186 +105,130 @@ class ShopifyWriter:
                 mock=True,
             )
 
-        gql = """
-        mutation ProductCreate($product: ProductCreateInput!) {
-          productCreate(product: $product) {
-            product { id variants(first: 1) { nodes { id } } }
-            userErrors { field message }
-          }
-        }
-        """.strip()
-
-        product_payload: Dict[str, Any] = {
-            "title": product.title.strip(),
-            "descriptionHtml": product.body_html or "",
-            "vendor": product.vendor or "",
-            "tags": product.tags or [],
-            "status": "DRAFT",
-        }
-        if product.product_type:
-            product_payload["productType"] = product.product_type
-
-        resp = self._graphql(gql, {"product": product_payload})
-        if not resp["ok"]:
-            return ShopifyWriteResult(False, None, resp["errors"], mock=False)
-
-        data = resp["data"].get("productCreate") if resp["data"] else None
-        if not data:
-            return ShopifyWriteResult(False, None, ["missing_productCreate_payload"], mock=False)
-
-        user_errors = _extract_user_errors(data.get("userErrors", []))
-        if user_errors:
-            return ShopifyWriteResult(False, None, user_errors, mock=False)
-
-        prod = data.get("product") or {}
-        product_id = prod.get("id")
-        if not isinstance(product_id, str) or not product_id:
-            return ShopifyWriteResult(False, None, ["missing_product_id"], mock=False)
-
-        if len(product.variants) > 1:
-            return ShopifyWriteResult(
-                False,
-                product_id,
-                ["live_mode_multi_variant_creation_not_implemented"],
-                mock=False,
-            )
-
-        v0 = product.variants[0]
-        nodes = (((prod.get("variants") or {}).get("nodes")) or [])
-        default_variant_id = nodes[0].get("id") if nodes else None
-        if isinstance(default_variant_id, str) and default_variant_id:
-            upd = self._update_single_variant_fields(default_variant_id, v0)
-            if not upd.success:
-                return ShopifyWriteResult(False, product_id, upd.errors, mock=False)
-        else:
-            log.warning("Product created but default variant id missing; skipping variant update")
-
-        return ShopifyWriteResult(True, product_id, [], mock=False)
-
-    @deal.pre(lambda self, product_id, updates: isinstance(product_id, str) and product_id.strip() != "")
-    @deal.pre(lambda self, product_id, updates: isinstance(updates, dict))
-    @deal.post(lambda result: isinstance(result, ShopifyWriteResult))
-    def update_product(self, product_id: str, updates: Dict) -> ShopifyWriteResult:
-        if not self._flags.shopify_live:
-            return ShopifyWriteResult(True, product_id, [], mock=True)
-
-        gql = """
-        mutation ProductUpdate($product: ProductUpdateInput!) {
-          productUpdate(product: $product) {
+        mutation = """
+        mutation productCreate($input: ProductInput!) {
+          productCreate(product: $input) {
             product { id }
             userErrors { field message }
           }
         }
-        """.strip()
+        """
+        variants = []
+        for v in product.variants:
+            variants.append(
+                {
+                    "sku": v.sku,
+                    "price": _fmt_money(v.price),
+                    "compareAtPrice": _fmt_money(v.compare_at_price) if v.compare_at_price is not None else None,
+                    "inventoryQuantities": {
+                        "availableQuantity": int(v.inventory_quantity),
+                    },
+                    "requiresShipping": bool(v.requires_shipping),
+                }
+            )
 
-        patch: Dict[str, Any] = {"id": product_id}
-        for k, v in (updates or {}).items():
-            if isinstance(k, str) and k:
-                patch[k] = v
+        variables = {
+            "input": {
+                "title": product.title,
+                "descriptionHtml": product.body_html,
+                "vendor": product.vendor,
+                "productType": product.product_type,
+                "tags": product.tags,
+                "status": product.status,
+                "variants": variants,
+            }
+        }
 
-        resp = self._graphql(gql, {"product": patch})
-        if not resp["ok"]:
-            return ShopifyWriteResult(False, product_id, resp["errors"], mock=False)
+        out = self._run_graphql(mutation, variables)
+        if not out["ok"]:
+            return ShopifyWriteResult(False, None, out["errors"], mock=False)
 
-        payload = resp["data"].get("productUpdate") if resp["data"] else None
-        if not payload:
-            return ShopifyWriteResult(False, product_id, ["missing_productUpdate_payload"], mock=False)
+        node = (((out.get("data") or {}).get("productCreate") or {}).get("product")) or {}
+        pid = node.get("id")
+        if not pid:
+            return ShopifyWriteResult(False, None, ["productCreate_missing_id"], mock=False)
+        return ShopifyWriteResult(True, pid, [], mock=False)
 
-        user_errors = _extract_user_errors(payload.get("userErrors", []))
-        if user_errors:
-            return ShopifyWriteResult(False, product_id, user_errors, mock=False)
+    def update_product(self, product_id: str, fields: Dict[str, Any]) -> ShopifyWriteResult:
+        if not self._flags.shopify_live:
+            return ShopifyWriteResult(True, product_id, [], mock=True)
 
-        return ShopifyWriteResult(True, product_id, [], mock=False)
+        mutation = """
+        mutation productUpdate($input: ProductUpdateInput!) {
+          productUpdate(product: $input) {
+            product { id }
+            userErrors { field message }
+          }
+        }
+        """
+        variables = {
+            "input": {
+                "id": product_id,
+                **fields,
+            }
+        }
+        out = self._run_graphql(mutation, variables)
+        if not out["ok"]:
+            return ShopifyWriteResult(False, product_id, out["errors"], mock=False)
 
-    @deal.pre(lambda self, variant_id, price: isinstance(variant_id, str) and variant_id.strip() != "")
-    @deal.pre(lambda self, variant_id, price: isinstance(price, Decimal) and price > Decimal("0"))
-    @deal.post(lambda result: isinstance(result, ShopifyWriteResult))
+        node = (((out.get("data") or {}).get("productUpdate") or {}).get("product")) or {}
+        pid = node.get("id") or product_id
+        return ShopifyWriteResult(True, pid, [], mock=False)
+
+    def set_product_status(self, product_id: str, status: str) -> ShopifyWriteResult:
+        if not self._flags.shopify_live:
+            return ShopifyWriteResult(True, product_id, [], mock=True)
+        return self.update_product(product_id, {"status": status})
+
     def update_variant_price(self, variant_id: str, price: Decimal) -> ShopifyWriteResult:
         if not self._flags.shopify_live:
             return ShopifyWriteResult(True, None, [], mock=True)
 
-        gql = """
-        mutation ProductVariantUpdate($input: ProductVariantInput!) {
+        mutation = """
+        mutation productVariantUpdate($input: ProductVariantInput!) {
           productVariantUpdate(input: $input) {
             productVariant { id }
             userErrors { field message }
           }
         }
-        """.strip()
-
-        resp = self._graphql(gql, {"input": {"id": variant_id, "price": str(price)}})
-        if not resp["ok"]:
-            return ShopifyWriteResult(False, None, resp["errors"], mock=False)
-
-        payload = resp["data"].get("productVariantUpdate") if resp["data"] else None
-        if not payload:
-            return ShopifyWriteResult(False, None, ["missing_productVariantUpdate_payload"], mock=False)
-
-        user_errors = _extract_user_errors(payload.get("userErrors", []))
-        if user_errors:
-            return ShopifyWriteResult(False, None, user_errors, mock=False)
-
+        """
+        variables = {
+            "input": {
+                "id": variant_id,
+                "price": _fmt_money(price),
+            }
+        }
+        out = self._run_graphql(mutation, variables)
+        if not out["ok"]:
+            return ShopifyWriteResult(False, None, out["errors"], mock=False)
         return ShopifyWriteResult(True, None, [], mock=False)
 
-    @deal.pre(lambda self, product_id, status: isinstance(product_id, str) and product_id.strip() != "")
-    @deal.pre(lambda self, product_id, status: status in ("ACTIVE", "DRAFT", "ARCHIVED"))
-    @deal.post(lambda result: isinstance(result, ShopifyWriteResult))
-    def set_product_status(self, product_id: str, status: str) -> ShopifyWriteResult:
-        if not self._flags.shopify_live:
-            return ShopifyWriteResult(True, product_id, [], mock=True)
-
-        gql = """
-        mutation ProductUpdateStatus($product: ProductUpdateInput!) {
-          productUpdate(product: $product) {
-            product { id status }
-            userErrors { field message }
-          }
-        }
-        """.strip()
-
-        resp = self._graphql(gql, {"product": {"id": product_id, "status": status}})
-        if not resp["ok"]:
-            return ShopifyWriteResult(False, product_id, resp["errors"], mock=False)
-
-        payload = resp["data"].get("productUpdate") if resp["data"] else None
-        if not payload:
-            return ShopifyWriteResult(False, product_id, ["missing_productUpdate_payload"], mock=False)
-
-        user_errors = _extract_user_errors(payload.get("userErrors", []))
-        if user_errors:
-            return ShopifyWriteResult(False, product_id, user_errors, mock=False)
-
-        return ShopifyWriteResult(True, product_id, [], mock=False)
-
-    # ------------------------
-    # Internal
-    # ------------------------
-
-    def _endpoint(self) -> str:
-        shop = self._shop
-        if not shop.endswith(".myshopify.com") and "." not in shop:
-            shop = f"{shop}.myshopify.com"
-        return f"https://{shop}/admin/api/{self._config.api_version}/graphql.json"
-
-    def _graphql(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
+    def _run_graphql(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
         url = self._endpoint()
         headers = {
-            "Content-Type": "application/json",
             "X-Shopify-Access-Token": self._token,
+            "Content-Type": "application/json",
         }
-        body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
+        body = json.dumps({"query": query, "variables": variables}, ensure_ascii=False).encode("utf-8")
 
         last_err: Optional[str] = None
-        for attempt in range(0, self._config.max_retries + 1):
+        for attempt in range(self._config.max_retries + 1):
             try:
                 status, text = self._http_post(url, headers, body)
-                if status < 200 or status >= 300:
-                    last_err = f"http_error status={status} body={text[:500]}"
-                else:
-                    payload = json.loads(text) if text else {}
-                    gql_errors = payload.get("errors") or []
-                    if gql_errors:
-                        return {"ok": False, "data": payload.get("data"), "errors": _stringify_graphql_errors(gql_errors)}
+                if status != 200:
+                    return {"ok": False, "data": None, "errors": [f"http_status={status}", text]}
+
+                payload = json.loads(text or "{}")
+                gql_errors = payload.get("errors")
+                if gql_errors:
+                    return {"ok": False, "data": payload.get("data"), "errors": _stringify_graphql_errors(gql_errors)}
+
+                root = payload.get("data") or {}
+                top = next(iter(root.values()), None)
+                if isinstance(top, dict):
+                    user_errors = top.get("userErrors")
+                    if user_errors:
+                        return {"ok": False, "data": payload.get("data"), "errors": _extract_user_errors(user_errors)}
                     return {"ok": True, "data": payload.get("data"), "errors": []}
             except Exception as e:
                 last_err = f"exception: {type(e).__name__}: {e}"
@@ -306,33 +259,73 @@ class ShopifyWriter:
 def _coerce_http_response(resp: Any) -> Tuple[int, str]:
     """
     Normaliza respuesta a (status:int, text:str) sin asumir clase exacta.
+    Edge cases cubiertos:
+    - tuple(status, body)
+    - dict con status/status_code/code y text/body/content
+    - objeto con attrs status/status_code/code y text/body/content
+    - bytes -> decode utf-8 fail-closed
+    - fallback a .json() si no hay body textual
     """
-    # tuple(status, text)
-    if isinstance(resp, tuple) and len(resp) == 2 and isinstance(resp[0], int):
-        return resp[0], str(resp[1])
+    if resp is None:
+        return 0, ""
 
-    # dict-like
+    def _coerce_status(value: Any) -> int:
+        try:
+            if value is None or value == "":
+                return 0
+            return int(value)
+        except Exception:
+            return 0
+
+    def _coerce_text(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return str(value)
+
+    def _from_json_method(obj: Any) -> Optional[str]:
+        json_method = getattr(obj, "json", None)
+        if not callable(json_method):
+            return None
+        try:
+            return json.dumps(json_method(), ensure_ascii=False)
+        except Exception:
+            return None
+
+    if isinstance(resp, tuple) and len(resp) == 2:
+        return _coerce_status(resp[0]), _coerce_text(resp[1])
+
     if isinstance(resp, dict):
-        status = resp.get("status") or resp.get("status_code") or resp.get("code") or 0
-        text = resp.get("text") or resp.get("body") or resp.get("content") or ""
-        return int(status), str(text)
+        status = 0
+        for key in ("status", "status_code", "code"):
+            if key in resp:
+                status = _coerce_status(resp.get(key))
+                break
 
-    # object with attributes
+        for key in ("text", "body", "content"):
+            if key in resp:
+                return status, _coerce_text(resp.get(key))
+
+        return status, ""
+
+    status = 0
     for s_attr in ("status", "status_code", "code"):
         if hasattr(resp, s_attr):
-            status = getattr(resp, s_attr)
+            status = _coerce_status(getattr(resp, s_attr))
             break
-    else:
-        status = 0
 
     for t_attr in ("text", "body", "content"):
         if hasattr(resp, t_attr):
-            text = getattr(resp, t_attr)
-            break
-    else:
-        text = ""
+            value = getattr(resp, t_attr)
+            if value is not None:
+                return status, _coerce_text(value)
 
-    return int(status), str(text)
+    json_text = _from_json_method(resp)
+    if json_text is not None:
+        return status, json_text
+
+    return status, ""
 
 
 def _extract_user_errors(user_errors: Any) -> List[str]:
@@ -364,4 +357,3 @@ def _update_single_variant_fields(variant_id: str, v: ShopifyVariantInput) -> Sh
     # Placeholder por seguridad: solo se usa en live mode desde create_product.
     # Se implementa inline en live cuando se necesite (S11 no exige live e2e).
     return ShopifyWriteResult(True, None, [], mock=False)
-
