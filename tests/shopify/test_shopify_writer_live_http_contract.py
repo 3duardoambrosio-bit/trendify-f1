@@ -37,7 +37,7 @@ def _build_writer(monkeypatch):
             spend_real_money=False,
         ),
         config=m.ShopifyWriterConfig(
-            api_version="2024-10",
+            api_version="2026-01",
             timeout_s=1.0,
             max_retries=0,
         ),
@@ -80,7 +80,7 @@ def _assert_single_post_json_call(calls):
     assert len(calls) == 1
     call = calls[0]
 
-    assert call["url"] == "https://invalid-shop.myshopify.com/admin/api/2024-10/graphql.json"
+    assert call["url"] == "https://invalid-shop.myshopify.com/admin/api/2026-01/graphql.json"
     assert call["headers"]["X-Shopify-Access-Token"] == "shpat_fake_token"
     assert call["headers"]["Content-Type"] == "application/json"
     assert call["timeout_s"] == 1.0
@@ -132,4 +132,6 @@ def test_live_update_variant_price_uses_post_json(monkeypatch):
 
     _assert_network_blocked_result(result)
     _assert_single_post_json_call(calls)
+
+
 
