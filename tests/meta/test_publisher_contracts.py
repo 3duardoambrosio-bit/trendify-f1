@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+from dataclasses import FrozenInstanceError
+from decimal import Decimal
+
+import pytest
+
+from synapse.meta.publisher_contracts import (
+    MetaCampaignPayload,
+    MetaCampaignResponse,
+    MetaPauseRequest,
+    MetaPauseResponse,
+)
+
+
+def test_campaign_payload_defaults_are_safe() -> None:
+    p = MetaCampaignPayload(name="Launch A")
+    assert p.name == "Launch A"
+    assert p.objective == "OUTCOME_SALES"
+    assert p.status == "PAUSED"
+    assert p.budget_mxn is None
+    assert p.daily_budget_minor_units is None
+    assert p.targeting is None
+    assert p.promoted_object is None
+    assert dict(p.extra) == {}
+
+
+def test_campaign_payload_is_frozen() -> None:
+    p = MetaCampaignPayload(name="Launch A")
+    with pytest.raises(FrozenInstanceError):
+        p.status = "ACTIVE"  # type: ignore[misc]
+
+
+def test_campaign_payload_to_api_dict_serializes_expected_shape() -> None:
+    p = MetaCampaignPayload(
+        name="Launch A",
+        budget_mxn=Decimal("123.45"),
+        daily_budget_minor_units=500,
+        targeting={"geo_locations": {"countries": ["MX"]}},
+        promoted_object={"pixel_id": "PX-1"},
+        extra={"special_ad_categories": []},
+    )
+    out = p.to_api_dict()
+    assert out["name"] == "Launch A"
+    assert out["objective"] == "OUTCOME_SALES"
+    assert out["status"] == "PAUSED"
+    assert out["budget_mxn"] == "123.45"
+    assert out["daily_budget_minor_units"] == 500
+    assert out["targeting"] == {"geo_locations": {"countries": ["MX"]}}
+    assert out["promoted_object"] == {"pixel_id": "PX-1"}
+    assert out["special_ad_categories"] == []
+
+
+def test_campaign_response_from_mock() -> None:
+    r = MetaCampaignResponse.from_mock("MOCK_CAMP_123")
+    assert r.ok is True
+    assert r.campaign_id == "MOCK_CAMP_123"
+    assert r.status == "PAUSED"
+    assert r.mode == "mock"
+    assert r.error_code is None
+    assert r.error_message is None
+
+
+def test_campaign_response_from_error() -> None:
+    r = MetaCampaignResponse.from_error(
+        "create_campaign_error",
+        "network timeout",
+        campaign_id=None,
+        api_response={"raw": "x"},
+    )
+    assert r.ok is False
+    assert r.campaign_id is None
+    assert r.status == "PAUSED"
+    assert r.mode == "error"
+    assert r.error_code == "create_campaign_error"
+    assert r.error_message == "network timeout"
+    assert r.api_response == {"raw": "x"}
+
+
+def test_pause_request_defaults_are_safe() -> None:
+    req = MetaPauseRequest(campaign_id="camp-123")
+    assert req.campaign_id == "camp-123"
+    assert req.status == "PAUSED"
+    assert req.to_api_dict() == {"campaign_id": "camp-123", "status": "PAUSED"}
+
+
+def test_pause_response_from_mock() -> None:
+    r = MetaPauseResponse.from_mock("camp-123")
+    assert r.ok is True
+    assert r.campaign_id == "camp-123"
+    assert r.status == "PAUSED"
+    assert r.mode == "mock"
+    assert r.error_code is None
+    assert r.error_message is None
+
+
+def test_pause_response_from_error() -> None:
+    r = MetaPauseResponse.from_error(
+        "camp-123",
+        "pause_campaign_error",
+        "api unavailable",
+        api_response={"raw": "y"},
+    )
+    assert r.ok is False
+    assert r.campaign_id == "camp-123"
+    assert r.status == "PAUSED"
+    assert r.mode == "error"
+    assert r.error_code == "pause_campaign_error"
+    assert r.error_message == "api unavailable"
+    assert r.api_response == {"raw": "y"}
