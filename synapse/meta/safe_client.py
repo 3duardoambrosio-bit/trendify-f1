@@ -1,12 +1,13 @@
-"""Meta Safe Client: PAUSED-by-default, spend caps, circuit breaker, ledger. S7+S19."""
+﻿"""Meta Safe Client: PAUSED-by-default, spend caps, circuit breaker, ledger. S7+S19."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Optional
 
 from synapse.config.thresholds import (
@@ -23,14 +24,11 @@ from synapse.infra.idempotency_store import IdempotencyStore
 from synapse.infra.ledger_f1_core import Ledger
 from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
+from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaCampaignResponse, MetaPauseRequest
 
 
-# ---------------------------------------------------------------------------
-# Pre-spend gates: capital_shield + safety_middleware
-# ---------------------------------------------------------------------------
 def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
-    """Ask CapitalShieldV2 for budget approval.  Returns gate result dict."""
-    # Zero spend = nothing to protect. Allow through.
+    """Ask CapitalShieldV2 for budget approval. Returns gate result dict."""
     if spend_mxn <= 0:
         return {"gate": "capital_shield", "allowed": True, "reason": "zero_spend_allowed", "correlation_id": correlation_id}
 
@@ -39,14 +37,12 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
     except ImportError:
         return {"gate": "capital_shield", "allowed": False, "reason": "module_unavailable_BLOCKED"}
 
-    # S13: Real file-backed vault.
-    # FAIL-CLOSED: if vault cannot load, spending is blocked.
     try:
         from vault.vault_file_backed import VaultFileBacked  # type: ignore[import-untyped]
         vault = VaultFileBacked()
     except Exception as exc:
         import logging as _log
-        _log.getLogger(__name__).critical("VAULT_LOAD_FAILED: %s — blocking spend", exc)
+        _log.getLogger(__name__).critical("VAULT_LOAD_FAILED: %s - blocking spend", exc)
         return {"gate": "capital_shield", "allowed": False, "reason": f"vault_load_failed:{type(exc).__name__}"}
 
     shield = CapitalShieldV2(vault=vault)
@@ -64,15 +60,13 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
 
 
 def _check_safety_middleware(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
-    """Run safety_middleware checks.  Returns gate result dict."""
-    # Zero spend = nothing to protect. Allow through.
+    """Run safety_middleware checks. Returns gate result dict."""
     if spend_mxn <= 0:
         return {"gate": "safety_middleware", "allowed": True, "reason": "zero_spend_allowed", "correlation_id": correlation_id}
 
     try:
         from ops.safety_middleware import check_safety_before_spend  # type: ignore[import-untyped]
     except ImportError:
-        # S13: FAIL-CLOSED — if safety module unavailable, block spend
         return {"gate": "safety_middleware", "allowed": False, "reason": "module_unavailable_BLOCKED"}
 
     result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
@@ -90,6 +84,76 @@ def _generate_mock_id(idempotency_key: str) -> str:
     return f"MOCK_CAMP_{h}"
 
 
+def _coerce_decimal(value: Any) -> Optional[Decimal]:
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_campaign_contract(payload: Dict[str, Any]) -> MetaCampaignPayload:
+    targeting = payload.get("targeting")
+    promoted_object = payload.get("promoted_object")
+
+    targeting_dict = dict(targeting) if isinstance(targeting, Mapping) else None
+    promoted_object_dict = dict(promoted_object) if isinstance(promoted_object, Mapping) else None
+
+    handled = {
+        "name",
+        "objective",
+        "status",
+        "budget_mxn",
+        "daily_budget_minor_units",
+        "targeting",
+        "promoted_object",
+    }
+    extra = {k: v for k, v in payload.items() if k not in handled}
+
+    return MetaCampaignPayload(
+        name=str(payload.get("name", "")),
+        objective=str(payload.get("objective", "OUTCOME_SALES")),
+        status="PAUSED",
+        budget_mxn=_coerce_decimal(payload.get("budget_mxn")),
+        daily_budget_minor_units=_coerce_int(payload.get("daily_budget_minor_units")),
+        targeting=targeting_dict,
+        promoted_object=promoted_object_dict,
+        extra=extra,
+    )
+
+
+def _normalize_api_response(api_result: Any) -> Dict[str, Any]:
+    if isinstance(api_result, MetaCampaignResponse):
+        out: Dict[str, Any] = {
+            "ok": api_result.ok,
+            "campaign_id": api_result.campaign_id,
+            "status": api_result.status,
+            "mode": api_result.mode,
+        }
+        if api_result.api_response is not None:
+            out["api_response"] = dict(api_result.api_response)
+        if api_result.error_code is not None:
+            out["error_code"] = api_result.error_code
+        if api_result.error_message is not None:
+            out["error_message"] = api_result.error_message
+        return out
+
+    if isinstance(api_result, Mapping):
+        return dict(api_result)
+
+    return {"raw_response": str(api_result)}
+
+
 @dataclass
 class MetaSafeClientConfig:
     daily_spend_cap_mxn: Decimal = DEFAULT_DAILY_SPEND_CAP_MXN
@@ -102,15 +166,7 @@ class MetaSafeClientConfig:
 
 @dataclass
 class MetaSafeClient:
-    """Institutional safe wrapper over Meta campaign creation.
-
-    - PAUSED by default (always forces status=PAUSED)
-    - Spend cap with auto-pause at 80%
-    - Circuit breaker + retry against graph.facebook.com
-    - Feature flag meta_live_api (default OFF = mock)
-    - Ledger logging for every attempt/result
-    - Idempotency: deterministic key prevents duplicates
-    """
+    """Institutional safe wrapper over Meta campaign creation."""
 
     feature_flags: FeatureFlags
     retry_policy: RetryPolicy
@@ -123,23 +179,22 @@ class MetaSafeClient:
     def _is_live(self) -> bool:
         return self.feature_flags.is_on("meta_live_api", default=False)
 
-    # ------------------------------------------------------------------
-    # create_campaign_safe
-    # ------------------------------------------------------------------
     def create_campaign_safe(
         self,
-        payload: Dict[str, Any],
+        payload: Dict[str, Any] | MetaCampaignPayload,
         idempotency_key: str,
         correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         if correlation_id is None:
             correlation_id = str(uuid.uuid4())
 
-        # Force PAUSED regardless of what caller sends
-        payload = dict(payload)
+        if isinstance(payload, MetaCampaignPayload):
+            payload = payload.to_api_dict()
+        else:
+            payload = dict(payload)
+
         payload["status"] = "PAUSED"
 
-        # Pre-spend gates: capital_shield + safety_middleware
         budget_mxn = Decimal(str(payload.get("budget_mxn", "0")))
         cs_result = _check_capital_shield(budget_mxn, correlation_id)
         sm_result = _check_safety_middleware(budget_mxn, correlation_id)
@@ -167,7 +222,6 @@ class MetaSafeClient:
                 payload=result,
                 critical=True,
             )
-            # S19: Alert on spend block
             try:
                 from synapse.infra.alert_wiring import get_alert_sink
                 sink = get_alert_sink()
@@ -178,10 +232,9 @@ class MetaSafeClient:
                     dedupe_key=f"spend_blocked:{correlation_id}",
                 )
             except Exception:
-                pass  # best-effort
+                pass
             return result
 
-        # Idempotency check
         existing = self.idempotency_store.get(idempotency_key)
         if existing is not None:
             try:
@@ -196,7 +249,6 @@ class MetaSafeClient:
                 "result": cached,
             }
 
-        # Ledger: attempt
         self.ledger.append(
             event_type="meta.create_campaign.attempt",
             correlation_id=correlation_id,
@@ -207,7 +259,6 @@ class MetaSafeClient:
         )
 
         if not self._is_live:
-            # Mock mode
             mock_id = _generate_mock_id(idempotency_key)
             result = {
                 "ok": True,
@@ -230,23 +281,25 @@ class MetaSafeClient:
             )
             return result
 
-        # Live mode: retry + circuit breaker
         try:
-            def _do_create() -> Dict[str, Any]:
+            campaign_contract = _to_campaign_contract(payload)
+
+            def _do_create() -> Any:
                 return self.circuit_breaker.call(
-                    lambda: call_create_campaign(payload),
+                    lambda: call_create_campaign(campaign_contract),
                 )
 
             api_result = self.retry_policy.run(_do_create)
+            api_payload = _normalize_api_response(api_result)
 
             result = {
                 "ok": True,
                 "mode": "live",
-                "campaign_id": api_result.get("id"),
-                "status": "PAUSED",
+                "campaign_id": api_payload.get("campaign_id") or api_payload.get("id"),
+                "status": str(api_payload.get("status", "PAUSED")),
                 "idempotency_key": idempotency_key,
                 "correlation_id": correlation_id,
-                "api_response": api_result,
+                "api_response": api_payload,
             }
             self.idempotency_store.put(
                 idempotency_key, json.dumps(result, ensure_ascii=False),
@@ -272,9 +325,6 @@ class MetaSafeClient:
                 error_code="create_campaign_error",
             )
 
-    # ------------------------------------------------------------------
-    # maybe_autopause
-    # ------------------------------------------------------------------
     def maybe_autopause(
         self,
         spend_today_mxn: Decimal,
@@ -327,7 +377,6 @@ class MetaSafeClient:
             )
             return result
 
-        # Should pause
         if not self._is_live:
             result = {
                 "ok": True,
@@ -349,11 +398,12 @@ class MetaSafeClient:
             )
             return result
 
-        # Live pause
         try:
-            def _do_pause() -> Dict[str, Any]:
+            pause_request = MetaPauseRequest(campaign_id=campaign_id)
+
+            def _do_pause() -> Any:
                 return self.circuit_breaker.call(
-                    lambda: call_pause_campaign(campaign_id),
+                    lambda: call_pause_campaign(pause_request),
                 )
 
             self.retry_policy.run(_do_pause)
@@ -384,9 +434,6 @@ class MetaSafeClient:
                 error_code="autopause_error",
             )
 
-    # ------------------------------------------------------------------
-    # internal
-    # ------------------------------------------------------------------
     def _handle_error(
         self,
         exc: Exception,
@@ -410,15 +457,14 @@ class MetaSafeClient:
             payload=result,
             critical=True,
         )
-        # S19: Alert on error
         try:
             from synapse.infra.alert_wiring import get_alert_sink
             sink = get_alert_sink()
             sink.send(
-                f"META ERROR: {error_code} — {str(exc)[:100]}",
+                f"META ERROR: {error_code} - {str(exc)[:100]}",
                 level="ERROR",
                 dedupe_key=f"meta_error:{error_code}:{correlation_id}",
             )
         except Exception:
-            pass  # best-effort
+            pass
         return result
