@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from synapse.shopify.cod_risk_scorer import CodRiskScorer
+from synapse.shopify.cod_risk_scorer import CodRiskConfig, CodRiskScorer
 
 
 def test_low_amount_low_risk():
@@ -28,6 +28,44 @@ def test_over_max_amount_blocked():
     r = s.score_order(amount_mxn=Decimal("3000"), postal_code="06600", is_rural=False, previous_rejections=0)
     assert r.cod_allowed is False
     assert r.reason.startswith("amount_exceeds")
+
+
+def test_blacklisted_email_blocks_cod():
+    s = CodRiskScorer(
+        CodRiskConfig(
+            blacklist_emails=("fraud@example.com",),
+        )
+    )
+    r = s.score_order(
+        amount_mxn=Decimal("500"),
+        postal_code="06600",
+        is_rural=False,
+        previous_rejections=0,
+        customer_email="Fraud@example.com",
+    )
+    assert r.score == Decimal("1")
+    assert r.cod_allowed is False
+    assert r.risk_level == "high"
+    assert r.reason == "blacklisted_email"
+
+
+def test_blacklisted_phone_blocks_cod():
+    s = CodRiskScorer(
+        CodRiskConfig(
+            blacklist_phones=("5551234567",),
+        )
+    )
+    r = s.score_order(
+        amount_mxn=Decimal("500"),
+        postal_code="06600",
+        is_rural=False,
+        previous_rejections=0,
+        customer_phone="555-123-4567",
+    )
+    assert r.score == Decimal("1")
+    assert r.cod_allowed is False
+    assert r.risk_level == "high"
+    assert r.reason == "blacklisted_phone"
 
 
 def test_score_is_bounded_hypothesis_optional():

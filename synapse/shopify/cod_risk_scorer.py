@@ -1,98 +1,162 @@
 ﻿from __future__ import annotations
 
-"""
-COD Risk Scorer — cod_risk_scoring.
-
-Modelo determinístico simple para decidir si ofrecer contra-entrega (COD).
-Score ∈ [0, 1].
-
-Factores:
-- amount / max_cod_amount (cap 1.0)
-- rural boost
-- previous_rejections boost (cap 0.45)
-
-__MARKER__ embedded in module constant below.
-"""
-
-import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
 import deal
 
-__MARKER__ = "SESSION_S11_cod_risk_scorer_2026-03-02"
+D0 = Decimal("0")
+D1 = Decimal("1")
 
-log = logging.getLogger(__name__)
+__MARKER__ = "SESSION_S11_cod_risk_scoring"
+
+
+def _d(x) -> Decimal:
+    if isinstance(x, Decimal):
+        return x
+    return Decimal(str(x))
+
+
+def _norm_token(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
+def _norm_phone(value: str | None) -> str:
+    raw = str(value or "")
+    return "".join(ch for ch in raw if ch.isdigit())
 
 
 @dataclass(frozen=True)
 class CodRiskConfig:
-    max_cod_amount_mxn: Decimal = Decimal("2000")
+    max_cod_amount_mxn: Decimal = Decimal("2500")
     high_risk_threshold: Decimal = Decimal("0.70")
     medium_risk_threshold: Decimal = Decimal("0.40")
     rural_risk_boost: Decimal = Decimal("0.20")
+    previous_rejection_boost: Decimal = Decimal("0.15")
+    blacklist_customer_ids: tuple[str, ...] = ()
+    blacklist_emails: tuple[str, ...] = ()
+    blacklist_phones: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class CodRiskResult:
-    score: Decimal  # 0..1
+    score: Decimal
     risk_level: str  # low/medium/high
     cod_allowed: bool
     reason: str
 
 
 class CodRiskScorer:
-    def __init__(self, config: CodRiskConfig | None = None) -> None:
+    def __init__(self, config: CodRiskConfig | None = None):
         self._cfg = config or CodRiskConfig()
 
-    @deal.pre(lambda self, amount_mxn, postal_code, is_rural, previous_rejections:
-              isinstance(amount_mxn, Decimal) and amount_mxn >= Decimal("0"))
-    @deal.pre(lambda self, amount_mxn, postal_code, is_rural, previous_rejections:
-              isinstance(previous_rejections, int) and previous_rejections >= 0)
-    @deal.post(lambda result: Decimal("0") <= result.score <= Decimal("1"))
+    def _blacklist_reason(
+        self,
+        *,
+        customer_id: str | None = None,
+        customer_email: str | None = None,
+        customer_phone: str | None = None,
+    ) -> str | None:
+        cid = _norm_token(customer_id)
+        email = _norm_token(customer_email)
+        phone = _norm_phone(customer_phone)
+
+        blocked_ids = {_norm_token(v) for v in self._cfg.blacklist_customer_ids}
+        blocked_emails = {_norm_token(v) for v in self._cfg.blacklist_emails}
+        blocked_phones = {_norm_phone(v) for v in self._cfg.blacklist_phones}
+
+        if cid and cid in blocked_ids:
+            return "blacklisted_customer_id"
+        if email and email in blocked_emails:
+            return "blacklisted_email"
+        if phone and phone in blocked_phones:
+            return "blacklisted_phone"
+        return None
+
+    @deal.pre(
+        lambda self, amount_mxn, postal_code, is_rural, previous_rejections, **kwargs:
+        _d(amount_mxn) >= D0
+    )
+    @deal.pre(
+        lambda self, amount_mxn, postal_code, is_rural, previous_rejections, **kwargs:
+        int(previous_rejections) >= 0
+    )
+    @deal.pre(
+        lambda self, amount_mxn, postal_code, is_rural, previous_rejections, **kwargs:
+        str(postal_code or "").strip() != ""
+    )
     @deal.post(lambda result: result.risk_level in ("low", "medium", "high"))
+    @deal.post(lambda result: D0 <= result.score <= D1)
     def score_order(
         self,
         amount_mxn: Decimal,
         postal_code: str,
-        is_rural: bool = False,
-        previous_rejections: int = 0,
+        is_rural: bool,
+        previous_rejections: int,
+        *,
+        customer_id: str | None = None,
+        customer_email: str | None = None,
+        customer_phone: str | None = None,
     ) -> CodRiskResult:
-        if amount_mxn > self._cfg.max_cod_amount_mxn:
+        blocked_reason = self._blacklist_reason(
+            customer_id=customer_id,
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+        )
+        if blocked_reason is not None:
             return CodRiskResult(
-                score=Decimal("1"),
+                score=D1,
                 risk_level="high",
                 cod_allowed=False,
-                reason="amount_exceeds_max_cod_2000",
+                reason=blocked_reason,
+            )
+
+        if amount_mxn > self._cfg.max_cod_amount_mxn:
+            return CodRiskResult(
+                score=D1,
+                risk_level="high",
+                cod_allowed=False,
+                reason="amount_exceeds_max_cod_amount",
             )
 
         denom = self._cfg.max_cod_amount_mxn
-        if denom <= Decimal("0"):
-            # Guardrail: config inválida -> fail closed
+        if denom <= D0:
             return CodRiskResult(
-                score=Decimal("1"),
+                score=D1,
                 risk_level="high",
                 cod_allowed=False,
                 reason="invalid_config_max_cod_amount",
             )
 
-        score = (amount_mxn / denom)
-        if score > Decimal("1"):
-            score = Decimal("1")
+        score = _d(amount_mxn) / denom
 
         if is_rural:
-            score += self._cfg.rural_risk_boost
+            score += _d(self._cfg.rural_risk_boost)
 
-        if previous_rejections > 0:
-            score += min(Decimal(previous_rejections) * Decimal("0.15"), Decimal("0.45"))
+        score += _d(previous_rejections) * _d(self._cfg.previous_rejection_boost)
 
-        if score > Decimal("1"):
-            score = Decimal("1")
-        if score < Decimal("0"):
-            score = Decimal("0")
+        if score > D1:
+            score = D1
 
         if score > self._cfg.high_risk_threshold:
-            return CodRiskResult(score=score, risk_level="high", cod_allowed=False, reason="high_risk")
+            return CodRiskResult(
+                score=score,
+                risk_level="high",
+                cod_allowed=False,
+                reason="score_above_high_risk_threshold",
+            )
+
         if score > self._cfg.medium_risk_threshold:
-            return CodRiskResult(score=score, risk_level="medium", cod_allowed=True, reason="medium_risk_warning")
-        return CodRiskResult(score=score, risk_level="low", cod_allowed=True, reason="ok")
+            return CodRiskResult(
+                score=score,
+                risk_level="medium",
+                cod_allowed=True,
+                reason="score_above_medium_risk_threshold",
+            )
+
+        return CodRiskResult(
+            score=score,
+            risk_level="low",
+            cod_allowed=True,
+            reason="score_below_medium_risk_threshold",
+        )
