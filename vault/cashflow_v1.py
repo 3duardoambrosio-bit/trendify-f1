@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
@@ -6,10 +6,12 @@ from typing import Optional
 
 D0 = Decimal("0")
 
+
 def _d(x) -> Decimal:
     if isinstance(x, Decimal):
         return x
     return Decimal(str(x))
+
 
 @dataclass(frozen=True)
 class CashflowConfig:
@@ -19,25 +21,41 @@ class CashflowConfig:
     """
     safety_buffer: Decimal = D0
 
+
 @dataclass
 class CashflowState:
     """
     Canonical state.
-    safety_buffer_cash: legacy buffer (compat). Se usa en State.can_spend / net_available.
+
+    safety_buffer_cash:
+        legacy buffer (compat). Se usa en State.can_spend / net_available.
+
+    projected_cod_rejections:
+        costo proyectado por rechazos COD que aún no están materializados
+        pero sí deben descontarse del cash disponible proyectado para P&L /
+        spend decisions (D-02).
     """
     available_cash: Decimal = D0
     held_cash: Decimal = D0
     projected_refunds: Decimal = D0
     projected_chargebacks: Decimal = D0
     safety_buffer_cash: Decimal = D0  # legacy compat
+    projected_cod_rejections: Decimal = D0  # additive D-02 (tail for compat)
 
     def projected_available_cash(self) -> Decimal:
-        net = _d(self.available_cash) - _d(self.projected_refunds) - _d(self.projected_chargebacks)
+        net = (
+            _d(self.available_cash)
+            - _d(self.projected_refunds)
+            - _d(self.projected_chargebacks)
+            - _d(self.projected_cod_rejections)
+        )
         return net if net > D0 else D0
 
     @property
     def net_available(self) -> Decimal:
-        # legacy behavior: net = available - refunds - chargebacks - legacy_buffer (clamped >=0)
+        # legacy behavior:
+        # net = available - refunds - chargebacks - cod_rejections - legacy_buffer
+        # clamped >= 0
         net = self.projected_available_cash() - _d(self.safety_buffer_cash)
         return net if net > D0 else D0
 
@@ -58,7 +76,9 @@ class CashflowState:
             projected_refunds=_d(self.projected_refunds),
             projected_chargebacks=_d(self.projected_chargebacks),
             safety_buffer_cash=_d(self.safety_buffer_cash),
+            projected_cod_rejections=_d(self.projected_cod_rejections),
         )
+
 
 class CashflowModel:
     """
@@ -107,6 +127,7 @@ class CashflowModel:
 
     def snapshot(self) -> CashflowState:
         return self.state.snapshot()
+
 
 # --- Legacy exports (older modules/tests) ---
 CashFlowConfig = CashflowConfig
