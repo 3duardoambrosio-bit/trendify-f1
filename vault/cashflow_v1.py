@@ -63,6 +63,20 @@ class CashflowTimelineEntry:
         return net if net > D0 else D0
 
 
+@dataclass(frozen=True)
+class CashflowDistributionEntry:
+    """
+    Distribution/reporting row derived from payment_method_timeline.
+    share is normalized over projected_available_cash across methods.
+    """
+    payment_method: str
+    projected_available_cash: Decimal = D0
+    share: Decimal = D0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payment_method", _norm_payment_method(self.payment_method))
+
+
 @dataclass
 class CashflowState:
     """
@@ -121,6 +135,29 @@ class CashflowState:
             if entry.payment_method == wanted:
                 return entry
         return CashflowTimelineEntry(payment_method=wanted)
+
+    def payment_method_distribution(self) -> tuple[CashflowDistributionEntry, ...]:
+        timeline = tuple(self.payment_method_timeline)
+        if not timeline:
+            return ()
+
+        totals = tuple(
+            (entry.payment_method, entry.projected_available_cash)
+            for entry in timeline
+        )
+        grand_total = sum((amount for _, amount in totals), D0)
+
+        rows: list[CashflowDistributionEntry] = []
+        for method, amount in totals:
+            share = (amount / grand_total) if grand_total > D0 else D0
+            rows.append(
+                CashflowDistributionEntry(
+                    payment_method=method,
+                    projected_available_cash=amount,
+                    share=share,
+                )
+            )
+        return tuple(rows)
 
     def snapshot(self) -> "CashflowState":
         return CashflowState(
@@ -196,6 +233,9 @@ class CashflowModel:
     def projected_available_cash_for(self, payment_method: str) -> Decimal:
         return self.state.timeline_for(payment_method).projected_available_cash
 
+    def payment_method_distribution(self) -> tuple[CashflowDistributionEntry, ...]:
+        return self.state.payment_method_distribution()
+
     def snapshot(self) -> CashflowState:
         return self.state.snapshot()
 
@@ -205,8 +245,9 @@ CashFlowConfig = CashflowConfig
 CashFlowState = CashflowState
 CashFlowModel = CashflowModel
 CashFlowTimelineEntry = CashflowTimelineEntry
+CashFlowDistributionEntry = CashflowDistributionEntry
 
 __all__ = [
-    "CashflowConfig", "CashflowState", "CashflowModel", "CashflowTimelineEntry",
-    "CashFlowConfig", "CashFlowState", "CashFlowModel", "CashFlowTimelineEntry",
+    "CashflowConfig", "CashflowState", "CashflowModel", "CashflowTimelineEntry", "CashflowDistributionEntry",
+    "CashFlowConfig", "CashFlowState", "CashFlowModel", "CashFlowTimelineEntry", "CashFlowDistributionEntry",
 ]
