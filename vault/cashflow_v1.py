@@ -13,6 +13,10 @@ def _d(x) -> Decimal:
     return Decimal(str(x))
 
 
+def _norm_payment_method(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
 @dataclass(frozen=True)
 class CashflowConfig:
     """
@@ -20,6 +24,43 @@ class CashflowConfig:
     safety_buffer: hard buffer de liquidez (P0).
     """
     safety_buffer: Decimal = D0
+
+
+@dataclass(frozen=True)
+class CashflowTimelineEntry:
+    """
+    Additive timeline per payment method.
+
+    settlement_days:
+        expected number of days until the method settles into available cash.
+        0 means immediate / already available.
+
+    This structure is reporting-oriented and does NOT mutate the legacy global
+    spend logic by itself; it complements the canonical state with per-method
+    projected availability.
+    """
+    payment_method: str
+    available_cash: Decimal = D0
+    held_cash: Decimal = D0
+    projected_refunds: Decimal = D0
+    projected_chargebacks: Decimal = D0
+    projected_cod_rejections: Decimal = D0
+    settlement_days: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payment_method", _norm_payment_method(self.payment_method))
+        if int(self.settlement_days) < 0:
+            raise ValueError("settlement_days must be >= 0")
+
+    @property
+    def projected_available_cash(self) -> Decimal:
+        net = (
+            _d(self.available_cash)
+            - _d(self.projected_refunds)
+            - _d(self.projected_chargebacks)
+            - _d(self.projected_cod_rejections)
+        )
+        return net if net > D0 else D0
 
 
 @dataclass
@@ -34,6 +75,10 @@ class CashflowState:
         costo proyectado por rechazos COD que aún no están materializados
         pero sí deben descontarse del cash disponible proyectado para P&L /
         spend decisions (D-02).
+
+    payment_method_timeline:
+        additive timeline/reporting surface per payment method
+        (cashflow_timeline_per_payment_method).
     """
     available_cash: Decimal = D0
     held_cash: Decimal = D0
@@ -41,6 +86,7 @@ class CashflowState:
     projected_chargebacks: Decimal = D0
     safety_buffer_cash: Decimal = D0  # legacy compat
     projected_cod_rejections: Decimal = D0  # additive D-02 (tail for compat)
+    payment_method_timeline: tuple[CashflowTimelineEntry, ...] = ()
 
     def projected_available_cash(self) -> Decimal:
         net = (
@@ -69,6 +115,13 @@ class CashflowState:
     def can_debit(self, amount: Decimal) -> bool:
         return self.can_spend(amount)
 
+    def timeline_for(self, payment_method: str) -> CashflowTimelineEntry:
+        wanted = _norm_payment_method(payment_method)
+        for entry in self.payment_method_timeline:
+            if entry.payment_method == wanted:
+                return entry
+        return CashflowTimelineEntry(payment_method=wanted)
+
     def snapshot(self) -> "CashflowState":
         return CashflowState(
             available_cash=_d(self.available_cash),
@@ -77,6 +130,18 @@ class CashflowState:
             projected_chargebacks=_d(self.projected_chargebacks),
             safety_buffer_cash=_d(self.safety_buffer_cash),
             projected_cod_rejections=_d(self.projected_cod_rejections),
+            payment_method_timeline=tuple(
+                CashflowTimelineEntry(
+                    payment_method=e.payment_method,
+                    available_cash=_d(e.available_cash),
+                    held_cash=_d(e.held_cash),
+                    projected_refunds=_d(e.projected_refunds),
+                    projected_chargebacks=_d(e.projected_chargebacks),
+                    projected_cod_rejections=_d(e.projected_cod_rejections),
+                    settlement_days=int(e.settlement_days),
+                )
+                for e in self.payment_method_timeline
+            ),
         )
 
 
@@ -125,6 +190,12 @@ class CashflowModel:
     def debit(self, amount: Decimal) -> None:
         self.debit_available(amount)
 
+    def payment_method_timeline(self) -> tuple[CashflowTimelineEntry, ...]:
+        return tuple(self.state.payment_method_timeline)
+
+    def projected_available_cash_for(self, payment_method: str) -> Decimal:
+        return self.state.timeline_for(payment_method).projected_available_cash
+
     def snapshot(self) -> CashflowState:
         return self.state.snapshot()
 
@@ -133,8 +204,9 @@ class CashflowModel:
 CashFlowConfig = CashflowConfig
 CashFlowState = CashflowState
 CashFlowModel = CashflowModel
+CashFlowTimelineEntry = CashflowTimelineEntry
 
 __all__ = [
-    "CashflowConfig", "CashflowState", "CashflowModel",
-    "CashFlowConfig", "CashFlowState", "CashFlowModel",
+    "CashflowConfig", "CashflowState", "CashflowModel", "CashflowTimelineEntry",
+    "CashFlowConfig", "CashFlowState", "CashFlowModel", "CashFlowTimelineEntry",
 ]
