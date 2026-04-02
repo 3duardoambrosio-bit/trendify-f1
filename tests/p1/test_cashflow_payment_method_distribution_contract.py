@@ -1,4 +1,6 @@
-﻿from decimal import Decimal
+# V3GAP:A-06_payment_method_distribution
+
+from decimal import Decimal
 
 from vault.cashflow_v1 import (
     CashFlowDistributionEntry,

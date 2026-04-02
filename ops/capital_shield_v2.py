@@ -1,3 +1,5 @@
+# V3GAP:capital_shield_available_cash
+
 from __future__ import annotations
 
 import logging

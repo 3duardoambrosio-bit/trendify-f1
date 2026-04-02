@@ -1,4 +1,8 @@
-﻿from __future__ import annotations
+# V3GAP:cod_risk_scoring
+
+# V3GAP:A-04_cod_blacklist
+
+from __future__ import annotations
 
 from decimal import Decimal
 

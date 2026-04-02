@@ -1,3 +1,7 @@
+# V3GAP:capital_shield_available_cash
+
+# V3GAP:capital_shield_available_cash
+
 from decimal import Decimal
 
 from ops.capital_shield_v2 import CapitalShieldV2, CapitalDecision

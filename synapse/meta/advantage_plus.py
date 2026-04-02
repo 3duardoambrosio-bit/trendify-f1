@@ -1,4 +1,6 @@
-﻿from __future__ import annotations
+# V3GAP:B-05_advantage_plus_2025
+
+from __future__ import annotations
 
 """
 Advantage+ Campaign Configuration — B-05.

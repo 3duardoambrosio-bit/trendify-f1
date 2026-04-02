@@ -1,4 +1,6 @@
-﻿from decimal import Decimal
+# V3GAP:cashflow_timeline_per_payment_method
+
+from decimal import Decimal
 
 from vault.cashflow_v1 import CashFlowModel, CashFlowState, CashFlowTimelineEntry
 

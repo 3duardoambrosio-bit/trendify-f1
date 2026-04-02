@@ -1,3 +1,5 @@
+# V3GAP:auto_pause_zero_stock
+
 """ops_tick Level 4 (NASA Power-of-Ten Grade).
 
 Orchestrates the Phase-1 loop end-to-end via subprocess calls.

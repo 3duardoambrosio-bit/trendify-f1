@@ -1,4 +1,8 @@
-﻿from __future__ import annotations
+# V3GAP:D-02_cod_rejection_in_pnl
+# V3GAP:cashflow_timeline_per_payment_method
+# V3GAP:A-06_payment_method_distribution
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal

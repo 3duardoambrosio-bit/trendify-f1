@@ -1,3 +1,5 @@
+# V3GAP:auto_pause_zero_stock
+
 """S20 P0 Tests: ops_tick inventory pre-flight gate."""
 
 from __future__ import annotations

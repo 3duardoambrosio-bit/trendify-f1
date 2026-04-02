@@ -1,4 +1,8 @@
-﻿from __future__ import annotations
+# V3GAP:C-04_product_quality_gate
+
+# V3GAP:C-04_product_quality_gate
+
+from __future__ import annotations
 
 """
 Creative Pack Gate — enforcer numérico para evitar creativos basura.

@@ -1,4 +1,8 @@
-﻿from __future__ import annotations
+# V3GAP:warm_up_executed_10_days
+
+# V3GAP:B-04_warm_up_protocol
+
+from __future__ import annotations
 
 """
 Meta Warm-Up Protocol — B-04.

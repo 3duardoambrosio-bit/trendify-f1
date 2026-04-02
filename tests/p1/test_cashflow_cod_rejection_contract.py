@@ -1,4 +1,6 @@
-﻿from decimal import Decimal
+# V3GAP:D-02_cod_rejection_in_pnl
+
+from decimal import Decimal
 
 from vault.cashflow_v1 import CashFlowModel, CashFlowState
 
