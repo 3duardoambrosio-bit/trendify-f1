@@ -1,6 +1,7 @@
 # V3GAP:D-02_cod_rejection_in_pnl
 # V3GAP:cashflow_timeline_per_payment_method
 # V3GAP:A-06_payment_method_distribution
+# V3GAP:A-05_msi_fee_adjustment
 
 from __future__ import annotations
 
@@ -39,6 +40,10 @@ class CashflowTimelineEntry:
         expected number of days until the method settles into available cash.
         0 means immediate / already available.
 
+    projected_msi_fees:
+        projected merchant fees attributable to MSI transactions for this method.
+        A-05 must discount these fees from projected available cash.
+
     This structure is reporting-oriented and does NOT mutate the legacy global
     spend logic by itself; it complements the canonical state with per-method
     projected availability.
@@ -49,6 +54,7 @@ class CashflowTimelineEntry:
     projected_refunds: Decimal = D0
     projected_chargebacks: Decimal = D0
     projected_cod_rejections: Decimal = D0
+    projected_msi_fees: Decimal = D0
     settlement_days: int = 0
 
     def __post_init__(self) -> None:
@@ -63,6 +69,7 @@ class CashflowTimelineEntry:
             - _d(self.projected_refunds)
             - _d(self.projected_chargebacks)
             - _d(self.projected_cod_rejections)
+            - _d(self.projected_msi_fees)
         )
         return net if net > D0 else D0
 
@@ -94,6 +101,10 @@ class CashflowState:
         pero sí deben descontarse del cash disponible proyectado para P&L /
         spend decisions (D-02).
 
+    projected_msi_fees:
+        costo proyectado por merchant fees de MSI que debe descontarse del
+        cash disponible proyectado y del P&L realista (A-05).
+
     payment_method_timeline:
         additive timeline/reporting surface per payment method
         (cashflow_timeline_per_payment_method).
@@ -104,6 +115,7 @@ class CashflowState:
     projected_chargebacks: Decimal = D0
     safety_buffer_cash: Decimal = D0  # legacy compat
     projected_cod_rejections: Decimal = D0  # additive D-02 (tail for compat)
+    projected_msi_fees: Decimal = D0  # additive A-05
     payment_method_timeline: tuple[CashflowTimelineEntry, ...] = ()
 
     def projected_available_cash(self) -> Decimal:
@@ -112,13 +124,14 @@ class CashflowState:
             - _d(self.projected_refunds)
             - _d(self.projected_chargebacks)
             - _d(self.projected_cod_rejections)
+            - _d(self.projected_msi_fees)
         )
         return net if net > D0 else D0
 
     @property
     def net_available(self) -> Decimal:
         # legacy behavior:
-        # net = available - refunds - chargebacks - cod_rejections - legacy_buffer
+        # net = available - refunds - chargebacks - cod_rejections - msi_fees - legacy_buffer
         # clamped >= 0
         net = self.projected_available_cash() - _d(self.safety_buffer_cash)
         return net if net > D0 else D0
@@ -171,6 +184,7 @@ class CashflowState:
             projected_chargebacks=_d(self.projected_chargebacks),
             safety_buffer_cash=_d(self.safety_buffer_cash),
             projected_cod_rejections=_d(self.projected_cod_rejections),
+            projected_msi_fees=_d(self.projected_msi_fees),
             payment_method_timeline=tuple(
                 CashflowTimelineEntry(
                     payment_method=e.payment_method,
@@ -179,6 +193,7 @@ class CashflowState:
                     projected_refunds=_d(e.projected_refunds),
                     projected_chargebacks=_d(e.projected_chargebacks),
                     projected_cod_rejections=_d(e.projected_cod_rejections),
+                    projected_msi_fees=_d(e.projected_msi_fees),
                     settlement_days=int(e.settlement_days),
                 )
                 for e in self.payment_method_timeline
