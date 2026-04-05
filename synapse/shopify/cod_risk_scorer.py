@@ -164,3 +164,40 @@ class CodRiskScorer:
             cod_allowed=True,
             reason="score_below_medium_risk_threshold",
         )
+
+# V3GAP:cod_pre_confirmation
+def build_cod_pre_confirmation_contract(
+    payment_method,
+    *,
+    channel: str = "whatsapp",
+    order_id=None,
+    metadata=None,
+):
+    """
+    Build the pre-confirmation contract only for COD-like payment methods.
+    This is a lightweight operational trigger, not the external integration itself.
+    """
+    if payment_method is None:
+        raise TypeError("payment_method is required")
+
+    normalized = str(payment_method).strip().lower()
+    cod_like = {"cod", "cash", "cash_on_delivery", "contraentrega"}
+
+    if normalized not in cod_like:
+        return None
+
+    contract = {
+        "gate_id": "cod_pre_confirmation",
+        "channel": channel,
+        "reason": "confirm_cod_order_before_fulfillment",
+        "payment_method": normalized,
+        "requires_customer_confirmation": True,
+    }
+
+    if order_id is not None:
+        contract["order_id"] = str(order_id)
+
+    if metadata is not None:
+        contract["metadata"] = dict(metadata)
+
+    return contract
