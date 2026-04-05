@@ -161,3 +161,43 @@ def build_oxxo_reminder_day3_contract(
         contract["metadata"] = dict(metadata)
 
     return contract
+
+# V3GAP:A-03_oxxo_refund_alternative
+def build_oxxo_refund_alternative_contract(
+    record,
+    *,
+    channel: str = "whatsapp",
+    metadata=None,
+):
+    """
+    Build the lightweight operational contract for OXXO refunds that must
+    follow an alternative path instead of the normal auto-fulfillment flow.
+    """
+    if not isinstance(record, OxxoLifecycleRecord):
+        raise TypeError("record must be OxxoLifecycleRecord")
+
+    requires_alternative = (
+        record.status is OxxoLifecycleStatus.EXPIRADO
+        or bool(record.orphan_payment)
+    )
+
+    if not requires_alternative:
+        return None
+
+    contract = {
+        "gate_id": "A-03_oxxo_refund_alternative",
+        "channel": channel,
+        "reason": "route_oxxo_refund_through_alternative_path",
+        "order_id": record.order_id,
+        "voucher_id": record.voucher_id,
+        "status": record.status.name.lower(),
+        "orphan_payment": bool(record.orphan_payment),
+    }
+
+    if record.paid_at is not None:
+        contract["paid_at"] = record.paid_at.isoformat()
+
+    if metadata is not None:
+        contract["metadata"] = dict(metadata)
+
+    return contract
