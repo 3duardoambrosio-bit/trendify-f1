@@ -111,3 +111,53 @@ class OxxoLifecycleManager:
 
     def can_auto_fulfill(self, record: OxxoLifecycleRecord) -> bool:
         return record.status is OxxoLifecycleStatus.PAGADO and not record.orphan_payment
+
+# V3GAP:oxxo_reminder_day3
+def build_oxxo_reminder_day3_contract(
+    voucher_created_at,
+    *,
+    validator=None,
+    channel: str = "whatsapp",
+    metadata=None,
+):
+    """
+    Build the day-3 OXXO reminder contract only when the existing validator
+    says the voucher already crossed the configured reminder threshold.
+    """
+    import inspect
+    from datetime import datetime
+    from synapse.shopify import oxxo_validator as _oxxo_validator_module
+
+    if not isinstance(voucher_created_at, datetime):
+        raise TypeError("voucher_created_at must be datetime")
+
+    resolved_validator = validator
+    if resolved_validator is None:
+        validator_classes = [
+            obj
+            for obj in vars(_oxxo_validator_module).values()
+            if inspect.isclass(obj) and hasattr(obj, "needs_reminder")
+        ]
+        if not validator_classes:
+            raise RuntimeError(
+                "No validator class with needs_reminder found in synapse.shopify.oxxo_validator"
+            )
+        resolved_validator = validator_classes[0]()
+
+    if not hasattr(resolved_validator, "needs_reminder"):
+        raise TypeError("validator must expose needs_reminder")
+
+    if not resolved_validator.needs_reminder(voucher_created_at):
+        return None
+
+    contract = {
+        "gate_id": "oxxo_reminder_day3",
+        "channel": channel,
+        "reason": "voucher_pending_payment_day3",
+        "voucher_created_at": voucher_created_at.isoformat(),
+    }
+
+    if metadata is not None:
+        contract["metadata"] = dict(metadata)
+
+    return contract
