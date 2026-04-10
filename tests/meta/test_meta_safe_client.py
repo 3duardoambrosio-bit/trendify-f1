@@ -309,3 +309,23 @@ class TestCockpitRegression:
         obj = json.loads(r.stdout)
         assert obj["ok"] is True
         assert obj["mode"] == "health"
+
+
+def test_governed_anchor_is_written_into_ledger_events(tmp_path: Path) -> None:
+    client = _make_client(tmp_path, live=False)
+    client.create_campaign_safe(
+        payload={"name": "Governed Anchor Campaign"},
+        idempotency_key="test-key-anchor-001",
+        correlation_id="corr-anchor-001",
+    )
+
+    events = _read_ledger_events(tmp_path)
+    attempt = next(e for e in events if e["event_type"] == "meta.create_campaign.attempt")
+
+    assert "governed_anchor" in attempt["payload"]
+    anchor = attempt["payload"]["governed_anchor"]
+    assert anchor["payload"]["event_type"] == "meta.create_campaign.attempt"
+    assert anchor["payload"]["correlation_id"] == "corr-anchor-001"
+    assert anchor["payload"]["idempotency_key"] == "test-key-anchor-001"
+    assert anchor["metadata"]["anchor_contract_version"] == "governed-write-anchor.v1"
+    assert anchor["metadata"]["source"] == "synapse.meta.safe_client"

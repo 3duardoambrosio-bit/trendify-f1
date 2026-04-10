@@ -25,6 +25,7 @@ from synapse.infra.ledger_f1_core import Ledger
 from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
 from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaCampaignResponse, MetaPauseRequest
+from synapse.meta.governed_write_anchor import attach_governed_anchor
 
 
 def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
@@ -179,6 +180,34 @@ class MetaSafeClient:
     def _is_live(self) -> bool:
         return self.feature_flags.is_on("meta_live_api", default=False)
 
+    def _append_governed_event(
+        self,
+        *,
+        event_type: str,
+        correlation_id: str,
+        idempotency_key: str,
+        severity: str,
+        payload: Dict[str, Any],
+        critical: bool = False,
+    ) -> None:
+        governed_payload = attach_governed_anchor(
+            event_type=event_type,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
+            payload=payload,
+            severity=severity,
+            critical=critical,
+            event_id=correlation_id,
+        )
+        self.ledger.append(
+            event_type,
+            correlation_id,
+            idempotency_key,
+            severity=severity,
+            payload=governed_payload,
+            critical=critical,
+        )
+
     def create_campaign_safe(
         self,
         payload: Dict[str, Any] | MetaCampaignPayload,
@@ -214,7 +243,7 @@ class MetaSafeClient:
                 "idempotency_key": idempotency_key,
                 "correlation_id": correlation_id,
             }
-            self.ledger.append(
+            self._append_governed_event(
                 event_type="meta.create_campaign.blocked",
                 correlation_id=correlation_id,
                 idempotency_key=idempotency_key,
@@ -249,7 +278,7 @@ class MetaSafeClient:
                 "result": cached,
             }
 
-        self.ledger.append(
+        self._append_governed_event(
             event_type="meta.create_campaign.attempt",
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
@@ -271,7 +300,7 @@ class MetaSafeClient:
             self.idempotency_store.put(
                 idempotency_key, json.dumps(result, ensure_ascii=False),
             )
-            self.ledger.append(
+            self._append_governed_event(
                 event_type="meta.create_campaign.result",
                 correlation_id=correlation_id,
                 idempotency_key=idempotency_key,
@@ -304,7 +333,7 @@ class MetaSafeClient:
             self.idempotency_store.put(
                 idempotency_key, json.dumps(result, ensure_ascii=False),
             )
-            self.ledger.append(
+            self._append_governed_event(
                 event_type="meta.create_campaign.result",
                 correlation_id=correlation_id,
                 idempotency_key=idempotency_key,
@@ -341,7 +370,7 @@ class MetaSafeClient:
         should_pause = spend_today_mxn >= threshold
         idem_key = f"autopause:{campaign_id}:{spend_today_mxn}"
 
-        self.ledger.append(
+        self._append_governed_event(
             event_type="meta.autopause.attempt",
             correlation_id=correlation_id,
             idempotency_key=idem_key,
@@ -367,7 +396,7 @@ class MetaSafeClient:
                 "campaign_id": campaign_id,
                 "correlation_id": correlation_id,
             }
-            self.ledger.append(
+            self._append_governed_event(
                 event_type="meta.autopause.result",
                 correlation_id=correlation_id,
                 idempotency_key=idem_key,
@@ -388,7 +417,7 @@ class MetaSafeClient:
                 "campaign_id": campaign_id,
                 "correlation_id": correlation_id,
             }
-            self.ledger.append(
+            self._append_governed_event(
                 event_type="meta.autopause.result",
                 correlation_id=correlation_id,
                 idempotency_key=idem_key,
@@ -418,7 +447,7 @@ class MetaSafeClient:
                 "campaign_id": campaign_id,
                 "correlation_id": correlation_id,
             }
-            self.ledger.append(
+            self._append_governed_event(
                 event_type="meta.autopause.result",
                 correlation_id=correlation_id,
                 idempotency_key=idem_key,
@@ -449,7 +478,7 @@ class MetaSafeClient:
             "idempotency_key": idempotency_key,
             "correlation_id": correlation_id,
         }
-        self.ledger.append(
+        self._append_governed_event(
             event_type="meta.error",
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
