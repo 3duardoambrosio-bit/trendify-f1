@@ -1,311 +1,377 @@
-# infra/ledger_v2.py
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional
 from uuid import uuid4
-import json
-import os
 
 import deal
 
+APPEND_ONLY_DOCUMENT_TYPE = "append-only"
+AMENDMENT_DOCUMENT_TYPE = "amendment"
+INGEST_TIME_FIELD = "ingest_time"
+EVENT_TIME_FIELD = "event_time"
 
-MoneyInput = Union[Decimal, int, str]
-_Q2 = Decimal("0.01")
-
-
-class LedgerError(Exception):
-    """Base error for LedgerV2."""
-
-
-class ValidationError(LedgerError):
-    """Invalid input to ledger."""
+DUMP_SEPARATORS = (",", ":")
 
 
-class LedgerClosedError(LedgerError):
-    """Operation attempted after close()."""
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-class LedgerIOError(LedgerError):
-    """File I/O failed."""
+def iso_utc(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-class LedgerIntegrityError(LedgerError):
-    """Ledger file is corrupted or inconsistent."""
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=DUMP_SEPARATORS, ensure_ascii=False)
+
+
+def compute_checksum(value: Any) -> str:
+    raw = _canonical_json(value).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def canonicalize_money(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        raw = value
+    elif isinstance(value, int):
+        raw = Decimal(value)
+    else:
+        raw = Decimal(str(value))
+    return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerRecord:
+    event_id: str
+    document_type: str
+    payload_checksum: str
+    payload: Dict[str, Any]
+    base_event_id: Optional[str] = None
+    ingest_time: str = ""
+    event_time: str = ""
+    metadata: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "document_type": self.document_type,
+            "payload_checksum": self.payload_checksum,
+            "payload": self.payload,
+            "base_event_id": self.base_event_id,
+            "ingest_time": self.ingest_time,
+            "event_time": self.event_time,
+            "metadata": self.metadata or {},
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerRecordWriteV2:
+    record: LedgerRecord
+    status: str
+    clock_source_id: str
+    clock_unreliable: bool
+    clock_skew_estimate: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        base = self.record.to_dict()
+        base.update(
+            {
+                "status": self.status,
+                "clock_source_id": self.clock_source_id,
+                "clock_unreliable": self.clock_unreliable,
+                "clock_skew_estimate": self.clock_skew_estimate,
+            }
+        )
+        return base
+
+
+def build_ledger_record(
+    *,
+    event_id: str,
+    document_type: str,
+    payload: Dict[str, Any],
+    base_event_id: Optional[str] = None,
+    ingest_time: Optional[str] = None,
+    event_time: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> LedgerRecord:
+    payload_checksum = compute_checksum(payload)
+    now = iso_utc(_now_utc())
+    return LedgerRecord(
+        event_id=event_id,
+        document_type=document_type,
+        payload_checksum=payload_checksum,
+        payload=payload,
+        base_event_id=base_event_id,
+        ingest_time=ingest_time or now,
+        event_time=event_time or now,
+        metadata=metadata or {},
+    )
+
+
+def wrap_as_append_only(
+    record: LedgerRecord,
+    *,
+    clock_source_id: str,
+    clock_unreliable: bool,
+    clock_skew_estimate: float,
+    status: str = "APPENDED",
+) -> LedgerRecordWriteV2:
+    return LedgerRecordWriteV2(
+        record=record,
+        status=status,
+        clock_source_id=clock_source_id,
+        clock_unreliable=clock_unreliable,
+        clock_skew_estimate=clock_skew_estimate,
+    )
+
+
+def wrap_as_amendment(
+    record: LedgerRecord,
+    *,
+    clock_source_id: str,
+    clock_unreliable: bool,
+    clock_skew_estimate: float,
+    status: str = "AMENDED",
+) -> LedgerRecordWriteV2:
+    if not record.base_event_id:
+        raise ValueError("amendment must reference base_event_id")
+    return LedgerRecordWriteV2(
+        record=record,
+        status=status,
+        clock_source_id=clock_source_id,
+        clock_unreliable=clock_unreliable,
+        clock_skew_estimate=clock_skew_estimate,
+    )
+
+
+def rebuild_checksums(documents: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rebuilt: List[Dict[str, Any]] = []
+    for document in documents:
+        copy = dict(document)
+        copy["payload_checksum"] = compute_checksum(copy.get("payload", {}))
+        rebuilt.append(copy)
+    return rebuilt
+
+
+class LedgerClosedError(RuntimeError):
+    pass
+
+
+class LedgerIntegrityError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class LedgerRow:
     entry_id: str
-    ts_utc: str
     kind: str
     amount: str
-    currency: str
     memo: str
-    meta: Dict[str, str]
+    meta: Dict[str, Any]
+    currency: str
+    ts: str
+    checksum: str
 
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> "LedgerRow":
+        return LedgerRow(
+            entry_id=str(data["entry_id"]),
+            kind=str(data["kind"]),
+            amount=str(data["amount"]),
+            memo=str(data.get("memo", "")),
+            meta=dict(data.get("meta", {})),
+            currency=str(data.get("currency", "USD")),
+            ts=str(data["ts"]),
+            checksum=str(data["checksum"]),
+        )
 
-def _utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
-
-
-def _is_currency(code: str) -> bool:
-    return isinstance(code, str) and len(code) == 3 and code.isalpha() and code.upper() == code
-
-
-def _ensure_kind(kind: str) -> str:
-    if not isinstance(kind, str) or not kind:
-        raise ValidationError("kind must be non-empty str")
-    k = kind.strip().upper()
-    if not k.replace("_", "").isalpha():
-        raise ValidationError("kind must be A-Z/_ only")
-    if len(k) > 24:
-        raise ValidationError("kind length must be <= 24")
-    return k
-
-
-def _reject_float(x: Any) -> None:
-    if isinstance(x, float):
-        raise ValidationError("float forbidden in money-path; use Decimal|int|str")
-
-
-def _to_decimal(amount: MoneyInput) -> Decimal:
-    _reject_float(amount)
-    if isinstance(amount, Decimal):
-        dec = amount
-    elif isinstance(amount, int):
-        dec = Decimal(amount)
-    elif isinstance(amount, str):
-        try:
-            dec = Decimal(amount.strip())
-        except (ValueError, ArithmeticError) as e:
-            raise ValidationError("invalid decimal string") from e
-    else:
-        raise ValidationError("amount must be Decimal|int|str")
-    return dec.quantize(_Q2, rounding=ROUND_HALF_UP)
-
-
-def _ensure_nonzero(dec: Decimal) -> None:
-    if dec == Decimal("0.00"):
-        raise ValidationError("amount must be non-zero")
-
-
-def _ensure_memo(memo: str) -> str:
-    if not isinstance(memo, str):
-        raise ValidationError("memo must be str")
-    if len(memo) > 200:
-        raise ValidationError("memo length must be <= 200")
-    return memo
-
-
-def _ensure_meta(meta: Optional[Mapping[str, str]]) -> Dict[str, str]:
-    if meta is None:
-        return {}
-    if not isinstance(meta, Mapping):
-        raise ValidationError("meta must be mapping[str,str]")
-    out: Dict[str, str] = {}
-    for k, v in meta.items():
-        if not isinstance(k, str) or not isinstance(v, str):
-            raise ValidationError("meta keys/values must be str")
-        if len(k) > 50 or len(v) > 200:
-            raise ValidationError("meta key<=50 and value<=200")
-        out[k] = v
-    return out
-
-
-def _row_to_json_line(row: LedgerRow) -> str:
-    payload = {
-        "entry_id": row.entry_id,
-        "ts_utc": row.ts_utc,
-        "kind": row.kind,
-        "amount": row.amount,
-        "currency": row.currency,
-        "memo": row.memo,
-        "meta": dict(row.meta),
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _parse_row_dict(d: Any) -> LedgerRow:
-    if not isinstance(d, dict):
-        raise LedgerIntegrityError("row must be dict")
-    try:
-        entry_id = d["entry_id"]
-        ts_utc = d["ts_utc"]
-        kind = d["kind"]
-        amount = d["amount"]
-        currency = d["currency"]
-        memo = d.get("memo", "")
-        meta = d.get("meta", {})
-    except KeyError as e:
-        raise LedgerIntegrityError("missing field") from e
-    if not isinstance(entry_id, str) or len(entry_id) < 8:
-        raise LedgerIntegrityError("invalid entry_id")
-    if not isinstance(ts_utc, str) or "T" not in ts_utc:
-        raise LedgerIntegrityError("invalid ts_utc")
-    k = _ensure_kind(kind)
-    if not _is_currency(currency):
-        raise LedgerIntegrityError("invalid currency")
-    _reject_float(amount)
-    dec = _to_decimal(amount if isinstance(amount, str) else str(amount))
-    _ensure_nonzero(dec)
-    m = _ensure_memo(memo)
-    meta_dict = _ensure_meta(meta)
-    return LedgerRow(
-        entry_id=entry_id,
-        ts_utc=ts_utc,
-        kind=k,
-        amount=str(dec),
-        currency=currency,
-        memo=m,
-        meta=meta_dict,
-    )
-
-
-def _read_existing_rows(path: Path) -> Tuple[LedgerRow, ...]:
-    if not path.exists():
-        return tuple()
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError as e:
-        raise LedgerIOError("failed to read ledger file") from e
-    rows: list[LedgerRow] = []
-    for idx, line in enumerate(raw.splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            d = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise LedgerIntegrityError(f"invalid json line {idx}") from e
-        rows.append(_parse_row_dict(d))
-    return tuple(rows)
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "entry_id": self.entry_id,
+            "kind": self.kind,
+            "amount": self.amount,
+            "memo": self.memo,
+            "meta": self.meta,
+            "currency": self.currency,
+            "ts": self.ts,
+            "checksum": self.checksum,
+        }
 
 
 class LedgerV2:
-    @deal.pre(lambda self, path="data/ledger/ledger_v2.jsonl", currency="USD", fsync=False, max_buffer=100: isinstance(max_buffer, int) and max_buffer > 0)
-    @deal.pre(lambda self, path="data/ledger/ledger_v2.jsonl", currency="USD", fsync=False, max_buffer=100: _is_currency(currency))
-    @deal.post(lambda result: result is None)
-    @deal.raises(ValidationError, LedgerIOError, LedgerIntegrityError)
     def __init__(
         self,
-        path: Union[str, Path] = "data/ledger/ledger_v2.jsonl",
+        *,
+        path: str | Path,
         currency: str = "USD",
         fsync: bool = False,
-        max_buffer: int = 100,
+        max_buffer: int = 1000,
     ) -> None:
-        self.currency: str = currency
-        self._path: Path = Path(path)
-        self._fsync: bool = bool(fsync)
-        self._max_buffer: int = int(max_buffer)
-        self._closed: bool = False
-        self._buffer: list[LedgerRow] = []
-        self._rows: list[LedgerRow] = list(_read_existing_rows(self._path))
+        self.path = Path(path)
+        self.currency = str(currency)
+        self.fsync = bool(fsync)
+        self.max_buffer = int(max_buffer)
+        self._closed = False
+        self._buffer: List[LedgerRow] = []
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _ensure_open(self) -> None:
-        if self._closed:
-            raise LedgerClosedError("ledger is closed")
+    @staticmethod
+    def _row_payload(kind: str, amount: str, memo: str, meta: Dict[str, Any], currency: str, ts: str) -> Dict[str, Any]:
+        return {
+            "kind": kind,
+            "amount": amount,
+            "memo": memo,
+            "meta": meta,
+            "currency": currency,
+            "ts": ts,
+        }
 
-    def _append_row(self, row: LedgerRow) -> None:
-        self._rows.append(row)
-        self._buffer.append(row)
+    @staticmethod
+    def _checksum_for(kind: str, amount: str, memo: str, meta: Dict[str, Any], currency: str, ts: str) -> str:
+        payload = LedgerV2._row_payload(kind, amount, memo, meta, currency, ts)
+        return compute_checksum(payload)
 
-    def _write_lines(self, lines: Sequence[str]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with self._path.open("a", encoding="utf-8", newline="\n") as f:
-                for line in lines:
-                    f.write(line + "\n")
-                f.flush()
-                if self._fsync:
-                    os.fsync(f.fileno())
-        except OSError as e:
-            raise LedgerIOError("failed to append ledger lines") from e
-
-    @deal.pre(lambda self, kind, amount, memo="", meta=None: isinstance(kind, str) and len(kind) > 0)
-    @deal.pre(lambda self, kind, amount, memo="", meta=None: amount is not None and not isinstance(amount, float))
-    @deal.pre(lambda self, kind, amount, memo="", meta=None: isinstance(memo, str) and len(memo) <= 200)
-    @deal.post(lambda result: isinstance(result, str) and len(result) >= 8)
-    @deal.raises(ValidationError, LedgerClosedError, LedgerIOError)
+    @deal.pre(lambda self, kind, amount, memo="", meta=None: not isinstance(amount, float))
     def write(
         self,
         kind: str,
-        amount: MoneyInput,
+        amount: Any,
+        *,
         memo: str = "",
-        meta: Optional[Mapping[str, str]] = None,
+        meta: Optional[Dict[str, Any]] = None,
     ) -> str:
-        self._ensure_open()
-        k = _ensure_kind(kind)
-        dec = _to_decimal(amount)
-        _ensure_nonzero(dec)
-        m = _ensure_memo(memo)
-        meta_dict = _ensure_meta(meta)
-        eid = uuid4().hex
-        row = LedgerRow(
-            entry_id=eid,
-            ts_utc=_utc_now_iso(),
-            kind=k,
-            amount=str(dec),
-            currency=self.currency,
-            memo=m,
-            meta=meta_dict,
-        )
-        self._append_row(row)
-        if len(self._buffer) >= self._max_buffer:
-            self.flush()
-        return eid
+        if self._closed:
+            raise LedgerClosedError("ledger is closed")
 
-    @deal.pre(lambda self: True)
-    @deal.post(lambda result: isinstance(result, int) and result >= 0)
-    @deal.raises(LedgerClosedError, LedgerIOError)
+        amount_dec = canonicalize_money(amount)
+        amount_str = f"{amount_dec:.2f}"
+        memo_str = str(memo)
+        meta_dict = dict(meta or {})
+        ts = iso_utc(_now_utc())
+        entry_id = uuid4().hex
+        checksum = self._checksum_for(str(kind), amount_str, memo_str, meta_dict, self.currency, ts)
+
+        row = LedgerRow(
+            entry_id=entry_id,
+            kind=str(kind),
+            amount=amount_str,
+            memo=memo_str,
+            meta=meta_dict,
+            currency=self.currency,
+            ts=ts,
+            checksum=checksum,
+        )
+        self._buffer.append(row)
+
+        if self.max_buffer > 0 and len(self._buffer) >= self.max_buffer:
+            self.flush()
+
+        return entry_id
+
+    def _read_file_rows(self) -> List[LedgerRow]:
+        if not self.path.exists():
+            return []
+
+        rows: List[LedgerRow] = []
+        for raw in self.path.read_text(encoding="utf-8").splitlines():
+            if not raw.strip():
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise LedgerIntegrityError(f"invalid json line in ledger: {exc}") from exc
+
+            required = {"entry_id", "kind", "amount", "ts", "checksum"}
+            if not required.issubset(data.keys()):
+                raise LedgerIntegrityError(f"missing keys in ledger row: required={sorted(required)} got={sorted(data.keys())}")
+
+            row = LedgerRow.from_dict(data)
+            expected = self._checksum_for(
+                row.kind,
+                row.amount,
+                row.memo,
+                row.meta,
+                row.currency,
+                row.ts,
+            )
+            if row.checksum != expected:
+                raise LedgerIntegrityError("checksum mismatch")
+            rows.append(row)
+        return rows
+
     def flush(self) -> int:
-        self._ensure_open()
+        if self._closed:
+            raise LedgerClosedError("ledger is closed")
         if not self._buffer:
             return 0
-        lines = [_row_to_json_line(r) for r in self._buffer]
-        self._write_lines(lines)
-        n = len(self._buffer)
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        count = len(self._buffer)
+        with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+            for row in self._buffer:
+                handle.write(json.dumps(row.to_dict(), ensure_ascii=False) + "\n")
+            handle.flush()
+            if self.fsync:
+                import os
+                os.fsync(handle.fileno())
         self._buffer.clear()
-        return n
+        return count
 
-    @deal.pre(lambda self, kind=None, limit=1000: isinstance(limit, int) and 1 <= limit <= 100000)
-    @deal.post(lambda result: isinstance(result, tuple))
-    @deal.raises(ValidationError)
-    def query(self, kind: Optional[str] = None, limit: int = 1000) -> Tuple[LedgerRow, ...]:
-        if kind is None:
-            return tuple(self._rows[-limit:])
-        k = _ensure_kind(kind)
-        out: list[LedgerRow] = []
-        for row in reversed(self._rows):
-            if row.kind == k:
-                out.append(row)
-                if len(out) >= limit:
-                    break
-        out.reverse()
-        return tuple(out)
+    def query(self, *, kind: Optional[str] = None, limit: int = 100) -> List[LedgerRow]:
+        file_rows = self._read_file_rows()
+        rows = file_rows + list(self._buffer)
+        if kind is not None:
+            rows = [r for r in rows if r.kind == kind]
+        if limit < 0:
+            return rows
+        return rows[:limit]
 
-    @deal.pre(lambda self: True)
-    @deal.post(lambda result: result is True)
-    @deal.raises(LedgerIntegrityError, LedgerIOError)
     def verify_integrity(self) -> bool:
-        rows = _read_existing_rows(self._path)
-        seen: set[str] = set()
-        for r in rows:
-            if r.entry_id in seen:
-                raise LedgerIntegrityError("duplicate entry_id")
-            seen.add(r.entry_id)
-            _reject_float(r.amount)
-            dec = _to_decimal(r.amount)
-            _ensure_nonzero(dec)
+        _ = self._read_file_rows()
+        for row in self._buffer:
+            expected = self._checksum_for(
+                row.kind,
+                row.amount,
+                row.memo,
+                row.meta,
+                row.currency,
+                row.ts,
+            )
+            if row.checksum != expected:
+                raise LedgerIntegrityError("buffer checksum mismatch")
         return True
 
-    @deal.pre(lambda self: True)
-    @deal.post(lambda result: result is None)
-    @deal.raises(LedgerIOError)
     def close(self) -> None:
-        if not self._closed:
-            if self._buffer:
-                self.flush()
-            self._closed = True
+        if self._closed:
+            return
+        if self._buffer:
+            self.flush()
+        self._closed = True
+
+
+__all__ = [
+    "APPEND_ONLY_DOCUMENT_TYPE",
+    "AMENDMENT_DOCUMENT_TYPE",
+    "INGEST_TIME_FIELD",
+    "EVENT_TIME_FIELD",
+    "LedgerRecord",
+    "LedgerRecordWriteV2",
+    "LedgerClosedError",
+    "LedgerIntegrityError",
+    "LedgerRow",
+    "LedgerV2",
+    "build_ledger_record",
+    "wrap_as_append_only",
+    "wrap_as_amendment",
+    "rebuild_checksums",
+    "compute_checksum",
+    "canonicalize_money",
+    "iso_utc",
+]
