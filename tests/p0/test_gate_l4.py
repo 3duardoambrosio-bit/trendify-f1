@@ -9,6 +9,7 @@ from ops.safety_middleware import (
     ODD_WITH_APPROVAL,
     ODD_WITHIN,
     build_layer0_descriptor,
+    check_safety_before_spend,
     evaluate_odd,
     get_threshold_registry_v0,
     get_threshold_value,
@@ -172,3 +173,50 @@ def test_build_layer0_descriptor_exposes_scope_and_threshold_refs() -> None:
     assert descriptor["kill_switch_target"] == "meta"
     assert descriptor["global_authority"] == "human_only"
     assert descriptor["threshold_refs"] == ["TR-006", "TR-011", "TR-031"]
+
+def test_check_safety_before_spend_preserves_legacy_default_without_enforce_odd() -> None:
+    result = check_safety_before_spend(
+        amount=Decimal("2000"),
+        operation_id="op-outside-legacy",
+        channel="meta",
+        country="MX",
+        currency="MXN",
+        data_freshness_minutes=0,
+        tracking_freshness_minutes=0,
+        heartbeat_age_minutes=0,
+    )
+
+    assert result.is_err() is False
+
+
+def test_check_safety_before_spend_enforces_odd_when_explicitly_requested() -> None:
+    result = check_safety_before_spend(
+        amount=Decimal("2000"),
+        operation_id="op-outside-enforced",
+        enforce_odd=True,
+        channel="meta",
+        country="MX",
+        currency="MXN",
+        data_freshness_minutes=0,
+        tracking_freshness_minutes=0,
+        heartbeat_age_minutes=0,
+    )
+
+    assert result.is_err() is True
+    assert str(result.error).startswith("ODD_OUTSIDE:")
+
+
+def test_check_safety_before_spend_allows_within_odd_when_explicitly_requested() -> None:
+    result = check_safety_before_spend(
+        amount=Decimal("200"),
+        operation_id="op-within-enforced",
+        enforce_odd=True,
+        channel="meta",
+        country="MX",
+        currency="MXN",
+        data_freshness_minutes=0,
+        tracking_freshness_minutes=0,
+        heartbeat_age_minutes=0,
+    )
+
+    assert result.is_err() is False

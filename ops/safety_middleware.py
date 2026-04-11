@@ -289,7 +289,7 @@ def check_safety_before_spend(
     """
     Money-path safety checks (FAIL-CLOSED).
 
-    1) Optional ODD evaluator (week1 foundation, opt-in to avoid accidental breakage).
+    1) ODD evaluator optional at middleware layer; callers may enforce explicitly for sovereign money-paths.
     2) KillSwitch (file-backed preferred).
     3) CircuitBreaker.
     4) SafetyGate (RiskLimits/RiskSnapshot) when provided.

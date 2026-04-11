@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -11,6 +11,8 @@ from uuid import uuid4
 
 import deal
 
+from synapse.infra.time_utc import build_clock_stamp
+
 APPEND_ONLY_DOCUMENT_TYPE = "append-only"
 AMENDMENT_DOCUMENT_TYPE = "amendment"
 INGEST_TIME_FIELD = "ingest_time"
@@ -18,9 +20,6 @@ EVENT_TIME_FIELD = "event_time"
 
 DUMP_SEPARATORS = (",", ":")
 
-
-def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def iso_utc(value: datetime) -> str:
@@ -102,15 +101,15 @@ def build_ledger_record(
     metadata: Optional[Dict[str, Any]] = None,
 ) -> LedgerRecord:
     payload_checksum = compute_checksum(payload)
-    now = iso_utc(_now_utc())
+    stamp = build_clock_stamp(event_time=event_time)
     return LedgerRecord(
         event_id=event_id,
         document_type=document_type,
         payload_checksum=payload_checksum,
         payload=payload,
         base_event_id=base_event_id,
-        ingest_time=ingest_time or now,
-        event_time=event_time or now,
+        ingest_time=ingest_time or stamp.ingest_time,
+        event_time=event_time or stamp.event_time,
         metadata=metadata or {},
     )
 
@@ -254,7 +253,7 @@ class LedgerV2:
         amount_str = f"{amount_dec:.2f}"
         memo_str = str(memo)
         meta_dict = dict(meta or {})
-        ts = iso_utc(_now_utc())
+        ts = build_clock_stamp().ingest_time
         entry_id = uuid4().hex
         checksum = self._checksum_for(str(kind), amount_str, memo_str, meta_dict, self.currency, ts)
 
