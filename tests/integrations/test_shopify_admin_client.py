@@ -1,17 +1,17 @@
-"""
-Tests para ShopifyAdminClient — solo modo mock (feature flag OFF).
+﻿"""
+Tests para ShopifyAdminClient — mock + live contract.
 No se hacen llamadas reales a Shopify.
 """
 
 from __future__ import annotations
 
-import json
 import time
 from unittest.mock import patch
 
 import pytest
 
 from config.feature_flags import FeatureFlags
+from synapse.integrations.http_client import HttpClientError, HttpTimeoutError
 from synapse.integrations.shopify_admin_client import (
     CircuitBreaker,
     CircuitOpenError,
@@ -20,7 +20,9 @@ from synapse.integrations.shopify_admin_client import (
 )
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _mock_flags(*, shopify_live: bool = False) -> FeatureFlags:
     """Feature flags con shopify_live_api configurable."""
@@ -40,7 +42,17 @@ def _client(*, live: bool = False) -> ShopifyAdminClient:
     )
 
 
-# ── Fixture loading ─────────────────────────────────────────────────
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fixture loading
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestFixtureLoading:
     def test_load_products_fixture(self):
@@ -67,7 +79,9 @@ class TestFixtureLoading:
         assert "not found" in data["error"]
 
 
-# ── Mock mode (shopify_live_api=False) ───────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Mock mode (shopify_live_api=False)
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestMockMode:
     def test_get_products_returns_fixture(self):
@@ -92,7 +106,6 @@ class TestMockMode:
     def test_get_product_unknown_falls_back(self):
         client = _client(live=False)
         result = client.get_product("9999")
-        # Falls back to products list when specific fixture not found
         assert result["data"] is not None
 
     def test_get_orders_returns_fixture(self):
@@ -124,7 +137,9 @@ class TestMockMode:
             mock_post.assert_not_called()
 
 
-# ── Product data structure ───────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Product data structure
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestProductStructure:
     def test_product_has_variants(self):
@@ -145,7 +160,9 @@ class TestProductStructure:
             assert key in node, f"Missing key: {key}"
 
 
-# ── Order data structure ─────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Order data structure
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestOrderStructure:
     def test_order_has_line_items(self):
@@ -165,7 +182,9 @@ class TestOrderStructure:
         assert total["currencyCode"] == "MXN"
 
 
-# ── Circuit Breaker ──────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Circuit Breaker
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestCircuitBreaker:
     def test_starts_closed(self):
@@ -220,7 +239,9 @@ class TestCircuitBreaker:
         assert cb.state == "OPEN"
 
 
-# ── Client configuration ────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Client configuration
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestClientConfig:
     def test_endpoint_url_format(self):
@@ -234,7 +255,7 @@ class TestClientConfig:
             access_token="tok",
             flags=_mock_flags(),
         )
-        assert client._endpoint().count("//") == 1  # only https://
+        assert client._endpoint().count("//") == 1
 
     def test_endpoint_adds_https(self):
         client = ShopifyAdminClient(
@@ -262,19 +283,19 @@ class TestClientConfig:
         assert client.access_token == "shpat_env_token"
 
 
-# ── Live mode circuit breaker integration ────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Live mode circuit breaker integration
+# ──────────────────────────────────────────────────────────────────────────────
 
 class TestLiveModeCircuitBreaker:
     def test_circuit_open_raises(self):
         client = _client(live=True)
-        # Trip the breaker manually
         for _ in range(5):
             client._breaker.record_failure()
         with pytest.raises(CircuitOpenError, match="Circuit breaker OPEN"):
             client.get_products()
 
     def test_graphql_missing_creds_no_http_call(self):
-        """Even in live mode, missing creds returns error dict, no HTTP."""
         client = ShopifyAdminClient(
             shop="",
             access_token="",
@@ -284,3 +305,75 @@ class TestLiveModeCircuitBreaker:
             result = client.get_orders()
             mock_post.assert_not_called()
             assert result["data"] is None
+            assert result["errors"][0]["message"] == "Missing shop or access_token"
+
+    def test_live_success_returns_json_and_resets_breaker(self):
+        client = _client(live=True)
+        client._breaker.record_failure()
+        client._breaker.record_failure()
+        assert client._breaker.state == "CLOSED"
+
+        fake_payload = {"data": {"products": {"edges": []}}}
+        with patch.object(client._http, "post_json", return_value=_FakeResponse(fake_payload)) as mock_post:
+            result = client.get_products(first=7)
+
+        assert result == fake_payload
+        assert client._breaker.state == "CLOSED"
+        mock_post.assert_called_once()
+        kwargs = mock_post.call_args.kwargs
+        assert kwargs["url"] == "https://test-shop.myshopify.com/admin/api/2024-10/graphql.json"
+        assert kwargs["headers"]["X-Shopify-Access-Token"] == "shpat_fake_token"
+        assert kwargs["timeout_s"] == 30.0
+        assert kwargs["payload"]["variables"] == {"first": 7}
+
+    def test_live_timeout_records_failure_and_raises(self):
+        client = _client(live=True)
+
+        with patch.object(client._http, "post_json", side_effect=HttpTimeoutError("timeout")):
+            with pytest.raises(HttpTimeoutError, match="timeout"):
+                client.get_orders(first=3)
+
+        assert client._breaker.state == "CLOSED"
+        assert client._breaker._failure_count == 1
+
+    def test_live_http_client_error_records_failure_and_raises(self):
+        client = _client(live=True)
+
+        with patch.object(client._http, "post_json", side_effect=HttpClientError("boom")):
+            with pytest.raises(HttpClientError, match="boom"):
+                client.get_products(first=2)
+
+        assert client._breaker.state == "CLOSED"
+        assert client._breaker._failure_count == 1
+
+    def test_live_repeated_http_failures_open_breaker(self):
+        client = _client(live=True)
+
+        with patch.object(client._http, "post_json", side_effect=HttpClientError("boom")):
+            for _ in range(5):
+                with pytest.raises(HttpClientError):
+                    client.get_products()
+
+        assert client._breaker.state == "OPEN"
+        with pytest.raises(CircuitOpenError, match="Circuit breaker OPEN"):
+            client.get_products()
+
+    def test_half_open_success_from_live_path_closes_breaker(self):
+        client = _client(live=True)
+        client._breaker.threshold = 1
+        client._breaker.recovery_timeout_s = 0.01
+
+        with patch.object(client._http, "post_json", side_effect=HttpClientError("boom")):
+            with pytest.raises(HttpClientError):
+                client.get_products()
+
+        assert client._breaker.state == "OPEN"
+        time.sleep(0.02)
+        assert client._breaker.state == "HALF_OPEN"
+
+        fake_payload = {"data": {"products": {"edges": []}}}
+        with patch.object(client._http, "post_json", return_value=_FakeResponse(fake_payload)):
+            result = client.get_products()
+
+        assert result == fake_payload
+        assert client._breaker.state == "CLOSED"
