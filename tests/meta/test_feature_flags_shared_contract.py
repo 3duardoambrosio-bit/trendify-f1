@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from types import SimpleNamespace as SNS
 from unittest.mock import patch
 
 from config.feature_flags import FeatureFlags as ConfigFeatureFlags
@@ -12,8 +13,6 @@ from infra.vault import VaultSnapshot
 from synapse.core.orchestrator import decide
 from synapse.infra.feature_flags import FeatureFlags as SynapseFeatureFlags
 from synapse.infra.circuit_breaker import CircuitBreaker
-from synapse.infra.idempotency_store import IdempotencyStore
-from synapse.infra.ledger_f1_core import Ledger
 from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
 
@@ -36,8 +35,8 @@ def _vault(
     )
 
 
-def _product(pid: str = "P2", score: float = 0.9, margin: float = 55.0) -> SimpleNamespace:
-    return SimpleNamespace(
+def _product(pid: str = "P2", score: float = 0.9, margin: float = 55.0) -> SNS:
+    return SNS(
         product_id=pid,
         match_score=score,
         margin_percent=margin,
@@ -106,8 +105,8 @@ def test_shared_flags_instance_supports_orchestrator_and_safe_client(tmp_path: P
                 feature_flags=shared_flags,
                 retry_policy=RetryPolicy(max_attempts=2, base_delay_s=0.0, max_delay_s=0.0),
                 circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
-                idempotency_store=IdempotencyStore.open(tmp_path / "idem.json"),
-                ledger=Ledger.open(tmp_path / "ledger.ndjson"),
+                idempotency_store=SimpleNamespace(path=tmp_path / "idem.sqlite3"),
+                ledger=SimpleNamespace(path=tmp_path / "ledger.ndjson"),
                 config=MetaSafeClientConfig(),
             )
 

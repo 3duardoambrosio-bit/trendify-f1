@@ -2,12 +2,11 @@
 
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from synapse.infra.circuit_breaker import CircuitBreaker
 from synapse.infra.feature_flags import FeatureFlags
-from synapse.infra.idempotency_store import IdempotencyStore
-from synapse.infra.ledger_f1_core import Ledger
 from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
 from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaPauseRequest
@@ -20,8 +19,8 @@ def _make_client(tmp_path: Path, *, live: bool = False) -> MetaSafeClient:
         feature_flags=flags,
         retry_policy=RetryPolicy(max_attempts=2, base_delay_s=0.0, max_delay_s=0.0),
         circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
-        idempotency_store=IdempotencyStore.open(tmp_path / "idem.json"),
-        ledger=Ledger.open(tmp_path / "ledger.ndjson"),
+        idempotency_store=SimpleNamespace(path=tmp_path / "idem.sqlite3"),
+        ledger=SimpleNamespace(path=tmp_path / "ledger.ndjson"),
         config=MetaSafeClientConfig(),
     )
 
