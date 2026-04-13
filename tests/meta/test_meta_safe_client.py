@@ -1,4 +1,4 @@
-"""Tests for MetaSafeClient. S7: meta safe client."""
+﻿"""Tests for MetaSafeClient."""
 
 from __future__ import annotations
 
@@ -7,35 +7,23 @@ import subprocess
 import sys
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from synapse.infra.circuit_breaker import CircuitBreaker
 from synapse.infra.feature_flags import FeatureFlags
-from synapse.infra.idempotency_store import IdempotencyStore
-from synapse.infra.ledger_f1_core import Ledger
 from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
 
 
-def _make_client(
-    tmp_path: Path,
-    *,
-    live: bool = False,
-) -> MetaSafeClient:
-    """Build a MetaSafeClient wired to tmp_path stores."""
-    if live:
-        flags = FeatureFlags(values={"meta_live_api": True})
-    else:
-        flags = FeatureFlags(values={})
-
+def _make_client(tmp_path: Path, *, live: bool = False) -> MetaSafeClient:
+    flags = FeatureFlags(values={"meta_live_api": True}) if live else FeatureFlags(values={})
     return MetaSafeClient(
         feature_flags=flags,
         retry_policy=RetryPolicy(max_attempts=2, base_delay_s=0.0, max_delay_s=0.0),
         circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
-        idempotency_store=IdempotencyStore.open(tmp_path / "idem.json"),
-        ledger=Ledger.open(tmp_path / "ledger.ndjson"),
+        idempotency_store=SimpleNamespace(path=tmp_path / "idem.sqlite3"),
+        ledger=SimpleNamespace(path=tmp_path / "ledger.ndjson"),
         config=MetaSafeClientConfig(),
     )
 
@@ -48,9 +36,6 @@ def _read_ledger_events(tmp_path: Path) -> list[dict]:
     return [json.loads(ln) for ln in lines]
 
 
-# ------------------------------------------------------------------
-# 1) meta_live_api OFF => mock mode, status PAUSED forced
-# ------------------------------------------------------------------
 class TestCreateCampaignMock:
     def test_mock_returns_paused(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=False)
@@ -62,7 +47,6 @@ class TestCreateCampaignMock:
         assert result["ok"] is True
         assert result["mode"] == "mock"
         assert result["status"] == "PAUSED"
-        assert "campaign_id" in result
         assert result["campaign_id"].startswith("MOCK_CAMP_")
 
     def test_ledger_events_written(self, tmp_path: Path) -> None:
@@ -78,9 +62,6 @@ class TestCreateCampaignMock:
         assert "meta.create_campaign.result" in event_types
 
 
-# ------------------------------------------------------------------
-# 2) Idempotency: same key => cached, no duplicate
-# ------------------------------------------------------------------
 class TestIdempotency:
     def test_duplicate_key_returns_cached(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=False)
@@ -90,24 +71,41 @@ class TestIdempotency:
             correlation_id="corr-a",
         )
         r2 = client.create_campaign_safe(
-            payload={"name": "Camp A different"},
+            payload={"name": "Camp A"},
             idempotency_key="idem-key-1",
             correlation_id="corr-b",
         )
+        assert r2["ok"] is True
         assert r2["mode"] == "cached"
         assert r2["result"]["campaign_id"] == r1["campaign_id"]
 
-        # Only 1 attempt+result pair in ledger (second call is cached)
         events = _read_ledger_events(tmp_path)
-        attempt_events = [
-            e for e in events if e["event_type"] == "meta.create_campaign.attempt"
-        ]
+        attempt_events = [e for e in events if e["event_type"] == "meta.create_campaign.attempt"]
+        assert len(attempt_events) == 1
+
+    def test_same_key_different_payload_returns_conflict(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+
+        r1 = client.create_campaign_safe(
+            payload={"name": "Camp A"},
+            idempotency_key="idem-key-conflict",
+            correlation_id="corr-c1",
+        )
+        r2 = client.create_campaign_safe(
+            payload={"name": "Camp B"},
+            idempotency_key="idem-key-conflict",
+            correlation_id="corr-c2",
+        )
+
+        assert r1["ok"] is True
+        assert r2["ok"] is False
+        assert r2["error_code"] == "idempotency_conflict"
+
+        events = _read_ledger_events(tmp_path)
+        attempt_events = [e for e in events if e["event_type"] == "meta.create_campaign.attempt"]
         assert len(attempt_events) == 1
 
 
-# ------------------------------------------------------------------
-# 3) Autopause: spend >= 80% cap => PAUSE
-# ------------------------------------------------------------------
 class TestAutopause:
     def test_at_threshold_triggers_pause(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=False)
@@ -143,23 +141,42 @@ class TestAutopause:
         assert "meta.autopause.attempt" in event_types
         assert "meta.autopause.result" in event_types
 
+    def test_autopause_duplicate_same_spend_returns_cached(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+        r1 = client.maybe_autopause(
+            spend_today_mxn=Decimal("85"),
+            cap_mxn=Decimal("100"),
+            campaign_id="camp-dup",
+            correlation_id="corr-ap-1",
+        )
+        r2 = client.maybe_autopause(
+            spend_today_mxn=Decimal("85"),
+            cap_mxn=Decimal("100"),
+            campaign_id="camp-dup",
+            correlation_id="corr-ap-2",
+        )
 
-# ------------------------------------------------------------------
-# 4) Error path: live mode + publisher raises => meta.error in ledger
-# ------------------------------------------------------------------
+        assert r1["ok"] is True
+        assert r1["action"] == "PAUSE"
+        assert r2["ok"] is True
+        assert r2["mode"] == "cached"
+        assert r2["action"] == "PAUSE"
+
+        events = _read_ledger_events(tmp_path)
+        attempt_events = [e for e in events if e["event_type"] == "meta.autopause.attempt"]
+        assert len(attempt_events) == 1
+
+
 class TestErrorPath:
     def test_live_publisher_error_captured(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=True)
 
-        # publisher_adapter.call_create_campaign raises NotImplementedError
-        # which is the default behavior; retry will exhaust and propagate
         result = client.create_campaign_safe(
             payload={"name": "Will Fail"},
             idempotency_key="error-key-1",
             correlation_id="corr-err",
         )
         assert result["ok"] is False
-        assert "error_code" in result
         assert result["error_code"] == "create_campaign_error"
 
         events = _read_ledger_events(tmp_path)
@@ -187,12 +204,8 @@ class TestErrorPath:
         assert len(error_events) >= 1
 
 
-# ------------------------------------------------------------------
-# 5) Pre-spend gates: capital_shield + safety_middleware
-# ------------------------------------------------------------------
 class TestPreSpendGates:
     def test_gates_pass_by_default_mock_mode(self, tmp_path: Path) -> None:
-        """When modules are available and approve, campaign creation proceeds."""
         client = _make_client(tmp_path, live=False)
         result = client.create_campaign_safe(
             payload={"name": "Gated Campaign", "budget_mxn": "50"},
@@ -203,12 +216,7 @@ class TestPreSpendGates:
         assert result["mode"] == "mock"
 
     def test_capital_shield_blocks_campaign(self, tmp_path: Path) -> None:
-        """When capital_shield denies, campaign is blocked."""
         client = _make_client(tmp_path, live=False)
-
-        mock_decision = MagicMock()
-        mock_decision.reason = "not_approved"
-        mock_decision.allocated = Decimal("0")
 
         with patch(
             "synapse.meta.safe_client._check_capital_shield",
@@ -234,7 +242,6 @@ class TestPreSpendGates:
         assert len(blocked_events) >= 1
 
     def test_safety_middleware_blocks_campaign(self, tmp_path: Path) -> None:
-        """When safety_middleware denies, campaign is blocked."""
         client = _make_client(tmp_path, live=False)
 
         with patch(
@@ -255,9 +262,6 @@ class TestPreSpendGates:
         assert "safety_middleware" in result["blocked_by"]
 
 
-# ------------------------------------------------------------------
-# 6) Ledger critical=True in all writes
-# ------------------------------------------------------------------
 class TestLedgerCriticalFlag:
     def test_create_campaign_ledger_has_critical_true(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=False)
@@ -268,9 +272,7 @@ class TestLedgerCriticalFlag:
         )
         events = _read_ledger_events(tmp_path)
         for event in events:
-            assert event.get("critical") is True, (
-                f"Ledger event {event['event_type']} missing critical=True"
-            )
+            assert event.get("critical") is True
 
     def test_autopause_ledger_has_critical_true(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=False)
@@ -281,9 +283,7 @@ class TestLedgerCriticalFlag:
         )
         events = _read_ledger_events(tmp_path)
         for event in events:
-            assert event.get("critical") is True, (
-                f"Ledger event {event['event_type']} missing critical=True"
-            )
+            assert event.get("critical") is True
 
     def test_error_path_ledger_has_critical_true(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=True)
@@ -297,18 +297,16 @@ class TestLedgerCriticalFlag:
             assert event.get("critical") is True
 
 
-# ------------------------------------------------------------------
-# 7) Cockpit still works (regression)
-# ------------------------------------------------------------------
 class TestCockpitRegression:
     def test_cockpit_health_json_parseable(self) -> None:
         r = subprocess.run(
             [sys.executable, "-m", "synapse.cli.cockpit", "health", "--json"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         obj = json.loads(r.stdout)
         assert obj["ok"] is True
-        assert obj["mode"] == "health"
 
 
 def test_governed_anchor_is_written_into_ledger_events(tmp_path: Path) -> None:

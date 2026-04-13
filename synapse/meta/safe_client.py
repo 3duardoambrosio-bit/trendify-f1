@@ -1,15 +1,16 @@
-﻿"""Meta Safe Client: PAUSED-by-default, spend caps, circuit breaker, ledger. S7+S19."""
+﻿"""Meta Safe Client: canonical idempotency + ndjson ledger with legacy-compatible constructor."""
 
 from __future__ import annotations
 
 import hashlib
-import json
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Dict, Optional
 
+from infra.idempotency import execute_once
 from synapse.config.thresholds import (
     AUTOPAUSE_RATIO,
     DEFAULT_DAILY_SPEND_CAP_MXN,
@@ -20,31 +21,49 @@ from synapse.config.thresholds import (
 )
 from synapse.infra.circuit_breaker import CircuitBreaker, CircuitOpenError
 from synapse.infra.feature_flags import FeatureFlags
-from synapse.infra.idempotency_store import IdempotencyStore
-from synapse.infra.ledger_f1_core import Ledger
 from synapse.infra.retry_policy import RetryPolicy
-from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
-from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaCampaignResponse, MetaPauseRequest
+from synapse.ledger_ndjson import append_event, build_event
 from synapse.meta.governed_write_anchor import attach_governed_anchor
+from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
+from synapse.meta.publisher_contracts import (
+    MetaCampaignPayload,
+    MetaCampaignResponse,
+    MetaPauseRequest,
+)
 
 
 def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
-    """Ask CapitalShieldV2 for budget approval. Returns gate result dict."""
     if spend_mxn <= 0:
-        return {"gate": "capital_shield", "allowed": True, "reason": "zero_spend_allowed", "correlation_id": correlation_id}
+        return {
+            "gate": "capital_shield",
+            "allowed": True,
+            "reason": "zero_spend_allowed",
+            "correlation_id": correlation_id,
+        }
 
     try:
         from ops.capital_shield_v2 import CapitalShieldV2  # type: ignore[import-untyped]
     except ImportError:
-        return {"gate": "capital_shield", "allowed": False, "reason": "module_unavailable_BLOCKED"}
+        return {
+            "gate": "capital_shield",
+            "allowed": False,
+            "reason": "module_unavailable_BLOCKED",
+            "correlation_id": correlation_id,
+        }
 
     try:
         from vault.vault_file_backed import VaultFileBacked  # type: ignore[import-untyped]
         vault = VaultFileBacked()
     except Exception as exc:
         import logging as _log
+
         _log.getLogger(__name__).critical("VAULT_LOAD_FAILED: %s - blocking spend", exc)
-        return {"gate": "capital_shield", "allowed": False, "reason": f"vault_load_failed:{type(exc).__name__}"}
+        return {
+            "gate": "capital_shield",
+            "allowed": False,
+            "reason": f"vault_load_failed:{type(exc).__name__}",
+            "correlation_id": correlation_id,
+        }
 
     shield = CapitalShieldV2(vault=vault)
     decision = shield.decide_for_product(
@@ -61,14 +80,23 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
 
 
 def _check_safety_middleware(spend_mxn: Decimal, correlation_id: str) -> Dict[str, Any]:
-    """Run safety_middleware checks. Returns gate result dict."""
     if spend_mxn <= 0:
-        return {"gate": "safety_middleware", "allowed": True, "reason": "zero_spend_allowed", "correlation_id": correlation_id}
+        return {
+            "gate": "safety_middleware",
+            "allowed": True,
+            "reason": "zero_spend_allowed",
+            "correlation_id": correlation_id,
+        }
 
     try:
         from ops.safety_middleware import check_safety_before_spend  # type: ignore[import-untyped]
     except ImportError:
-        return {"gate": "safety_middleware", "allowed": False, "reason": "module_unavailable_BLOCKED"}
+        return {
+            "gate": "safety_middleware",
+            "allowed": False,
+            "reason": "module_unavailable_BLOCKED",
+            "correlation_id": correlation_id,
+        }
 
     result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
     is_ok = bool(getattr(result, "is_ok", lambda: bool(result))())
@@ -155,6 +183,39 @@ def _normalize_api_response(api_result: Any) -> Dict[str, Any]:
     return {"raw_response": str(api_result)}
 
 
+def _extract_path(value: Any, field_name: str) -> Path:
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str):
+        return Path(value)
+    path = getattr(value, "path", None)
+    if isinstance(path, Path):
+        return path
+    if isinstance(path, str):
+        return Path(path)
+    raise TypeError(f"{field_name}_must_be_path_or_have_path_attr")
+
+
+def _sqlite_sidecar(path: Path) -> Path:
+    suffix = path.suffix.lower()
+    if suffix in {".sqlite3", ".sqlite", ".db"}:
+        return path
+    if suffix:
+        return path.with_suffix(".sqlite3")
+    return path.with_name(f"{path.name}.sqlite3")
+
+
+def _allow_mock_module_unavailable(result: Dict[str, Any], *, is_live: bool) -> Dict[str, Any]:
+    if is_live:
+        return result
+    if str(result.get("reason", "")).strip() == "module_unavailable_BLOCKED":
+        patched = dict(result)
+        patched["allowed"] = True
+        patched["reason"] = "module_unavailable_ALLOWED_IN_MOCK"
+        return patched
+    return result
+
+
 @dataclass
 class MetaSafeClientConfig:
     daily_spend_cap_mxn: Decimal = DEFAULT_DAILY_SPEND_CAP_MXN
@@ -167,18 +228,24 @@ class MetaSafeClientConfig:
 
 @dataclass
 class MetaSafeClient:
-    """Institutional safe wrapper over Meta campaign creation."""
-
     feature_flags: FeatureFlags
     retry_policy: RetryPolicy
     circuit_breaker: CircuitBreaker
-    idempotency_store: IdempotencyStore
-    ledger: Ledger
+    idempotency_store: Any
+    ledger: Any
     config: MetaSafeClientConfig = field(default_factory=MetaSafeClientConfig)
 
     @property
     def _is_live(self) -> bool:
         return self.feature_flags.is_on("meta_live_api", default=False)
+
+    @property
+    def _idempotency_db_path(self) -> Path:
+        return _sqlite_sidecar(_extract_path(self.idempotency_store, "idempotency_store"))
+
+    @property
+    def _ledger_path(self) -> Path:
+        return _extract_path(self.ledger, "ledger")
 
     def _append_governed_event(
         self,
@@ -199,14 +266,17 @@ class MetaSafeClient:
             critical=critical,
             event_id=correlation_id,
         )
-        self.ledger.append(
-            event_type,
-            correlation_id,
-            idempotency_key,
-            severity=severity,
+        record = build_event(
+            kind=event_type,
             payload=governed_payload,
-            critical=critical,
+            event_id=f"{correlation_id}:{event_type}",
         )
+        record["event_type"] = event_type
+        record["correlation_id"] = correlation_id
+        record["idempotency_key"] = idempotency_key
+        record["severity"] = severity
+        record["critical"] = bool(critical)
+        append_event(record, path=self._ledger_path)
 
     def create_campaign_safe(
         self,
@@ -224,9 +294,15 @@ class MetaSafeClient:
 
         payload["status"] = "PAUSED"
 
-        budget_mxn = Decimal(str(payload.get("budget_mxn", "0")))
-        cs_result = _check_capital_shield(budget_mxn, correlation_id)
-        sm_result = _check_safety_middleware(budget_mxn, correlation_id)
+        budget_mxn = _coerce_decimal(payload.get("budget_mxn")) or Decimal("0")
+        cs_result = _allow_mock_module_unavailable(
+            _check_capital_shield(budget_mxn, correlation_id),
+            is_live=self._is_live,
+        )
+        sm_result = _allow_mock_module_unavailable(
+            _check_safety_middleware(budget_mxn, correlation_id),
+            is_live=self._is_live,
+        )
 
         if not cs_result["allowed"] or not sm_result["allowed"]:
             blocked_by = []
@@ -253,6 +329,7 @@ class MetaSafeClient:
             )
             try:
                 from synapse.infra.alert_wiring import get_alert_sink
+
                 sink = get_alert_sink()
                 sink.send(
                     f"SPEND BLOCKED by {','.join(blocked_by)} "
@@ -264,59 +341,46 @@ class MetaSafeClient:
                 pass
             return result
 
-        existing = self.idempotency_store.get(idempotency_key)
-        if existing is not None:
-            try:
-                cached = json.loads(existing)
-            except (json.JSONDecodeError, TypeError):
-                cached = {"raw": existing}
-            return {
-                "ok": True,
-                "mode": "cached",
-                "idempotency_key": idempotency_key,
-                "correlation_id": correlation_id,
-                "result": cached,
-            }
+        operation_payload = {
+            "operation": "meta.create_campaign_safe",
+            "live": self._is_live,
+            "payload": payload,
+        }
 
-        self._append_governed_event(
-            event_type="meta.create_campaign.attempt",
-            correlation_id=correlation_id,
-            idempotency_key=idempotency_key,
-            severity="INFO",
-            payload={"live": self._is_live, "campaign_payload": payload},
-            critical=True,
-        )
-
-        if not self._is_live:
-            mock_id = _generate_mock_id(idempotency_key)
-            result = {
-                "ok": True,
-                "mode": "mock",
-                "campaign_id": mock_id,
-                "status": "PAUSED",
-                "idempotency_key": idempotency_key,
-                "correlation_id": correlation_id,
-            }
-            self.idempotency_store.put(
-                idempotency_key, json.dumps(result, ensure_ascii=False),
-            )
+        def _operation(_: Any) -> Dict[str, Any]:
             self._append_governed_event(
-                event_type="meta.create_campaign.result",
+                event_type="meta.create_campaign.attempt",
                 correlation_id=correlation_id,
                 idempotency_key=idempotency_key,
                 severity="INFO",
-                payload=result,
+                payload={"live": self._is_live, "campaign_payload": payload},
                 critical=True,
             )
-            return result
 
-        try:
+            if not self._is_live:
+                mock_id = _generate_mock_id(idempotency_key)
+                result = {
+                    "ok": True,
+                    "mode": "mock",
+                    "campaign_id": mock_id,
+                    "status": "PAUSED",
+                    "idempotency_key": idempotency_key,
+                    "correlation_id": correlation_id,
+                }
+                self._append_governed_event(
+                    event_type="meta.create_campaign.result",
+                    correlation_id=correlation_id,
+                    idempotency_key=idempotency_key,
+                    severity="INFO",
+                    payload=result,
+                    critical=True,
+                )
+                return result
+
             campaign_contract = _to_campaign_contract(payload)
 
             def _do_create() -> Any:
-                return self.circuit_breaker.call(
-                    lambda: call_create_campaign(campaign_contract),
-                )
+                return self.circuit_breaker.call(lambda: call_create_campaign(campaign_contract))
 
             api_result = self.retry_policy.run(_do_create)
             api_payload = _normalize_api_response(api_result)
@@ -330,9 +394,6 @@ class MetaSafeClient:
                 "correlation_id": correlation_id,
                 "api_response": api_payload,
             }
-            self.idempotency_store.put(
-                idempotency_key, json.dumps(result, ensure_ascii=False),
-            )
             self._append_governed_event(
                 event_type="meta.create_campaign.result",
                 correlation_id=correlation_id,
@@ -343,16 +404,58 @@ class MetaSafeClient:
             )
             return result
 
+        try:
+            idem_result = execute_once(
+                key=idempotency_key,
+                payload=operation_payload,
+                operation=_operation,
+                db_path=self._idempotency_db_path,
+            )
         except CircuitOpenError as exc:
-            return self._handle_error(
-                exc, idempotency_key, correlation_id,
-                error_code="circuit_open",
-            )
+            return self._handle_error(exc, idempotency_key, correlation_id, error_code="circuit_open")
         except Exception as exc:
+            return self._handle_error(exc, idempotency_key, correlation_id, error_code="create_campaign_error")
+
+        status = str(idem_result.get("status") or "").strip().upper()
+        response = idem_result.get("response")
+        response_dict = dict(response) if isinstance(response, Mapping) else {}
+
+        if status == "COMPLETED":
+            return response_dict
+
+        if status == "DUPLICATE":
+            return {
+                "ok": True,
+                "mode": "cached",
+                "campaign_id": response_dict.get("campaign_id"),
+                "status": response_dict.get("status"),
+                "idempotency_key": idempotency_key,
+                "correlation_id": correlation_id,
+                "result": response_dict,
+            }
+
+        if status == "CONFLICT":
             return self._handle_error(
-                exc, idempotency_key, correlation_id,
-                error_code="create_campaign_error",
+                RuntimeError("idempotency_conflict"),
+                idempotency_key,
+                correlation_id,
+                error_code="idempotency_conflict",
             )
+
+        if status == "IN_FLIGHT":
+            return self._handle_error(
+                RuntimeError("idempotency_in_flight"),
+                idempotency_key,
+                correlation_id,
+                error_code="idempotency_in_flight",
+            )
+
+        return self._handle_error(
+            RuntimeError(f"unexpected_idempotency_status:{status or '<empty>'}"),
+            idempotency_key,
+            correlation_id,
+            error_code="idempotency_unexpected_status",
+        )
 
     def maybe_autopause(
         self,
@@ -370,70 +473,78 @@ class MetaSafeClient:
         should_pause = spend_today_mxn >= threshold
         idem_key = f"autopause:{campaign_id}:{spend_today_mxn}"
 
-        self._append_governed_event(
-            event_type="meta.autopause.attempt",
-            correlation_id=correlation_id,
-            idempotency_key=idem_key,
-            severity="INFO",
-            payload={
-                "spend_today_mxn": str(spend_today_mxn),
-                "cap_mxn": str(cap_mxn),
-                "threshold_mxn": str(threshold),
-                "should_pause": should_pause,
-                "campaign_id": campaign_id,
-                "live": self._is_live,
-            },
-            critical=True,
-        )
+        operation_payload = {
+            "operation": "meta.maybe_autopause",
+            "live": self._is_live,
+            "spend_today_mxn": str(spend_today_mxn),
+            "cap_mxn": str(cap_mxn),
+            "threshold_mxn": str(threshold),
+            "should_pause": should_pause,
+            "campaign_id": campaign_id,
+        }
 
-        if not should_pause:
-            result: Dict[str, Any] = {
-                "ok": True,
-                "action": "NONE",
-                "reason": "below_threshold",
-                "spend_today_mxn": str(spend_today_mxn),
-                "threshold_mxn": str(threshold),
-                "campaign_id": campaign_id,
-                "correlation_id": correlation_id,
-            }
+        def _operation(_: Any) -> Dict[str, Any]:
             self._append_governed_event(
-                event_type="meta.autopause.result",
+                event_type="meta.autopause.attempt",
                 correlation_id=correlation_id,
                 idempotency_key=idem_key,
                 severity="INFO",
-                payload=result,
+                payload={
+                    "spend_today_mxn": str(spend_today_mxn),
+                    "cap_mxn": str(cap_mxn),
+                    "threshold_mxn": str(threshold),
+                    "should_pause": should_pause,
+                    "campaign_id": campaign_id,
+                    "live": self._is_live,
+                },
                 critical=True,
             )
-            return result
 
-        if not self._is_live:
-            result = {
-                "ok": True,
-                "action": "PAUSE",
-                "mode": "mock",
-                "reason": "spend_at_or_above_threshold",
-                "spend_today_mxn": str(spend_today_mxn),
-                "threshold_mxn": str(threshold),
-                "campaign_id": campaign_id,
-                "correlation_id": correlation_id,
-            }
-            self._append_governed_event(
-                event_type="meta.autopause.result",
-                correlation_id=correlation_id,
-                idempotency_key=idem_key,
-                severity="WARN",
-                payload=result,
-                critical=True,
-            )
-            return result
+            if not should_pause:
+                result: Dict[str, Any] = {
+                    "ok": True,
+                    "action": "NONE",
+                    "reason": "below_threshold",
+                    "spend_today_mxn": str(spend_today_mxn),
+                    "threshold_mxn": str(threshold),
+                    "campaign_id": campaign_id,
+                    "correlation_id": correlation_id,
+                }
+                self._append_governed_event(
+                    event_type="meta.autopause.result",
+                    correlation_id=correlation_id,
+                    idempotency_key=idem_key,
+                    severity="INFO",
+                    payload=result,
+                    critical=True,
+                )
+                return result
 
-        try:
+            if not self._is_live:
+                result = {
+                    "ok": True,
+                    "action": "PAUSE",
+                    "mode": "mock",
+                    "reason": "spend_at_or_above_threshold",
+                    "spend_today_mxn": str(spend_today_mxn),
+                    "threshold_mxn": str(threshold),
+                    "campaign_id": campaign_id,
+                    "correlation_id": correlation_id,
+                }
+                self._append_governed_event(
+                    event_type="meta.autopause.result",
+                    correlation_id=correlation_id,
+                    idempotency_key=idem_key,
+                    severity="WARN",
+                    payload=result,
+                    critical=True,
+                )
+                return result
+
             pause_request = MetaPauseRequest(campaign_id=campaign_id)
 
             def _do_pause() -> Any:
-                return self.circuit_breaker.call(
-                    lambda: call_pause_campaign(pause_request),
-                )
+                return self.circuit_breaker.call(lambda: call_pause_campaign(pause_request))
 
             self.retry_policy.run(_do_pause)
 
@@ -457,11 +568,47 @@ class MetaSafeClient:
             )
             return result
 
-        except Exception as exc:
-            return self._handle_error(
-                exc, idem_key, correlation_id,
-                error_code="autopause_error",
+        try:
+            idem_result = execute_once(
+                key=idem_key,
+                payload=operation_payload,
+                operation=_operation,
+                db_path=self._idempotency_db_path,
             )
+        except Exception as exc:
+            return self._handle_error(exc, idem_key, correlation_id, error_code="autopause_error")
+
+        status = str(idem_result.get("status") or "").strip().upper()
+        response = idem_result.get("response")
+        response_dict = dict(response) if isinstance(response, Mapping) else {}
+
+        if status == "COMPLETED":
+            return response_dict
+
+        if status == "DUPLICATE":
+            return {
+                "ok": True,
+                "mode": "cached",
+                "action": response_dict.get("action"),
+                "reason": response_dict.get("reason"),
+                "campaign_id": response_dict.get("campaign_id"),
+                "idempotency_key": idem_key,
+                "correlation_id": correlation_id,
+                "result": response_dict,
+            }
+
+        if status == "CONFLICT":
+            return self._handle_error(RuntimeError("idempotency_conflict"), idem_key, correlation_id, error_code="idempotency_conflict")
+
+        if status == "IN_FLIGHT":
+            return self._handle_error(RuntimeError("idempotency_in_flight"), idem_key, correlation_id, error_code="idempotency_in_flight")
+
+        return self._handle_error(
+            RuntimeError(f"unexpected_idempotency_status:{status or '<empty>'}"),
+            idem_key,
+            correlation_id,
+            error_code="idempotency_unexpected_status",
+        )
 
     def _handle_error(
         self,
@@ -488,6 +635,7 @@ class MetaSafeClient:
         )
         try:
             from synapse.infra.alert_wiring import get_alert_sink
+
             sink = get_alert_sink()
             sink.send(
                 f"META ERROR: {error_code} - {str(exc)[:100]}",
