@@ -230,3 +230,319 @@ def test_simulate_mode_generates_deterministic_sim_ids(tmp_path: Path) -> None:
     sim_id = report["results"][0]["simulated_id"]
     assert sim_id.startswith("SIMCAMP_")
     assert report["id_map"]["meta:campaign:test_campaign"] == sim_id
+
+
+def test_live_missing_dependency_fails_before_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = _write_plan(
+        tmp_path / "plan.json",
+        [
+            {
+                "i": 1,
+                "op": "create_adset",
+                "key": "meta:adset:test_adset",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/adsets",
+                "depends_on": ["meta:campaign:missing"],
+                "payload": {"name": "Adset X"},
+            }
+        ],
+    )
+    out = tmp_path / "run.json"
+    hist = tmp_path / "runs"
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "tok_test")
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
+
+    p1, p2 = _patch_common(file_fps=_fake_file_fps())
+    with p1, p2, patch(
+        "synapse.infra.live_gate.check_meta_live_gate",
+        return_value=_fake_gate(ok=True, status="OK", reason="passed"),
+    ), patch("synapse.meta_publish_execute._http_post") as mock_post:
+        rc = mpe.main(
+            [
+                "--plan", str(plan),
+                "--out", str(out),
+                "--out-dir", str(hist),
+                "--mode", "live",
+                "--ledger-disable",
+            ]
+        )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 2
+    assert report["status"] == "FAIL"
+    assert report["counts"]["results"] == 1
+    assert report["counts"]["errors"] == 1
+    assert "missing deps" in report["errors"][0]["error"]
+    assert report["results"][0]["status"] == "FAIL"
+    mock_post.assert_not_called()
+
+
+def test_live_unresolved_placeholders_fail_before_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = _write_plan(
+        tmp_path / "plan.json",
+        [
+            {
+                "i": 1,
+                "op": "create_campaign",
+                "key": "meta:campaign:test_campaign",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/campaigns",
+                "depends_on": [],
+                "payload": {
+                    "name": "Campaign X",
+                    "daily_budget": "<DAILY_BUDGET_MINOR_UNITS>",
+                },
+            }
+        ],
+    )
+    out = tmp_path / "run.json"
+    hist = tmp_path / "runs"
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "tok_test")
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
+
+    p1, p2 = _patch_common(file_fps=_fake_file_fps())
+    with p1, p2, patch(
+        "synapse.infra.live_gate.check_meta_live_gate",
+        return_value=_fake_gate(ok=True, status="OK", reason="passed"),
+    ), patch("synapse.meta_publish_execute._http_post") as mock_post:
+        rc = mpe.main(
+            [
+                "--plan", str(plan),
+                "--out", str(out),
+                "--out-dir", str(hist),
+                "--mode", "live",
+                "--ledger-disable",
+            ]
+        )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 2
+    assert report["status"] == "FAIL"
+    assert "unresolved placeholders" in report["errors"][0]["error"]
+    assert "<DAILY_BUDGET_MINOR_UNITS>" in report["results"][0]["unresolved"]
+    mock_post.assert_not_called()
+
+
+def test_live_upload_video_source_without_file_ref_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = _write_plan(
+        tmp_path / "plan.json",
+        [
+            {
+                "i": 1,
+                "op": "upload_video",
+                "key": "meta:video:test_video",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/advideos",
+                "depends_on": [],
+                "payload": {
+                    "name": "Video X",
+                    "source": "not_a_file_ref",
+                },
+            }
+        ],
+    )
+    out = tmp_path / "run.json"
+    hist = tmp_path / "runs"
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "tok_test")
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
+
+    p1, p2 = _patch_common(file_fps=_fake_file_fps())
+    with p1, p2, patch(
+        "synapse.infra.live_gate.check_meta_live_gate",
+        return_value=_fake_gate(ok=True, status="OK", reason="passed"),
+    ), patch("synapse.meta_publish_execute._http_post_multipart") as mock_multi:
+        rc = mpe.main(
+            [
+                "--plan", str(plan),
+                "--out", str(out),
+                "--out-dir", str(hist),
+                "--mode", "live",
+                "--ledger-disable",
+            ]
+        )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 2
+    assert report["status"] == "FAIL"
+    assert "missing <FILE:...> source" in report["errors"][0]["error"]
+    mock_multi.assert_not_called()
+
+
+def test_live_success_create_campaign_sets_created_id_and_id_map(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = _write_plan(
+        tmp_path / "plan.json",
+        [
+            {
+                "i": 1,
+                "op": "create_campaign",
+                "key": "meta:campaign:test_campaign",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/campaigns",
+                "depends_on": [],
+                "payload": {
+                    "name": "Campaign X",
+                    "status": "PAUSED",
+                },
+            }
+        ],
+    )
+    out = tmp_path / "run.json"
+    hist = tmp_path / "runs"
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "tok_test")
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
+
+    p1, p2 = _patch_common(file_fps=_fake_file_fps())
+    with p1, p2, patch(
+        "synapse.infra.live_gate.check_meta_live_gate",
+        return_value=_fake_gate(ok=True, status="OK", reason="passed"),
+    ), patch(
+        "synapse.meta_publish_execute._http_post",
+        return_value={"id": "CAMP-123"},
+    ) as mock_post:
+        rc = mpe.main(
+            [
+                "--plan", str(plan),
+                "--out", str(out),
+                "--out-dir", str(hist),
+                "--mode", "live",
+                "--ledger-disable",
+            ]
+        )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 0
+    assert report["status"] == "OK"
+    assert report["counts"]["results"] == 1
+    assert report["counts"]["errors"] == 0
+    assert report["results"][0]["created_id"] == "CAMP-123"
+    assert report["results"][0]["endpoint_resolved"] == "/123456789/campaigns"
+    assert report["id_map"]["meta:campaign:test_campaign"] == "CAMP-123"
+
+    mock_post.assert_called_once()
+    args, kwargs = mock_post.call_args
+    assert args[0] == "https://graph.facebook.com/v25.0/123456789/campaigns"
+    assert kwargs["access_token"] == "tok_test"
+    assert kwargs["data"]["name"] == "Campaign X"
+    assert kwargs["data"]["status"] == "PAUSED"
+
+
+def test_live_upload_video_success_uses_multipart_and_maps_video_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"fake-video")
+    plan = _write_plan(
+        tmp_path / "plan.json",
+        [
+            {
+                "i": 1,
+                "op": "upload_video",
+                "key": "meta:video:test_video",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/advideos",
+                "depends_on": [],
+                "payload": {
+                    "name": "Video X",
+                    "source": f"<FILE:{video_path}>",
+                },
+            }
+        ],
+    )
+    out = tmp_path / "run.json"
+    hist = tmp_path / "runs"
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "tok_test")
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
+
+    p1, p2 = _patch_common(file_fps=_fake_file_fps())
+    with p1, p2, patch(
+        "synapse.infra.live_gate.check_meta_live_gate",
+        return_value=_fake_gate(ok=True, status="OK", reason="passed"),
+    ), patch(
+        "synapse.meta_publish_execute._http_post_multipart",
+        return_value={"video_id": "VID-123"},
+    ) as mock_multi:
+        rc = mpe.main(
+            [
+                "--plan", str(plan),
+                "--out", str(out),
+                "--out-dir", str(hist),
+                "--mode", "live",
+                "--ledger-disable",
+            ]
+        )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 0
+    assert report["status"] == "OK"
+    assert report["results"][0]["created_id"] == "VID-123"
+    assert report["id_map"]["meta:video:test_video"] == "VID-123"
+
+    mock_multi.assert_called_once()
+    args, kwargs = mock_multi.call_args
+    assert args[0] == "https://graph.facebook.com/v25.0/123456789/advideos"
+    assert kwargs["access_token"] == "tok_test"
+    assert kwargs["file_path"] == video_path.resolve()
+    assert kwargs["fields"]["name"] == "Video X"
+
+
+def test_live_continue_on_error_keeps_next_step_running(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = _write_plan(
+        tmp_path / "plan.json",
+        [
+            {
+                "i": 1,
+                "op": "create_campaign",
+                "key": "meta:campaign:bad_campaign",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/campaigns",
+                "depends_on": [],
+                "payload": {
+                    "name": "Bad Campaign",
+                    "daily_budget": "<DAILY_BUDGET_MINOR_UNITS>",
+                },
+            },
+            {
+                "i": 2,
+                "op": "create_campaign",
+                "key": "meta:campaign:good_campaign",
+                "endpoint": "/<META_AD_ACCOUNT_ID>/campaigns",
+                "depends_on": [],
+                "payload": {
+                    "name": "Good Campaign",
+                    "status": "PAUSED",
+                },
+            },
+        ],
+    )
+    out = tmp_path / "run.json"
+    hist = tmp_path / "runs"
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "tok_test")
+    monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
+
+    p1, p2 = _patch_common(file_fps=_fake_file_fps())
+    with p1, p2, patch(
+        "synapse.infra.live_gate.check_meta_live_gate",
+        return_value=_fake_gate(ok=True, status="OK", reason="passed"),
+    ), patch(
+        "synapse.meta_publish_execute._http_post",
+        return_value={"id": "CAMP-200"},
+    ) as mock_post:
+        rc = mpe.main(
+            [
+                "--plan", str(plan),
+                "--out", str(out),
+                "--out-dir", str(hist),
+                "--mode", "live",
+                "--continue-on-error",
+                "--ledger-disable",
+            ]
+        )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 2
+    assert report["status"] == "FAIL"
+    assert report["counts"]["results"] == 2
+    assert report["counts"]["errors"] == 1
+    assert report["results"][0]["status"] == "FAIL"
+    assert report["results"][1]["status"] == "OK"
+    assert report["results"][1]["created_id"] == "CAMP-200"
+    assert report["id_map"]["meta:campaign:good_campaign"] == "CAMP-200"
+    mock_post.assert_called_once()
