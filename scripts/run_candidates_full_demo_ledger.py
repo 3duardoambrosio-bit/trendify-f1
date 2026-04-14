@@ -3,9 +3,21 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
-from core.ledger import Ledger
+from synapse.ledger_ndjson import append_event, build_event
+
+
+def _append_run_event(ledger_path: str, *, event_type: str, payload: Dict[str, Any]) -> None:
+    path = Path(ledger_path)
+    body = {
+        "entity_type": "system",
+        "entity_id": "candidates_full",
+        **payload,
+    }
+    record = build_event(kind=event_type, payload=body)
+    append_event(record, path=path)
 
 
 def main() -> int:
@@ -19,11 +31,15 @@ def main() -> int:
 
     print(proc.stdout, end="")
 
-    Ledger(path=args.ledger).append(
-        "CANDIDATES_FULL_RUN",
-        "system",
-        "candidates_full",
-        {"cmd": cmd, "exit_code": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr},
+    _append_run_event(
+        args.ledger,
+        event_type="CANDIDATES_FULL_RUN",
+        payload={
+            "cmd": cmd,
+            "exit_code": proc.returncode,
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+        },
     )
     return proc.returncode
 
