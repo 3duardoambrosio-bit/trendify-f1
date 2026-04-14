@@ -3,22 +3,41 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.ledger import Ledger
+from synapse.ledger_ndjson import append_event, build_event, read_events
+
+
+def _append(path: Path, *, kind: str, payload: dict) -> dict:
+    record = build_event(kind=kind, payload=payload)
+    return append_event(record, path=path)
 
 
 def test_ledger_append_and_read(tmp_path: Path) -> None:
     p = tmp_path / "events.ndjson"
-    ledger = Ledger(path=str(p))
 
-    ledger.append("DECISION_MADE", "product", "r004", {"decision": "LAUNCH_CANDIDATE"})
-    ledger.append("SPEND_APPROVED", "product", "r004", {"amount": 5})
+    _append(
+        p,
+        kind="DECISION_MADE",
+        payload={
+            "entity_type": "product",
+            "entity_id": "r004",
+            "decision": "LAUNCH_CANDIDATE",
+        },
+    )
+    _append(
+        p,
+        kind="SPEND_APPROVED",
+        payload={
+            "entity_type": "product",
+            "entity_id": "r004",
+            "amount": 5,
+        },
+    )
 
-    rows = list(ledger.iter_events())
+    rows = read_events(p)
     assert len(rows) == 2
-    assert rows[0]["event_type"] == "DECISION_MADE"
+    assert rows[0]["kind"] == "DECISION_MADE"
     assert rows[1]["payload"]["amount"] == 5
 
-    # Each line is valid JSON
     raw = p.read_text(encoding="utf-8").strip().splitlines()
     assert len(raw) == 2
     json.loads(raw[0])
@@ -27,9 +46,29 @@ def test_ledger_append_and_read(tmp_path: Path) -> None:
 
 def test_ledger_schema_required_fields(tmp_path: Path) -> None:
     p = tmp_path / "events.ndjson"
-    ledger = Ledger(path=str(p))
-    ev = ledger.append("PING", "system", "synapse", {"ok": True})
-    d = ev.to_dict()
+    ev = append_event(
+        build_event(
+            kind="PING",
+            payload={
+                "entity_type": "system",
+                "entity_id": "synapse",
+                "ok": True,
+            },
+        ),
+        path=p,
+    )
 
-    for k in ["event_id", "ts_utc", "event_type", "entity_type", "entity_id", "payload"]:
-        assert k in d
+    for k in [
+        "event_id",
+        "kind",
+        "payload",
+        "ingest_time",
+        "event_time",
+        "clock_source_id",
+        "clock_skew_estimate",
+        "clock_unreliable",
+        "policy_version",
+        "payload_schema_version",
+        "offset",
+    ]:
+        assert k in ev
