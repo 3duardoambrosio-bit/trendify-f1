@@ -8,7 +8,7 @@ Objetivo:
 - CERO scraping. CERO "se rumorea". CERO numeritos sin URL.
 - Output: memo JSON + reporte Markdown.
 - Idempotente por input_hash. Soporta --dry-run y --force.
-- Loggea eventos al Ledger si existe.
+- Loggea eventos al ledger canónico.
 
 Input (JSON):
 {
@@ -44,9 +44,13 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+from uuid import uuid4
+
+from synapse.ledger_ndjson import append_event, build_event
 
 
 # ---------------------------
@@ -99,7 +103,11 @@ class MarketPulseMemo:
 # ---------------------------
 
 def _now_iso() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _sha256_json(obj: Any) -> str:
@@ -171,7 +179,6 @@ def validate_signal(raw: Dict[str, Any]) -> Tuple[Optional[PulseSignal], List[st
     if not description:
         errs.append("description requerido")
 
-    # Anti-alucin: si vas a hablar con seguridad, no uses lenguaje especulativo.
     if confidence > 0.5:
         combined = f"{headline} {description}"
         if _SPECULATIVE_RE.search(combined):
@@ -199,26 +206,51 @@ def validate_signal(raw: Dict[str, Any]) -> Tuple[Optional[PulseSignal], List[st
 
 
 # ---------------------------
-# Ledger integration (best effort)
+# Ledger integration (canonical)
 # ---------------------------
 
-def _get_ledger(repo_root: Path, ledger_dir: Optional[Path] = None):
+def _get_ledger_path(repo_root: Path, ledger_dir: Optional[Path] = None) -> Path:
+    if ledger_dir is None:
+        return repo_root / "runtime" / "ledger" / "events.ndjson"
+    if ledger_dir.suffix.lower() == ".ndjson":
+        return ledger_dir
+    return ledger_dir / "events.ndjson"
+
+
+def _build_event_record(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        from synapse.infra.ledger import Ledger  # type: ignore
-        ld = ledger_dir or (repo_root / "data" / "ledger")
-        return Ledger(str(ld))
-    except Exception:
-        return None
+        record = build_event(
+            event_type=event_type,
+            entity_type="system",
+            entity_id="market_pulse",
+            payload=payload,
+            wave_id="",
+            event_id=None,
+            event_time=None,
+        )
+        if not isinstance(record, dict):
+            raise TypeError("build_event_must_return_dict")
+        return record
+    except TypeError:
+        return {
+            "event_id": f"market_pulse-{uuid4().hex[:12]}",
+            "event_type": event_type,
+            "entity_type": "system",
+            "entity_id": "market_pulse",
+            "payload": payload,
+            "wave_id": "",
+            "event_time": _utc_now_iso(),
+        }
 
 
-def _ledger_write(ledger_obj: Any, event_type: str, payload: Dict[str, Any]) -> None:
-    if ledger_obj is None:
-        return
-    if hasattr(ledger_obj, "write"):
-        try:
-            ledger_obj.write(event_type=event_type, entity_type="system", entity_id="market_pulse", payload=payload)
-        except (AttributeError):
-            return
+def _ledger_write(ledger_path: Path, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(ledger_path, Path):
+        raise TypeError("market_pulse_ledger_path_required")
+    record = _build_event_record(event_type=event_type, payload=payload)
+    persisted = append_event(record, path=ledger_path)
+    if not isinstance(persisted, dict):
+        raise TypeError("append_event_must_return_dict")
+    return persisted
 
 
 # ---------------------------
@@ -250,17 +282,14 @@ class MarketPulseRunner:
         if not isinstance(raw_signals, list):
             raise PulseValidationError("signals debe ser lista")
 
-        # input hash (solo lo que importa)
         input_hash = _sha256_json({"schema_version": schema_version, "signals": raw_signals})
 
         if state_path.exists() and not force:
             prev = _json_load(state_path)
             if prev.get("input_hash") == input_hash:
-                # Idempotent skip: regresamos memo anterior si existe
                 if memo_path.exists():
                     m = _json_load(memo_path)
-                    return MarketPulseMemo(**m)  # type: ignore
-                # fallback
+                    return MarketPulseMemo(**m)  # type: ignore[arg-type]
                 return MarketPulseMemo(
                     schema_version="1.0.0",
                     generated_at=_now_iso(),
@@ -304,7 +333,6 @@ class MarketPulseRunner:
 
         report_md = self._render_report(memo)
 
-        # Persistencia
         if not dry_run:
             _json_write(memo_path, asdict(memo))
             _md_write(report_path, report_md)
@@ -313,10 +341,9 @@ class MarketPulseRunner:
             _md_write(report_path, report_md)
             _json_write(state_path, {"input_hash": input_hash, "generated_at": memo.generated_at, "dry_run": True})
 
-        # Ledger
-        ledger = _get_ledger(self.repo_root)
+        ledger_path = _get_ledger_path(self.repo_root)
         _ledger_write(
-            ledger,
+            ledger_path,
             "MARKET_PULSE_RECORDED" if status == "SUFFICIENT_EVIDENCE" else "MARKET_PULSE_INSUFFICIENT_EVIDENCE",
             {
                 "input_hash": input_hash,
