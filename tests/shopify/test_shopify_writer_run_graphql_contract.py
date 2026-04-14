@@ -1,13 +1,14 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from decimal import Decimal
-from unittest.mock import patch, call
+from pathlib import Path
+from unittest.mock import patch
 
 import synapse.shopify.shopify_writer as m
 
 
-def _writer(*, max_retries: int = 2) -> m.ShopifyWriter:
+def _writer(*, max_retries: int = 2, idempotency_db_path: Path | None = None) -> m.ShopifyWriter:
     return m.ShopifyWriter(
         shop="test-shop",
         access_token="shpat_fake_token",
@@ -21,6 +22,8 @@ def _writer(*, max_retries: int = 2) -> m.ShopifyWriter:
             api_version="2026-01",
             timeout_s=3.0,
             max_retries=max_retries,
+            idempotency_db_path=idempotency_db_path or Path("runtime/idempotency/test-shopify-writer.sqlite3"),
+            idempotency_ttl_seconds=3600,
         ),
     )
 
@@ -45,8 +48,8 @@ def _product() -> m.ShopifyProductInput:
     )
 
 
-def test_http_status_non_200_returns_exact_error_and_does_not_retry():
-    writer = _writer(max_retries=2)
+def test_http_status_non_200_returns_exact_error_and_does_not_retry(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
 
     with patch.object(writer, "_http_post", return_value=(503, "upstream_down")) as mock_post, patch(
         "synapse.shopify.shopify_writer.time.sleep"
@@ -61,8 +64,8 @@ def test_http_status_non_200_returns_exact_error_and_does_not_retry():
     mock_sleep.assert_not_called()
 
 
-def test_graphql_errors_are_stringified():
-    writer = _writer(max_retries=1)
+def test_graphql_errors_are_stringified(tmp_path):
+    writer = _writer(max_retries=1, idempotency_db_path=tmp_path / "idem.sqlite3")
     payload = {
         "errors": [
             {"message": "bad query"},
@@ -81,8 +84,8 @@ def test_graphql_errors_are_stringified():
     assert any("X123" in e for e in result.errors)
 
 
-def test_user_errors_are_extracted():
-    writer = _writer(max_retries=1)
+def test_user_errors_are_extracted(tmp_path):
+    writer = _writer(max_retries=1, idempotency_db_path=tmp_path / "idem.sqlite3")
     payload = {
         "data": {
             "productCreate": {
@@ -103,8 +106,8 @@ def test_user_errors_are_extracted():
     assert result.errors == ["title: required", "bad tag"]
 
 
-def test_user_errors_not_list_fails_closed():
-    writer = _writer(max_retries=1)
+def test_user_errors_not_list_fails_closed(tmp_path):
+    writer = _writer(max_retries=1, idempotency_db_path=tmp_path / "idem.sqlite3")
     payload = {
         "data": {
             "productCreate": {
@@ -122,8 +125,8 @@ def test_user_errors_not_list_fails_closed():
     assert result.errors == ["userErrors_not_list"]
 
 
-def test_create_product_missing_id_returns_specific_error():
-    writer = _writer(max_retries=1)
+def test_create_product_missing_id_returns_specific_error(tmp_path):
+    writer = _writer(max_retries=1, idempotency_db_path=tmp_path / "idem.sqlite3")
     payload = {
         "data": {
             "productCreate": {
@@ -140,6 +143,64 @@ def test_create_product_missing_id_returns_specific_error():
     assert result.mock is False
     assert result.product_id is None
     assert result.errors == ["productCreate_missing_id"]
+
+
+def test_graphql_data_null_fails_closed_without_retry(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+    payload = {"data": None}
+
+    with patch.object(writer, "_http_post", return_value=(200, json.dumps(payload))) as mock_post, patch(
+        "synapse.shopify.shopify_writer.time.sleep"
+    ) as mock_sleep:
+        result = writer.create_product(_product())
+
+    assert result.success is False
+    assert result.mock is False
+    assert result.product_id is None
+    assert result.errors == ["graphql_data_missing_or_invalid"]
+    assert mock_post.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+def test_graphql_top_level_null_fails_closed_without_retry(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+    payload = {"data": {"productCreate": None}}
+
+    with patch.object(writer, "_http_post", return_value=(200, json.dumps(payload))) as mock_post, patch(
+        "synapse.shopify.shopify_writer.time.sleep"
+    ) as mock_sleep:
+        result = writer.create_product(_product())
+
+    assert result.success is False
+    assert result.mock is False
+    assert result.product_id is None
+    assert result.errors == ["graphql_top_level_null:productCreate"]
+    assert mock_post.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+def test_create_product_success_is_idempotent_across_duplicate_calls(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+    payload = {
+        "data": {
+            "productCreate": {
+                "product": {"id": "gid://shopify/Product/999"},
+                "userErrors": [],
+            }
+        }
+    }
+
+    with patch.object(writer, "_http_post", return_value=(200, json.dumps(payload))) as mock_post:
+        first = writer.create_product(_product())
+        second = writer.create_product(_product())
+
+    assert first.success is True
+    assert first.product_id == "gid://shopify/Product/999"
+    assert first.errors == []
+    assert second.success is True
+    assert second.product_id == "gid://shopify/Product/999"
+    assert second.errors == []
+    assert mock_post.call_count == 1
 
 
 def test_update_product_missing_response_id_falls_back_to_input_id():
@@ -188,8 +249,8 @@ def test_update_variant_price_success_returns_ok():
     assert result.errors == []
 
 
-def test_transport_exception_retries_with_incremental_backoff_and_returns_last_error():
-    writer = _writer(max_retries=2)
+def test_transport_exception_does_not_retry_unsafe_create_product(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
 
     with patch.object(writer, "_http_post", side_effect=RuntimeError("transport blocked")) as mock_post, patch(
         "synapse.shopify.shopify_writer.time.sleep"
@@ -202,6 +263,5 @@ def test_transport_exception_retries_with_incremental_backoff_and_returns_last_e
     assert len(result.errors) == 1
     assert "RuntimeError" in result.errors[0]
     assert "transport blocked" in result.errors[0]
-
-    assert mock_post.call_count == 3
-    assert mock_sleep.call_args_list == [call(0.25), call(0.5)]
+    assert mock_post.call_count == 1
+    mock_sleep.assert_not_called()

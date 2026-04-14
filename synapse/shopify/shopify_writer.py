@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """
 Shopify Writer — Mutations para crear/actualizar productos y variants.
@@ -9,17 +9,20 @@ IMPORTANTE P0: NO usar urllib/requests directo. Toda red debe pasar por synapse.
 __MARKER__ embedded in module constant below.
 """
 
+import hashlib
 import json
 import logging
 import time
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import deal
 
 from config.feature_flags import FeatureFlags
+from infra.idempotency import execute_once
 from synapse.integrations.http_client import SimpleHttpClient
 
 __MARKER__ = "SESSION_S11_shopify_writer_2026-03-02"
@@ -32,6 +35,8 @@ class ShopifyWriterConfig:
     api_version: str = "2026-01"
     timeout_s: float = 30.0
     max_retries: int = 2
+    idempotency_db_path: Path = Path("runtime/idempotency/shopify_writer.sqlite3")
+    idempotency_ttl_seconds: int = 3600
 
 
 @dataclass(frozen=True)
@@ -62,8 +67,55 @@ class ShopifyWriteResult:
     mock: bool
 
 
+class ShopifyOperationError(RuntimeError):
+    def __init__(self, errors: List[str]):
+        cleaned = [str(e) for e in errors if str(e).strip()]
+        self.errors = cleaned or ["shopify_operation_error"]
+        super().__init__(" | ".join(self.errors))
+
+
 def _fmt_money(v: Decimal) -> str:
     return f"{v:.2f}"
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _product_variants_payload(variants: List[ShopifyVariantInput]) -> List[Dict[str, Any]]:
+    payload: List[Dict[str, Any]] = []
+    for variant in variants:
+        payload.append(
+            {
+                "sku": variant.sku,
+                "price": _fmt_money(variant.price),
+                "compareAtPrice": _fmt_money(variant.compare_at_price) if variant.compare_at_price is not None else None,
+                "inventoryQuantities": {
+                    "availableQuantity": int(variant.inventory_quantity),
+                },
+                "requiresShipping": bool(variant.requires_shipping),
+            }
+        )
+    return payload
+
+
+def _product_create_variables(product: ShopifyProductInput) -> Dict[str, Any]:
+    return {
+        "input": {
+            "title": product.title,
+            "descriptionHtml": product.body_html,
+            "vendor": product.vendor,
+            "productType": product.product_type,
+            "tags": list(product.tags),
+            "status": product.status,
+            "variants": _product_variants_payload(product.variants),
+        }
+    }
+
+
+def _create_product_idempotency_key(shop: str, api_version: str, variables: Dict[str, Any]) -> str:
+    digest = hashlib.sha256(_canonical_json({"shop": shop, "api_version": api_version, "variables": variables}).encode("utf-8")).hexdigest()
+    return f"shopify:create_product:{shop}:{digest}"
 
 
 @deal.pre(lambda p: bool(p.title.strip()))
@@ -113,41 +165,67 @@ class ShopifyWriter:
           }
         }
         """
-        variants = []
-        for v in product.variants:
-            variants.append(
-                {
-                    "sku": v.sku,
-                    "price": _fmt_money(v.price),
-                    "compareAtPrice": _fmt_money(v.compare_at_price) if v.compare_at_price is not None else None,
-                    "inventoryQuantities": {
-                        "availableQuantity": int(v.inventory_quantity),
-                    },
-                    "requiresShipping": bool(v.requires_shipping),
-                }
+        variables = _product_create_variables(product)
+        idem_key = _create_product_idempotency_key(self._shop, self._config.api_version, variables)
+
+        def _operation(_: Dict[str, Any]) -> Dict[str, Any]:
+            out = self._run_graphql(
+                mutation,
+                variables,
+                allow_retries=False,
+                extra_headers={"X-Idempotency-Key": idem_key},
+            )
+            if not out["ok"]:
+                raise ShopifyOperationError(out["errors"])
+
+            node = (((out.get("data") or {}).get("productCreate") or {}).get("product")) or {}
+            pid = node.get("id")
+            if not pid:
+                raise ShopifyOperationError(["productCreate_missing_id"])
+            return {
+                "product_id": str(pid),
+            }
+
+        try:
+            idem_result = execute_once(
+                key=idem_key,
+                payload={
+                    "operation": "shopify.create_product",
+                    "shop": self._shop,
+                    "api_version": self._config.api_version,
+                    "variables": variables,
+                },
+                operation=_operation,
+                db_path=self._config.idempotency_db_path,
+                ttl_seconds=self._config.idempotency_ttl_seconds,
+            )
+        except ShopifyOperationError as exc:
+            return ShopifyWriteResult(False, None, exc.errors, mock=False)
+        except Exception as exc:
+            return ShopifyWriteResult(
+                False,
+                None,
+                [f"exception: {type(exc).__name__}: {exc}"],
+                mock=False,
             )
 
-        variables = {
-            "input": {
-                "title": product.title,
-                "descriptionHtml": product.body_html,
-                "vendor": product.vendor,
-                "productType": product.product_type,
-                "tags": product.tags,
-                "status": product.status,
-                "variants": variants,
-            }
-        }
+        status = str(idem_result.get("status") or "").strip().upper()
+        response = idem_result.get("response")
+        response_dict = dict(response) if isinstance(response, dict) else {}
 
-        out = self._run_graphql(mutation, variables)
-        if not out["ok"]:
-            return ShopifyWriteResult(False, None, out["errors"], mock=False)
+        if status in {"COMPLETED", "DUPLICATE"}:
+            pid = response_dict.get("product_id")
+            if not pid:
+                return ShopifyWriteResult(False, None, ["productCreate_missing_cached_id"], mock=False)
+            return ShopifyWriteResult(True, str(pid), [], mock=False)
 
-        node = (((out.get("data") or {}).get("productCreate") or {}).get("product")) or {}
-        pid = node.get("id")
-        if not pid:
-            return ShopifyWriteResult(False, None, ["productCreate_missing_id"], mock=False)
-        return ShopifyWriteResult(True, pid, [], mock=False)
+        if status == "CONFLICT":
+            return ShopifyWriteResult(False, None, ["idempotency_conflict"], mock=False)
+
+        if status == "IN_FLIGHT":
+            return ShopifyWriteResult(False, None, ["idempotency_in_flight"], mock=False)
+
+        return ShopifyWriteResult(False, None, [f"idempotency_unexpected_status:{status or '<empty>'}"], mock=False)
 
     def update_product(self, product_id: str, fields: Dict[str, Any]) -> ShopifyWriteResult:
         if not self._flags.shopify_live:
@@ -203,16 +281,26 @@ class ShopifyWriter:
             return ShopifyWriteResult(False, None, out["errors"], mock=False)
         return ShopifyWriteResult(True, None, [], mock=False)
 
-    def _run_graphql(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
+    def _run_graphql(
+        self,
+        query: str,
+        variables: Dict[str, Any],
+        *,
+        allow_retries: bool = True,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
         url = self._endpoint()
         headers = {
             "X-Shopify-Access-Token": self._token,
             "Content-Type": "application/json",
         }
+        if extra_headers:
+            headers.update(extra_headers)
         body = json.dumps({"query": query, "variables": variables}, ensure_ascii=False).encode("utf-8")
 
         last_err: Optional[str] = None
-        for attempt in range(self._config.max_retries + 1):
+        max_attempts = (self._config.max_retries + 1) if allow_retries else 1
+        for attempt in range(max_attempts):
             try:
                 status, text = self._http_post(url, headers, body)
                 if status != 200:
@@ -223,18 +311,29 @@ class ShopifyWriter:
                 if gql_errors:
                     return {"ok": False, "data": payload.get("data"), "errors": _stringify_graphql_errors(gql_errors)}
 
-                root = payload.get("data") or {}
-                top = next(iter(root.values()), None)
-                if isinstance(top, dict):
-                    user_errors = top.get("userErrors")
-                    if user_errors:
-                        return {"ok": False, "data": payload.get("data"), "errors": _extract_user_errors(user_errors)}
-                    return {"ok": True, "data": payload.get("data"), "errors": []}
+                root = payload.get("data")
+                if not isinstance(root, dict) or not root:
+                    return {"ok": False, "data": payload.get("data"), "errors": ["graphql_data_missing_or_invalid"]}
+
+                top_key, top = next(iter(root.items()))
+                if top is None:
+                    return {"ok": False, "data": payload.get("data"), "errors": [f"graphql_top_level_null:{top_key}"]}
+                if not isinstance(top, dict):
+                    return {
+                        "ok": False,
+                        "data": payload.get("data"),
+                        "errors": [f"graphql_top_level_not_object:{top_key}:{type(top).__name__}"],
+                    }
+
+                user_errors = top.get("userErrors")
+                if user_errors:
+                    return {"ok": False, "data": payload.get("data"), "errors": _extract_user_errors(user_errors)}
+                return {"ok": True, "data": payload.get("data"), "errors": []}
             except Exception as e:
                 last_err = f"exception: {type(e).__name__}: {e}"
-                log.warning("Shopify GraphQL error attempt=%s err=%s", attempt, last_err)
+                log.warning("Shopify GraphQL error attempt=%s/%s err=%s", attempt + 1, max_attempts, last_err)
 
-            if attempt < self._config.max_retries:
+            if allow_retries and attempt < (max_attempts - 1):
                 time.sleep(0.25 * (attempt + 1))
 
         return {"ok": False, "data": None, "errors": [last_err or "unknown_error"]}
