@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import synapse.shopify.shopify_writer as m
 
 
@@ -203,8 +204,8 @@ def test_create_product_success_is_idempotent_across_duplicate_calls(tmp_path):
     assert mock_post.call_count == 1
 
 
-def test_update_product_missing_response_id_falls_back_to_input_id():
-    writer = _writer(max_retries=1)
+def test_update_product_missing_response_id_falls_back_to_input_id(tmp_path):
+    writer = _writer(max_retries=1, idempotency_db_path=tmp_path / "idem.sqlite3")
     payload = {
         "data": {
             "productUpdate": {
@@ -226,8 +227,30 @@ def test_update_product_missing_response_id_falls_back_to_input_id():
     assert result.errors == []
 
 
-def test_update_variant_price_success_returns_ok():
-    writer = _writer(max_retries=1)
+def test_update_product_success_is_idempotent_across_duplicate_calls(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+    payload = {
+        "data": {
+            "productUpdate": {
+                "product": {"id": "gid://shopify/Product/123"},
+                "userErrors": [],
+            }
+        }
+    }
+
+    with patch.object(writer, "_http_post", return_value=(200, json.dumps(payload))) as mock_post:
+        first = writer.update_product("gid://shopify/Product/123", {"title": "Updated"})
+        second = writer.update_product("gid://shopify/Product/123", {"title": "Updated"})
+
+    assert first.success is True
+    assert first.product_id == "gid://shopify/Product/123"
+    assert second.success is True
+    assert second.product_id == "gid://shopify/Product/123"
+    assert mock_post.call_count == 1
+
+
+def test_update_variant_price_success_returns_ok(tmp_path):
+    writer = _writer(max_retries=1, idempotency_db_path=tmp_path / "idem.sqlite3")
     payload = {
         "data": {
             "productVariantUpdate": {
@@ -249,6 +272,26 @@ def test_update_variant_price_success_returns_ok():
     assert result.errors == []
 
 
+def test_update_variant_price_success_is_idempotent_across_duplicate_calls(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+    payload = {
+        "data": {
+            "productVariantUpdate": {
+                "productVariant": {"id": "gid://shopify/ProductVariant/456"},
+                "userErrors": [],
+            }
+        }
+    }
+
+    with patch.object(writer, "_http_post", return_value=(200, json.dumps(payload))) as mock_post:
+        first = writer.update_variant_price("gid://shopify/ProductVariant/456", Decimal("29.99"))
+        second = writer.update_variant_price("gid://shopify/ProductVariant/456", Decimal("29.99"))
+
+    assert first.success is True
+    assert second.success is True
+    assert mock_post.call_count == 1
+
+
 def test_transport_exception_does_not_retry_unsafe_create_product(tmp_path):
     writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
 
@@ -265,3 +308,53 @@ def test_transport_exception_does_not_retry_unsafe_create_product(tmp_path):
     assert "transport blocked" in result.errors[0]
     assert mock_post.call_count == 1
     mock_sleep.assert_not_called()
+
+
+def test_transport_exception_does_not_retry_unsafe_update_product(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+
+    with patch.object(writer, "_http_post", side_effect=RuntimeError("transport blocked")) as mock_post, patch(
+        "synapse.shopify.shopify_writer.time.sleep"
+    ) as mock_sleep:
+        result = writer.update_product("gid://shopify/Product/123", {"title": "Updated"})
+
+    assert result.success is False
+    assert result.mock is False
+    assert result.product_id is None
+    assert len(result.errors) == 1
+    assert "RuntimeError" in result.errors[0]
+    assert "transport blocked" in result.errors[0]
+    assert mock_post.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+def test_transport_exception_does_not_retry_unsafe_update_variant_price(tmp_path):
+    writer = _writer(max_retries=2, idempotency_db_path=tmp_path / "idem.sqlite3")
+
+    with patch.object(writer, "_http_post", side_effect=RuntimeError("transport blocked")) as mock_post, patch(
+        "synapse.shopify.shopify_writer.time.sleep"
+    ) as mock_sleep:
+        result = writer.update_variant_price("gid://shopify/ProductVariant/456", Decimal("29.99"))
+
+    assert result.success is False
+    assert result.mock is False
+    assert result.product_id is None
+    assert len(result.errors) == 1
+    assert "RuntimeError" in result.errors[0]
+    assert "transport blocked" in result.errors[0]
+    assert mock_post.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+def test_update_single_variant_fields_is_explicitly_not_implemented():
+    with pytest.raises(NotImplementedError, match="not implemented"):
+        m._update_single_variant_fields(
+            "gid://shopify/ProductVariant/456",
+            m.ShopifyVariantInput(
+                sku="SKU-1",
+                price=Decimal("19.99"),
+                compare_at_price=None,
+                inventory_quantity=1,
+                requires_shipping=True,
+            ),
+        )

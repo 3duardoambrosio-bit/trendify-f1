@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import hashlib
@@ -36,7 +36,6 @@ def extract_shopify_webhook_headers(headers: Mapping[str, str]) -> ShopifyWebhoo
 def build_shopify_dedup_key(shop_domain: Optional[str], webhook_id: Optional[str]) -> Optional[str]:
     shop = (shop_domain or "").strip()
     wid = (webhook_id or "").strip()
-
     if shop and wid:
         return f"{shop}:{wid}"
     if wid:
@@ -50,6 +49,8 @@ def compute_shopify_hmac_sha256_base64(secret: str, body: bytes) -> str:
 
 
 def verify_shopify_hmac_sha256(secret: str, body: bytes, header_hmac_b64: Optional[str]) -> bool:
+    if not secret or not secret.strip():
+        raise ValueError("shopify_webhook_secret_required")
     if not header_hmac_b64:
         return False
     expected = compute_shopify_hmac_sha256_base64(secret, body)
@@ -81,11 +82,12 @@ def process_shopify_webhook(
     body: bytes,
     dedup_set: Optional[MutableSet[str]] = None,
 ) -> ShopifyWebhookResult:
-    parsed_headers = extract_shopify_webhook_headers(headers)
+    if not secret or not secret.strip():
+        raise ValueError("shopify_webhook_secret_required")
 
+    parsed_headers = extract_shopify_webhook_headers(headers)
     if not verify_shopify_hmac_sha256(secret, body, parsed_headers.hmac_b64):
         return ShopifyWebhookResult(False, 401, "invalid_hmac", None)
-
     if not body:
         return ShopifyWebhookResult(False, 400, "empty_body", None)
 
@@ -102,11 +104,10 @@ def process_shopify_webhook(
             return ShopifyWebhookResult(False, 409, "duplicate_webhook", None)
         dedup_set.add(dedup_key)
 
-    payload: Any = None
     try:
-        payload = json.loads(body.decode("utf-8"))
+        payload: Any = json.loads(body.decode("utf-8"))
     except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
-        payload = {"_parse_error": "invalid_json"}
+        return ShopifyWebhookResult(False, 400, "invalid_json", None)
 
     ev = ShopifyWebhookEvent(
         webhook_id=webhook_id,

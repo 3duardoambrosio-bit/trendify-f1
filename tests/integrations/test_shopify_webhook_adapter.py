@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
@@ -102,3 +102,23 @@ def test_adapter_dedup_409():
     data = json.loads(r2.body.decode("utf-8"))
     assert data["ok"] is False
     assert data["reason"] == "duplicate_webhook"
+
+
+def test_adapter_rejects_invalid_json_400():
+    secret = "shpss_test_secret"
+    body = b'{"x":'
+    h = compute_shopify_hmac_sha256_base64(secret, body)
+
+    headers = {
+        "X-Shopify-Hmac-Sha256": h,
+        "X-Shopify-Webhook-Id": "wh_bad_json",
+        "X-Shopify-Topic": "orders/create",
+        "X-Shopify-Shop-Domain": "example.myshopify.com",
+    }
+
+    resp = handle_shopify_webhook_http(secret=secret, headers=headers, body=body, dedup_set=set())
+    assert resp.status_code == 400
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["ok"] is False
+    assert data["reason"] == "invalid_json"
+    assert resp.headers["x-synapse-reason"] == "invalid_json"

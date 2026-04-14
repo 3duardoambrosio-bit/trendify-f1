@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import deal
@@ -113,9 +113,26 @@ def _product_create_variables(product: ShopifyProductInput) -> Dict[str, Any]:
     }
 
 
-def _create_product_idempotency_key(shop: str, api_version: str, variables: Dict[str, Any]) -> str:
-    digest = hashlib.sha256(_canonical_json({"shop": shop, "api_version": api_version, "variables": variables}).encode("utf-8")).hexdigest()
-    return f"shopify:create_product:{shop}:{digest}"
+def _write_idempotency_key(
+    *,
+    shop: str,
+    api_version: str,
+    operation: str,
+    scope: str,
+    variables: Dict[str, Any],
+) -> str:
+    digest = hashlib.sha256(
+        _canonical_json(
+            {
+                "shop": shop,
+                "api_version": api_version,
+                "operation": operation,
+                "scope": scope,
+                "variables": variables,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"shopify:{operation}:{shop}:{scope}:{digest}"
 
 
 @deal.pre(lambda p: bool(p.title.strip()))
@@ -166,66 +183,26 @@ class ShopifyWriter:
         }
         """
         variables = _product_create_variables(product)
-        idem_key = _create_product_idempotency_key(self._shop, self._config.api_version, variables)
-
-        def _operation(_: Dict[str, Any]) -> Dict[str, Any]:
-            out = self._run_graphql(
-                mutation,
-                variables,
-                allow_retries=False,
-                extra_headers={"X-Idempotency-Key": idem_key},
-            )
-            if not out["ok"]:
-                raise ShopifyOperationError(out["errors"])
-
-            node = (((out.get("data") or {}).get("productCreate") or {}).get("product")) or {}
-            pid = node.get("id")
-            if not pid:
-                raise ShopifyOperationError(["productCreate_missing_id"])
-            return {
-                "product_id": str(pid),
-            }
-
-        try:
-            idem_result = execute_once(
-                key=idem_key,
-                payload={
-                    "operation": "shopify.create_product",
-                    "shop": self._shop,
-                    "api_version": self._config.api_version,
-                    "variables": variables,
-                },
-                operation=_operation,
-                db_path=self._config.idempotency_db_path,
-                ttl_seconds=self._config.idempotency_ttl_seconds,
-            )
-        except ShopifyOperationError as exc:
-            return ShopifyWriteResult(False, None, exc.errors, mock=False)
-        except Exception as exc:
-            return ShopifyWriteResult(
-                False,
-                None,
-                [f"exception: {type(exc).__name__}: {exc}"],
-                mock=False,
-            )
-
-        status = str(idem_result.get("status") or "").strip().upper()
-        response = idem_result.get("response")
-        response_dict = dict(response) if isinstance(response, dict) else {}
-
-        if status in {"COMPLETED", "DUPLICATE"}:
-            pid = response_dict.get("product_id")
-            if not pid:
-                return ShopifyWriteResult(False, None, ["productCreate_missing_cached_id"], mock=False)
-            return ShopifyWriteResult(True, str(pid), [], mock=False)
-
-        if status == "CONFLICT":
-            return ShopifyWriteResult(False, None, ["idempotency_conflict"], mock=False)
-
-        if status == "IN_FLIGHT":
-            return ShopifyWriteResult(False, None, ["idempotency_in_flight"], mock=False)
-
-        return ShopifyWriteResult(False, None, [f"idempotency_unexpected_status:{status or '<empty>'}"], mock=False)
+        idem_key = _write_idempotency_key(
+            shop=self._shop,
+            api_version=self._config.api_version,
+            operation="create_product",
+            scope="product",
+            variables=variables,
+        )
+        result = self._execute_idempotent_write(
+            operation_name="create_product",
+            idempotency_key=idem_key,
+            mutation=mutation,
+            variables=variables,
+            extractor=lambda out: self._extract_create_product_response(out),
+        )
+        return ShopifyWriteResult(
+            success=result["success"],
+            product_id=result.get("product_id"),
+            errors=result["errors"],
+            mock=False,
+        )
 
     def update_product(self, product_id: str, fields: Dict[str, Any]) -> ShopifyWriteResult:
         if not self._flags.shopify_live:
@@ -245,13 +222,26 @@ class ShopifyWriter:
                 **fields,
             }
         }
-        out = self._run_graphql(mutation, variables)
-        if not out["ok"]:
-            return ShopifyWriteResult(False, product_id, out["errors"], mock=False)
-
-        node = (((out.get("data") or {}).get("productUpdate") or {}).get("product")) or {}
-        pid = node.get("id") or product_id
-        return ShopifyWriteResult(True, pid, [], mock=False)
+        idem_key = _write_idempotency_key(
+            shop=self._shop,
+            api_version=self._config.api_version,
+            operation="update_product",
+            scope=product_id,
+            variables=variables,
+        )
+        result = self._execute_idempotent_write(
+            operation_name="update_product",
+            idempotency_key=idem_key,
+            mutation=mutation,
+            variables=variables,
+            extractor=lambda out: self._extract_update_product_response(out, fallback_product_id=product_id),
+        )
+        return ShopifyWriteResult(
+            success=result["success"],
+            product_id=result.get("product_id"),
+            errors=result["errors"],
+            mock=False,
+        )
 
     def set_product_status(self, product_id: str, status: str) -> ShopifyWriteResult:
         if not self._flags.shopify_live:
@@ -276,10 +266,105 @@ class ShopifyWriter:
                 "price": _fmt_money(price),
             }
         }
-        out = self._run_graphql(mutation, variables)
-        if not out["ok"]:
-            return ShopifyWriteResult(False, None, out["errors"], mock=False)
-        return ShopifyWriteResult(True, None, [], mock=False)
+        idem_key = _write_idempotency_key(
+            shop=self._shop,
+            api_version=self._config.api_version,
+            operation="update_variant_price",
+            scope=variant_id,
+            variables=variables,
+        )
+        result = self._execute_idempotent_write(
+            operation_name="update_variant_price",
+            idempotency_key=idem_key,
+            mutation=mutation,
+            variables=variables,
+            extractor=lambda out: self._extract_update_variant_price_response(out, variant_id=variant_id),
+        )
+        return ShopifyWriteResult(
+            success=result["success"],
+            product_id=result.get("product_id"),
+            errors=result["errors"],
+            mock=False,
+        )
+
+    def _execute_idempotent_write(
+        self,
+        *,
+        operation_name: str,
+        idempotency_key: str,
+        mutation: str,
+        variables: Dict[str, Any],
+        extractor: Callable[[Dict[str, Any]], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        def _operation(_: Dict[str, Any]) -> Dict[str, Any]:
+            out = self._run_graphql(
+                mutation,
+                variables,
+                allow_retries=False,
+                extra_headers={"X-Idempotency-Key": idempotency_key},
+            )
+            if not out["ok"]:
+                raise ShopifyOperationError(out["errors"])
+            return extractor(out)
+
+        try:
+            idem_result = execute_once(
+                key=idempotency_key,
+                payload={
+                    "operation": f"shopify.{operation_name}",
+                    "shop": self._shop,
+                    "api_version": self._config.api_version,
+                    "variables": variables,
+                },
+                operation=_operation,
+                db_path=self._config.idempotency_db_path,
+                ttl_seconds=self._config.idempotency_ttl_seconds,
+            )
+        except ShopifyOperationError as exc:
+            return {"success": False, "product_id": None, "errors": exc.errors}
+        except Exception as exc:
+            return {
+                "success": False,
+                "product_id": None,
+                "errors": [f"exception: {type(exc).__name__}: {exc}"],
+            }
+
+        status = str(idem_result.get("status") or "").strip().upper()
+        response = idem_result.get("response")
+        response_dict = dict(response) if isinstance(response, dict) else {}
+
+        if status in {"COMPLETED", "DUPLICATE"}:
+            return {
+                "success": True,
+                "product_id": response_dict.get("product_id"),
+                "errors": [],
+            }
+        if status == "CONFLICT":
+            return {"success": False, "product_id": None, "errors": ["idempotency_conflict"]}
+        if status == "IN_FLIGHT":
+            return {"success": False, "product_id": None, "errors": ["idempotency_in_flight"]}
+        return {
+            "success": False,
+            "product_id": None,
+            "errors": [f"idempotency_unexpected_status:{status or '<empty>'}"],
+        }
+
+    def _extract_create_product_response(self, out: Dict[str, Any]) -> Dict[str, Any]:
+        node = (((out.get("data") or {}).get("productCreate") or {}).get("product")) or {}
+        pid = node.get("id")
+        if not pid:
+            raise ShopifyOperationError(["productCreate_missing_id"])
+        return {"product_id": str(pid)}
+
+    def _extract_update_product_response(self, out: Dict[str, Any], *, fallback_product_id: str) -> Dict[str, Any]:
+        node = (((out.get("data") or {}).get("productUpdate") or {}).get("product")) or {}
+        pid = node.get("id") or fallback_product_id
+        return {"product_id": str(pid)}
+
+    def _extract_update_variant_price_response(self, out: Dict[str, Any], *, variant_id: str) -> Dict[str, Any]:
+        node = (((out.get("data") or {}).get("productVariantUpdate") or {}).get("productVariant")) or {}
+        vid = node.get("id") or variant_id
+        return {"variant_id": str(vid)}
 
     def _run_graphql(
         self,
@@ -339,13 +424,8 @@ class ShopifyWriter:
         return {"ok": False, "data": None, "errors": [last_err or "unknown_error"]}
 
     def _http_post(self, url: str, headers: Dict[str, str], body: bytes) -> Tuple[int, str]:
-        """
-        Adapter canónico: usa la interfaz REAL de SimpleHttpClient (post_json).
-        Esto SOLO corre en live mode.
-        """
         client = self._http
         payload = json.loads(body.decode("utf-8")) if body else {}
-
         resp = client.post_json(
             url=url,
             payload=payload,
@@ -356,15 +436,6 @@ class ShopifyWriter:
 
 
 def _coerce_http_response(resp: Any) -> Tuple[int, str]:
-    """
-    Normaliza respuesta a (status:int, text:str) sin asumir clase exacta.
-    Edge cases cubiertos:
-    - tuple(status, body)
-    - dict con status/status_code/code y text/body/content
-    - objeto con attrs status/status_code/code y text/body/content
-    - bytes -> decode utf-8 fail-closed
-    - fallback a .json() si no hay body textual
-    """
     if resp is None:
         return 0, ""
 
@@ -401,11 +472,9 @@ def _coerce_http_response(resp: Any) -> Tuple[int, str]:
             if key in resp:
                 status = _coerce_status(resp.get(key))
                 break
-
         for key in ("text", "body", "content"):
             if key in resp:
                 return status, _coerce_text(resp.get(key))
-
         return status, ""
 
     status = 0
@@ -413,7 +482,6 @@ def _coerce_http_response(resp: Any) -> Tuple[int, str]:
         if hasattr(resp, s_attr):
             status = _coerce_status(getattr(resp, s_attr))
             break
-
     for t_attr in ("text", "body", "content"):
         if hasattr(resp, t_attr):
             value = getattr(resp, t_attr)
@@ -423,7 +491,6 @@ def _coerce_http_response(resp: Any) -> Tuple[int, str]:
     json_text = _from_json_method(resp)
     if json_text is not None:
         return status, json_text
-
     return status, ""
 
 
@@ -453,6 +520,4 @@ def _stringify_graphql_errors(errors: Any) -> List[str]:
 
 
 def _update_single_variant_fields(variant_id: str, v: ShopifyVariantInput) -> ShopifyWriteResult:
-    # Placeholder por seguridad: solo se usa en live mode desde create_product.
-    # Se implementa inline en live cuando se necesite (S11 no exige live e2e).
-    return ShopifyWriteResult(True, None, [], mock=False)
+    raise NotImplementedError("shopify_writer._update_single_variant_fields is not implemented")

@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 
 import synapse.shopify.shopify_writer as m
 
@@ -39,7 +39,7 @@ def _build_writer(monkeypatch):
         config=m.ShopifyWriterConfig(
             api_version="2026-01",
             timeout_s=1.0,
-            max_retries=0,
+            max_retries=2,
         ),
     )
     return writer, calls
@@ -76,13 +76,15 @@ def _assert_network_blocked_result(result):
     assert "no attribute 'post'" not in joined
 
 
-def _assert_single_post_json_call(calls):
+def _assert_single_post_json_call(calls, *, expect_idempotency_header: bool = True):
     assert len(calls) == 1
     call = calls[0]
 
     assert call["url"] == "https://invalid-shop.myshopify.com/admin/api/2026-01/graphql.json"
     assert call["headers"]["X-Shopify-Access-Token"] == "shpat_fake_token"
     assert call["headers"]["Content-Type"] == "application/json"
+    if expect_idempotency_header:
+        assert call["headers"].get("X-Idempotency-Key")
     assert call["timeout_s"] == 1.0
     assert isinstance(call["payload"], dict)
 
@@ -106,7 +108,7 @@ def test_live_update_product_uses_post_json(monkeypatch):
 
     _assert_network_blocked_result(result)
     _assert_single_post_json_call(calls)
-    assert result.product_id == "gid://shopify/Product/123"
+    assert result.product_id is None
 
 
 def test_live_set_product_status_uses_post_json(monkeypatch):
@@ -119,7 +121,7 @@ def test_live_set_product_status_uses_post_json(monkeypatch):
 
     _assert_network_blocked_result(result)
     _assert_single_post_json_call(calls)
-    assert result.product_id == "gid://shopify/Product/123"
+    assert result.product_id is None
 
 
 def test_live_update_variant_price_uses_post_json(monkeypatch):
@@ -132,6 +134,3 @@ def test_live_update_variant_price_uses_post_json(monkeypatch):
 
     _assert_network_blocked_result(result)
     _assert_single_post_json_call(calls)
-
-
-

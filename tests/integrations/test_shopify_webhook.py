@@ -1,4 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+import pytest
 
 from synapse.integrations.shopify_webhook import (
     build_shopify_dedup_key,
@@ -98,6 +100,29 @@ def test_shopify_webhook_dedup_409():
     assert r2.accepted is False
     assert r2.status_code == 409
     assert r2.reason == "duplicate_webhook"
+
+
+def test_shopify_webhook_invalid_json_rejected_400():
+    secret = "shpss_test_secret"
+    body = b'{"x":'
+    good = compute_shopify_hmac_sha256_base64(secret, body)
+    headers = {
+        "X-Shopify-Hmac-Sha256": good,
+        "X-Shopify-Webhook-Id": "wh_bad_json",
+        "X-Shopify-Topic": "orders/create",
+        "X-Shopify-Shop-Domain": "example.myshopify.com",
+    }
+
+    r = process_shopify_webhook(secret=secret, headers=headers, body=body, dedup_set=set())
+    assert r.accepted is False
+    assert r.status_code == 400
+    assert r.reason == "invalid_json"
+    assert r.event is None
+
+
+def test_shopify_webhook_secret_required_explicit():
+    with pytest.raises(ValueError, match="shopify_webhook_secret_required"):
+        process_shopify_webhook(secret="", headers={}, body=b"{}", dedup_set=set())
 
 
 def test_shopify_dedup_key_prefers_shop_scoped_key():
