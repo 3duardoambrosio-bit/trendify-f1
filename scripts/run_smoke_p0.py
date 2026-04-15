@@ -2,22 +2,41 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
-from core.ledger import Ledger
+from synapse.ledger_ndjson import read_events
+
+
+def _tail_events(path: str, n: int = 5):
+    rows = read_events(Path(path))
+    return rows[-n:]
 
 
 def main() -> int:
     ledger_path = "data/ledger/events.ndjson"
-    cmd = [sys.executable, "scripts/run_launch_dossier_ledger.py", "--path", "data/catalog/candidates_real.csv", "--threshold", "75", "--ledger", ledger_path]
+    cmd = [
+        sys.executable,
+        "scripts/run_launch_dossier_ledger.py",
+        "--path",
+        "data/catalog/candidates_real.csv",
+        "--threshold",
+        "75",
+        "--ledger",
+        ledger_path,
+    ]
     proc = subprocess.run(cmd)
 
-    ledger = Ledger(path=ledger_path)
-    tail = ledger.tail(5)
+    tail = _tail_events(ledger_path, 5)
     print("\n==============================")
     print("LEDGER TAIL (last 5)")
     print("==============================")
     for ev in tail:
-        print(f"- {ev.get('ts_utc')} | {ev.get('event_type')} | {ev.get('entity_type')}:{ev.get('entity_id')}")
+        payload = ev.get("payload", {})
+        entity_type = payload.get("entity_type", "unknown")
+        entity_id = payload.get("entity_id", "unknown")
+        event_type = ev.get("kind", "unknown")
+        ts = ev.get("event_time") or ev.get("ingest_time") or "unknown"
+        print(f"- {ts} | {event_type} | {entity_type}:{entity_id}")
 
     return proc.returncode
 
