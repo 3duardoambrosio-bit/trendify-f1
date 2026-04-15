@@ -213,12 +213,22 @@ class WaveRunner:
             )
 
         except Exception as e:
-            self._log_event("WAVE_ERROR", product.product_id, {"wave_id": wave_id, "error": str(e)})
+            error_type = type(e).__name__
+            self._log_event(
+                "WAVE_ERROR",
+                product.product_id,
+                {
+                    "wave_id": wave_id,
+                    "input_hash": input_hash,
+                    "error_code": "wave_runner_execution_error",
+                    "error_type": error_type,
+                },
+            )
             return WaveResult(
                 wave_id=wave_id,
                 product_id=product.product_id,
                 status="ERROR",
-                message=f"Error: {str(e)}",
+                message=f"WAVE_RUNNER_EXECUTION_ERROR:{error_type}",
                 input_hash=input_hash,
                 started_at=started_at.isoformat(),
                 completed_at=datetime.now(timezone.utc).isoformat(),
@@ -239,6 +249,13 @@ class WaveRunner:
                     if manifest.get("input_hash") == input_hash:
                         return True
             except (FileNotFoundError, PermissionError):
+                continue
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+                logger.warning(
+                    "wave_runner manifest unreadable file=%s err=%s",
+                    manifest_file,
+                    type(exc).__name__,
+                )
                 continue
         return False
 

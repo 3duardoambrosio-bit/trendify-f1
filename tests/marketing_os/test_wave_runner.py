@@ -130,6 +130,43 @@ class TestWaveRunner:
         )
 
 
+
+
+    def test_corrupt_manifest_is_ignored_and_run_succeeds(self, runner, product, temp_dirs):
+        bad_manifest = temp_dirs["manifest"] / f"{product.product_id}_manifest_bad.json"
+        bad_manifest.parent.mkdir(parents=True, exist_ok=True)
+        bad_manifest.write_text("{not-json", encoding="utf-8")
+
+        result = runner.run(product)
+
+        assert result.status == "SUCCESS"
+        assert result.kit_path
+        assert Path(result.kit_path).exists()
+
+    def test_generate_kit_failure_returns_stable_error_taxonomy(self, runner, product, temp_dirs, monkeypatch):
+        def boom(*args, **kwargs):
+            raise RuntimeError("creative factory exploded")
+
+        monkeypatch.setattr(runner.creative_factory, "generate_kit", boom)
+
+        result = runner.run(product, force=True)
+
+        assert result.status == "ERROR"
+        assert result.message == "WAVE_RUNNER_EXECUTION_ERROR:RuntimeError"
+
+        ledger_path = temp_dirs["ledger"] / "events.ndjson"
+        assert ledger_path.exists()
+
+        rows = read_events(ledger_path)
+        assert any(
+            row.get("entity_id") == product.product_id
+            and row.get("event_type") == "WAVE_ERROR"
+            and row.get("payload", {}).get("error_code") == "wave_runner_execution_error"
+            and row.get("payload", {}).get("error_type") == "RuntimeError"
+            for row in rows
+        )
+
+
 class TestBatchProcessing:
     def test_run_batch_multiple_products(self, runner):
         products = [
