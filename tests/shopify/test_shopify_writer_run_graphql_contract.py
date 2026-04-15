@@ -358,3 +358,45 @@ def test_update_single_variant_fields_is_explicitly_not_implemented():
                 requires_shipping=True,
             ),
         )
+
+def test_run_graphql_transport_exception_returns_stable_error_code(monkeypatch):
+    writer = m.ShopifyWriter(
+        shop="demo-shop",
+        access_token="token",
+        flags=m.FeatureFlags(shopify_live=True, meta_live=False, dropi_live=False, spend_real_money=False),
+    )
+
+    def boom(url, payload, headers, timeout_s):
+        raise TimeoutError("socket timeout")
+
+    monkeypatch.setattr(writer._http, "post_json", boom, raising=True)
+
+    out = writer._run_graphql("mutation X { productCreate(input: {}) { product { id } userErrors { field message } } }", {})
+
+    assert out["ok"] is False
+    assert out["errors"] == ["graphql_transport_error:TimeoutError"]
+
+
+def test_execute_idempotent_write_unexpected_exception_returns_stable_error_code(monkeypatch):
+    writer = m.ShopifyWriter(
+        shop="demo-shop",
+        access_token="token",
+        flags=m.FeatureFlags(shopify_live=True, meta_live=False, dropi_live=False, spend_real_money=False),
+    )
+
+    def fake_execute_once(**kwargs):
+        raise RuntimeError("sqlite unavailable")
+
+    monkeypatch.setattr(m, "execute_once", fake_execute_once, raising=True)
+
+    out = writer._execute_idempotent_write(
+        operation_name="create_product",
+        idempotency_key="idem-123",
+        mutation="mutation X { productCreate(input: {}) { product { id } userErrors { field message } } }",
+        variables={},
+        extractor=lambda out: {"product_id": "gid://shopify/Product/1"},
+    )
+
+    assert out["success"] is False
+    assert out["product_id"] is None
+    assert out["errors"] == ["idempotency_execution_error:RuntimeError"]

@@ -326,7 +326,7 @@ class ShopifyWriter:
             return {
                 "success": False,
                 "product_id": None,
-                "errors": [f"exception: {type(exc).__name__}: {exc}"],
+                "errors": [f"idempotency_execution_error:{type(exc).__name__}"],
             }
 
         status = str(idem_result.get("status") or "").strip().upper()
@@ -415,7 +415,7 @@ class ShopifyWriter:
                     return {"ok": False, "data": payload.get("data"), "errors": _extract_user_errors(user_errors)}
                 return {"ok": True, "data": payload.get("data"), "errors": []}
             except Exception as e:
-                last_err = f"exception: {type(e).__name__}: {e}"
+                last_err = f"graphql_transport_error:{type(e).__name__}"
                 log.warning("Shopify GraphQL error attempt=%s/%s err=%s", attempt + 1, max_attempts, last_err)
 
             if allow_retries and attempt < (max_attempts - 1):
