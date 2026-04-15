@@ -1,4 +1,4 @@
-﻿"""Tests for MetaSafeClient."""
+"""Tests for MetaSafeClient."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from synapse.infra.circuit_breaker import CircuitBreaker
+from synapse.infra.circuit_breaker import CircuitBreaker, CircuitOpenError
 from synapse.infra.feature_flags import FeatureFlags
 from synapse.infra.retry_policy import RetryPolicy
 from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
@@ -327,3 +327,105 @@ def test_governed_anchor_is_written_into_ledger_events(tmp_path: Path) -> None:
     assert anchor["payload"]["idempotency_key"] == "test-key-anchor-001"
     assert anchor["metadata"]["anchor_contract_version"] == "governed-write-anchor.v1"
     assert anchor["metadata"]["source"] == "synapse.meta.safe_client"
+
+
+class TestErrorTaxonomy:
+    def test_live_autopause_circuit_open_returns_circuit_open(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=True)
+
+        with patch.object(client.circuit_breaker, "call", side_effect=CircuitOpenError("breaker open")):
+            result = client.maybe_autopause(
+                spend_today_mxn=Decimal("80"),
+                cap_mxn=Decimal("100"),
+                campaign_id="camp-cb-open",
+                correlation_id="corr-cb-open",
+            )
+
+        assert result["ok"] is False
+        assert result["error_code"] == "circuit_open"
+        assert result["error_type"] == "CircuitOpenError"
+
+    def test_live_autopause_pause_failure_returns_autopause_error(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=True)
+
+        with patch(
+            "synapse.meta.safe_client.call_pause_campaign",
+            side_effect=ConnectionError("pause unreachable"),
+        ):
+            result = client.maybe_autopause(
+                spend_today_mxn=Decimal("80"),
+                cap_mxn=Decimal("100"),
+                campaign_id="camp-pause-fail",
+                correlation_id="corr-pause-fail",
+            )
+
+        assert result["ok"] is False
+        assert result["error_code"] == "autopause_error"
+        assert result["error_type"] == "ConnectionError"
+        assert "pause unreachable" in result["error_message"]
+
+    def test_create_campaign_in_flight_maps_specific_error(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+
+        with patch(
+            "synapse.meta.safe_client.execute_once",
+            return_value={"status": "IN_FLIGHT", "response": None},
+        ):
+            result = client.create_campaign_safe(
+                payload={"name": "Inflight"},
+                idempotency_key="idem-in-flight-create",
+                correlation_id="corr-in-flight-create",
+            )
+
+        assert result["ok"] is False
+        assert result["error_code"] == "idempotency_in_flight"
+
+    def test_create_campaign_unexpected_status_maps_specific_error(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+
+        with patch(
+            "synapse.meta.safe_client.execute_once",
+            return_value={"status": "BROKEN", "response": None},
+        ):
+            result = client.create_campaign_safe(
+                payload={"name": "Unexpected"},
+                idempotency_key="idem-unexpected-create",
+                correlation_id="corr-unexpected-create",
+            )
+
+        assert result["ok"] is False
+        assert result["error_code"] == "idempotency_unexpected_status"
+
+    def test_autopause_in_flight_maps_specific_error(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+
+        with patch(
+            "synapse.meta.safe_client.execute_once",
+            return_value={"status": "IN_FLIGHT", "response": None},
+        ):
+            result = client.maybe_autopause(
+                spend_today_mxn=Decimal("85"),
+                cap_mxn=Decimal("100"),
+                campaign_id="camp-in-flight",
+                correlation_id="corr-in-flight",
+            )
+
+        assert result["ok"] is False
+        assert result["error_code"] == "idempotency_in_flight"
+
+    def test_autopause_unexpected_status_maps_specific_error(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+
+        with patch(
+            "synapse.meta.safe_client.execute_once",
+            return_value={"status": "BROKEN", "response": None},
+        ):
+            result = client.maybe_autopause(
+                spend_today_mxn=Decimal("85"),
+                cap_mxn=Decimal("100"),
+                campaign_id="camp-unexpected",
+                correlation_id="corr-unexpected",
+            )
+
+        assert result["ok"] is False
+        assert result["error_code"] == "idempotency_unexpected_status"
