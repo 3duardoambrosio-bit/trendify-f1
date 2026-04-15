@@ -374,7 +374,7 @@ def test_run_graphql_transport_exception_returns_stable_error_code(monkeypatch):
     out = writer._run_graphql("mutation X { productCreate(input: {}) { product { id } userErrors { field message } } }", {})
 
     assert out["ok"] is False
-    assert out["errors"] == ["graphql_transport_error:TimeoutError"]
+    assert out["errors"] == ["graphql_transport_error:TimeoutError:socket timeout"]
 
 
 def test_execute_idempotent_write_unexpected_exception_returns_stable_error_code(monkeypatch):

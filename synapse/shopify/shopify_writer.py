@@ -415,7 +415,11 @@ class ShopifyWriter:
                     return {"ok": False, "data": payload.get("data"), "errors": _extract_user_errors(user_errors)}
                 return {"ok": True, "data": payload.get("data"), "errors": []}
             except Exception as e:
-                last_err = f"graphql_transport_error:{type(e).__name__}"
+                err_msg = str(e).strip()
+                if err_msg:
+                    last_err = f"graphql_transport_error:{type(e).__name__}:{err_msg}"
+                else:
+                    last_err = f"graphql_transport_error:{type(e).__name__}"
                 log.warning("Shopify GraphQL error attempt=%s/%s err=%s", attempt + 1, max_attempts, last_err)
 
             if allow_retries and attempt < (max_attempts - 1):
