@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 
 import synapse.shopify.shopify_writer as m
 
@@ -6,7 +7,7 @@ WRONG_HTTP_METHOD = "WRONG_HTTP_METHOD_USED"
 NETWORK_BLOCKED = "NETWORK_BLOCKED"
 
 
-def _build_writer(monkeypatch):
+def _build_writer(monkeypatch, tmp_path: Path):
     calls = []
 
     def wrong_method(*args, **kwargs):
@@ -40,6 +41,8 @@ def _build_writer(monkeypatch):
             api_version="2026-01",
             timeout_s=1.0,
             max_retries=2,
+            idempotency_db_path=tmp_path / "shopify-writer-live-http.sqlite3",
+            idempotency_ttl_seconds=3600,
         ),
     )
     return writer, calls
@@ -89,8 +92,8 @@ def _assert_single_post_json_call(calls, *, expect_idempotency_header: bool = Tr
     assert isinstance(call["payload"], dict)
 
 
-def test_live_create_product_uses_post_json(monkeypatch):
-    writer, calls = _build_writer(monkeypatch)
+def test_live_create_product_uses_post_json(monkeypatch, tmp_path):
+    writer, calls = _build_writer(monkeypatch, tmp_path)
 
     result = writer.create_product(_build_product())
 
@@ -98,8 +101,8 @@ def test_live_create_product_uses_post_json(monkeypatch):
     _assert_single_post_json_call(calls)
 
 
-def test_live_update_product_uses_post_json(monkeypatch):
-    writer, calls = _build_writer(monkeypatch)
+def test_live_update_product_uses_post_json(monkeypatch, tmp_path):
+    writer, calls = _build_writer(monkeypatch, tmp_path)
 
     result = writer.update_product(
         "gid://shopify/Product/123",
@@ -111,8 +114,8 @@ def test_live_update_product_uses_post_json(monkeypatch):
     assert result.product_id is None
 
 
-def test_live_set_product_status_uses_post_json(monkeypatch):
-    writer, calls = _build_writer(monkeypatch)
+def test_live_set_product_status_uses_post_json(monkeypatch, tmp_path):
+    writer, calls = _build_writer(monkeypatch, tmp_path)
 
     result = writer.set_product_status(
         "gid://shopify/Product/123",
@@ -124,8 +127,8 @@ def test_live_set_product_status_uses_post_json(monkeypatch):
     assert result.product_id is None
 
 
-def test_live_update_variant_price_uses_post_json(monkeypatch):
-    writer, calls = _build_writer(monkeypatch)
+def test_live_update_variant_price_uses_post_json(monkeypatch, tmp_path):
+    writer, calls = _build_writer(monkeypatch, tmp_path)
 
     result = writer.update_variant_price(
         "gid://shopify/ProductVariant/456",
