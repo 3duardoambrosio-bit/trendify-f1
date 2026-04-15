@@ -65,11 +65,20 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
             "correlation_id": correlation_id,
         }
 
-    shield = CapitalShieldV2(vault=vault)
-    decision = shield.decide_for_product(
-        final_decision="approved",
-        requested_amount=spend_mxn,
-    )
+    try:
+        shield = CapitalShieldV2(vault=vault)
+        decision = shield.decide_for_product(
+            final_decision="approved",
+            requested_amount=spend_mxn,
+        )
+    except Exception as exc:
+        return {
+            "gate": "capital_shield",
+            "allowed": False,
+            "reason": f"gate_execution_error:{type(exc).__name__}",
+            "correlation_id": correlation_id,
+        }
+
     return {
         "gate": "capital_shield",
         "allowed": decision.reason == "approved",
@@ -98,8 +107,17 @@ def _check_safety_middleware(spend_mxn: Decimal, correlation_id: str) -> Dict[st
             "correlation_id": correlation_id,
         }
 
-    result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
-    is_ok = bool(getattr(result, "is_ok", lambda: bool(result))())
+    try:
+        result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
+        is_ok = bool(getattr(result, "is_ok", lambda: bool(result))())
+    except Exception as exc:
+        return {
+            "gate": "safety_middleware",
+            "allowed": False,
+            "reason": f"gate_execution_error:{type(exc).__name__}",
+            "correlation_id": correlation_id,
+        }
+
     return {
         "gate": "safety_middleware",
         "allowed": is_ok,

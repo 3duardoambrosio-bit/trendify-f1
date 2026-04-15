@@ -429,3 +429,58 @@ class TestErrorTaxonomy:
 
         assert result["ok"] is False
         assert result["error_code"] == "idempotency_unexpected_status"
+
+def test_capital_shield_gate_internal_exception_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    client = _make_client(tmp_path)
+    monkeypatch.setattr(type(client), "_is_live", property(lambda self: False), raising=True)
+
+    class BoomShield:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def decide_for_product(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    with patch("vault.vault_file_backed.VaultFileBacked", return_value=object()):
+        with patch("ops.capital_shield_v2.CapitalShieldV2", BoomShield):
+            with patch("synapse.meta.safe_client._check_safety_middleware") as mock_sm:
+                mock_sm.return_value = {
+                    "gate": "safety_middleware",
+                    "allowed": True,
+                    "reason": "passed",
+                    "correlation_id": "corr-1",
+                }
+
+                result = client.create_campaign_safe(
+                    {"name": "Camp", "budget_mxn": "100"},
+                    idempotency_key="idem-cs-explosion",
+                    correlation_id="corr-1",
+                )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "pre_spend_gate_blocked"
+    assert "capital_shield" in result["blocked_by"]
+    assert result["capital_shield"]["reason"] == "gate_execution_error:RuntimeError"
+
+def test_safety_middleware_gate_internal_exception_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    client = _make_client(tmp_path)
+    monkeypatch.setattr(type(client), "_is_live", property(lambda self: False), raising=True)
+
+    with patch("synapse.meta.safe_client._check_capital_shield") as mock_cs:
+        mock_cs.return_value = {
+            "gate": "capital_shield",
+            "allowed": True,
+            "reason": "approved",
+            "correlation_id": "corr-2",
+        }
+        with patch("ops.safety_middleware.check_safety_before_spend", side_effect=RuntimeError("boom")):
+            result = client.create_campaign_safe(
+                {"name": "Camp", "budget_mxn": "100"},
+                idempotency_key="idem-sm-explosion",
+                correlation_id="corr-2",
+            )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "pre_spend_gate_blocked"
+    assert "safety_middleware" in result["blocked_by"]
+    assert result["safety_middleware"]["reason"] == "gate_execution_error:RuntimeError"
