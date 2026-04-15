@@ -2,8 +2,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from synapse.learning.learning_loop import (
     LearningLoop,
     LearningLoopConfig,
@@ -21,8 +19,38 @@ class FakeLedger:
 
     def write(self, event_type, entity_type, entity_id, payload):
         self.writes.append(
-            {"event_type": event_type, "entity_type": entity_type, "entity_id": entity_id, "payload": payload}
+            {
+                "event_type": event_type,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "payload": payload,
+            }
         )
+
+
+class LegacyOnlyLedger:
+    def __init__(self, events):
+        self._events = list(events)
+        self.calls = []
+
+    def write(self, event_type, entity_type, entity_id, payload):
+        self.calls.append(
+            {
+                "event_type": event_type,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "payload": payload,
+            }
+        )
+
+
+class DictWriteLedger:
+    def __init__(self, events):
+        self._events = list(events)
+        self.calls = []
+
+    def write(self, event):
+        self.calls.append(event)
 
 
 def _mk_event(ts, payload, event_type="EXPERIMENT_METRICS_RECORDED", entity_id="34357"):
@@ -67,13 +95,12 @@ def test_learning_loop_updates_weights_and_is_idempotent(tmp_path):
     (repo / "data" / "config").mkdir(parents=True, exist_ok=True)
 
     events = []
-    # enough spend + multiple records
     for i in range(10):
         payload = {
             "product_id": "34357",
             "platform": "meta",
             "utm_content": f"Hh{i}_Adolor_Fhands_V1",
-            "spend": 5.0,  # total 50
+            "spend": 5.0,
             "impressions": 1000,
             "clicks": 20 + i,
             "conversions": 1,
@@ -95,11 +122,9 @@ def test_learning_loop_updates_weights_and_is_idempotent(tmp_path):
     assert data1["schema_version"] == "1.0.0"
     assert "angles" in data1 and "formats" in data1 and "hooks" in data1
 
-    # second run with same input => SKIPPED
     res2 = runner.run(ledger_obj=ledger, cfg=cfg, force=False, dry_run=False)
     assert res2.status == "SKIPPED"
 
-    # verify ledger writes include completed + skipped
     types = [w["event_type"] for w in ledger.writes]
     assert "LEARNING_LOOP_COMPLETED" in types
     assert "LEARNING_LOOP_SKIPPED" in types
@@ -119,7 +144,7 @@ def test_learning_loop_respects_dry_run(tmp_path):
             "angle": "status",
             "format": "voiceover",
             "hook_id": f"h{i}",
-            "spend": 3.0,  # total 24
+            "spend": 3.0,
             "impressions": 800,
             "clicks": 10,
             "conversions": 1,
@@ -135,6 +160,40 @@ def test_learning_loop_respects_dry_run(tmp_path):
     res = runner.run(ledger_obj=ledger, cfg=cfg, dry_run=True)
 
     assert res.status == "COMPLETED_DRY_RUN"
-    # dry run still writes report + state, but weights may or may not exist
     assert Path(res.report_path).exists()
     assert Path(res.state_path).exists()
+
+
+def test_learning_loop_writes_legacy_four_arg_contract_explicitly(tmp_path):
+    repo = tmp_path
+    (repo / "data" / "learning").mkdir(parents=True, exist_ok=True)
+    (repo / "data" / "config").mkdir(parents=True, exist_ok=True)
+
+    ledger = LegacyOnlyLedger(events=[])
+    cfg = LearningLoopConfig(min_records=8, require_evidence=True)
+
+    runner = LearningLoop(repo)
+    res = runner.run(ledger_obj=ledger, cfg=cfg)
+
+    assert res.status == "INSUFFICIENT_EVIDENCE"
+    assert len(ledger.calls) == 1
+    assert ledger.calls[0]["event_type"] == "LEARNING_LOOP_SKIPPED"
+    assert ledger.calls[0]["entity_type"] == "learning_loop"
+    assert ledger.calls[0]["payload"]["status"] == "INSUFFICIENT_EVIDENCE"
+
+
+def test_learning_loop_writes_single_dict_contract_explicitly(tmp_path):
+    repo = tmp_path
+    (repo / "data" / "learning").mkdir(parents=True, exist_ok=True)
+    (repo / "data" / "config").mkdir(parents=True, exist_ok=True)
+
+    ledger = DictWriteLedger(events=[])
+    cfg = LearningLoopConfig(min_records=8, require_evidence=True)
+
+    runner = LearningLoop(repo)
+    res = runner.run(ledger_obj=ledger, cfg=cfg)
+
+    assert res.status == "INSUFFICIENT_EVIDENCE"
+    assert len(ledger.calls) == 1
+    assert ledger.calls[0]["event_type"] == "LEARNING_LOOP_SKIPPED"
+    assert ledger.calls[0]["status"] == "INSUFFICIENT_EVIDENCE"

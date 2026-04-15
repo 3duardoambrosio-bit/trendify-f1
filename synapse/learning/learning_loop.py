@@ -291,21 +291,30 @@ def _ledger_write(ledger_obj: Any, *, event_type: str, status: str, input_hash: 
     if total_spend is not None:
         ev["total_spend"] = float(total_spend)
 
-    for m in ("write", "write_event", "emit", "record", "add_event"):
+    write_fn = getattr(ledger_obj, "write", None)
+    if callable(write_fn):
+        try:
+            write_fn(ev)
+            return
+        except TypeError:
+            try:
+                write_fn(event_type, "learning_loop", input_hash, ev)
+                return
+            except TypeError:
+                pass
+
+    for m in ("write_event", "emit", "record", "add_event"):
         fn = getattr(ledger_obj, m, None)
         if callable(fn):
             try:
                 fn(ev)
                 return
-            except Exception:
+            except TypeError:
                 pass
 
-    try:
-        writes = getattr(ledger_obj, "writes", None)
-        if isinstance(writes, list):
-            writes.append(ev)
-    except (AttributeError):
-        pass
+    writes = getattr(ledger_obj, "writes", None)
+    if isinstance(writes, list):
+        writes.append(ev)
 
 
 class LearningLoop:
