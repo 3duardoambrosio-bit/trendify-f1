@@ -363,11 +363,62 @@ class SpendGateway:
         if status in {STATUS_COMPLETED, STATUS_DUPLICATE}:
             return SpendGatewayDecision.from_dict(result["response"])
         if status == STATUS_CONFLICT:
+            event_payload = {
+                "reason": "IDEMPOTENCY_CONFLICT",
+                "request_id": str(req_id),
+                "product_id": str(product_id),
+                "amount": str(amount),
+                "day": day,
+                "pool": pool,
+                "channel": channel,
+                "country": country,
+                "currency": currency,
+                "layer0": layer0_meta,
+            }
+            self._log_event("SPEND_DENIED", event_payload)
             return SpendGatewayDecision(False, "IDEMPOTENCY_CONFLICT", amount, pool, str(product_id), day, {"layer0": layer0_meta})
         if status == STATUS_IN_FLIGHT:
+            event_payload = {
+                "reason": "IDEMPOTENCY_IN_FLIGHT",
+                "request_id": str(req_id),
+                "product_id": str(product_id),
+                "amount": str(amount),
+                "day": day,
+                "pool": pool,
+                "channel": channel,
+                "country": country,
+                "currency": currency,
+                "layer0": layer0_meta,
+            }
+            self._log_event("SPEND_DENIED", event_payload)
             return SpendGatewayDecision(False, "IDEMPOTENCY_IN_FLIGHT", amount, pool, str(product_id), day, {"layer0": layer0_meta})
 
-        raise RuntimeError(f"unexpected idempotency status: {status}")
+        event_payload = {
+            "reason": "IDEMPOTENCY_UNEXPECTED_STATUS",
+            "idempotency_status": str(status),
+            "request_id": str(req_id),
+            "product_id": str(product_id),
+            "amount": str(amount),
+            "day": day,
+            "pool": pool,
+            "channel": channel,
+            "country": country,
+            "currency": currency,
+            "layer0": layer0_meta,
+        }
+        self._log_event("SPEND_DENIED", event_payload)
+        return SpendGatewayDecision(
+            False,
+            "IDEMPOTENCY_UNEXPECTED_STATUS",
+            amount,
+            pool,
+            str(product_id),
+            day,
+            {
+                "layer0": layer0_meta,
+                "idempotency_status": str(status),
+            },
+        )
 
     def request_spend(self, *, amount: Decimal, bucket: str):
         class _Req:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from ops.spend_gateway_v1 import SpendGateway
 from synapse.ledger_ndjson import read_events
@@ -66,3 +67,67 @@ def test_spend_gateway_blocks_outside_odd_by_default(tmp_path: Path) -> None:
     events = read_events(ledger.path)
     assert len(events) == 1
     assert events[0]["event_type"] == "SPEND_BLOCKED_SAFETY"
+
+def test_spend_gateway_conflict_is_fail_closed_and_logs_denial(tmp_path: Path) -> None:
+    vault = _Vault()
+    ledger = SimpleNamespace(path=tmp_path / "events.ndjson")
+    gateway = SpendGateway(vault=vault, ledger=ledger, idempotency_db_path=tmp_path / "idempotency.sqlite3")
+
+    with patch(
+        "ops.spend_gateway_v1.execute_once",
+        return_value={"status": "CONFLICT", "response": None},
+    ):
+        decision = gateway.request(_req(amount="100.00", request_id="req-conflict"), idempotency_key="idem-conflict")
+
+    assert decision.allowed is False
+    assert decision.reason == "IDEMPOTENCY_CONFLICT"
+    assert vault.calls == 0
+
+    events = read_events(ledger.path)
+    assert len(events) == 1
+    assert events[0]["event_type"] == "SPEND_DENIED"
+    assert events[0]["payload"]["reason"] == "IDEMPOTENCY_CONFLICT"
+
+
+def test_spend_gateway_in_flight_is_fail_closed_and_logs_denial(tmp_path: Path) -> None:
+    vault = _Vault()
+    ledger = SimpleNamespace(path=tmp_path / "events.ndjson")
+    gateway = SpendGateway(vault=vault, ledger=ledger, idempotency_db_path=tmp_path / "idempotency.sqlite3")
+
+    with patch(
+        "ops.spend_gateway_v1.execute_once",
+        return_value={"status": "IN_FLIGHT", "response": None},
+    ):
+        decision = gateway.request(_req(amount="100.00", request_id="req-in-flight"), idempotency_key="idem-in-flight")
+
+    assert decision.allowed is False
+    assert decision.reason == "IDEMPOTENCY_IN_FLIGHT"
+    assert vault.calls == 0
+
+    events = read_events(ledger.path)
+    assert len(events) == 1
+    assert events[0]["event_type"] == "SPEND_DENIED"
+    assert events[0]["payload"]["reason"] == "IDEMPOTENCY_IN_FLIGHT"
+
+
+def test_spend_gateway_unexpected_status_is_fail_closed_and_logs_denial(tmp_path: Path) -> None:
+    vault = _Vault()
+    ledger = SimpleNamespace(path=tmp_path / "events.ndjson")
+    gateway = SpendGateway(vault=vault, ledger=ledger, idempotency_db_path=tmp_path / "idempotency.sqlite3")
+
+    with patch(
+        "ops.spend_gateway_v1.execute_once",
+        return_value={"status": "BROKEN", "response": None},
+    ):
+        decision = gateway.request(_req(amount="100.00", request_id="req-broken"), idempotency_key="idem-broken")
+
+    assert decision.allowed is False
+    assert decision.reason == "IDEMPOTENCY_UNEXPECTED_STATUS"
+    assert decision.meta["idempotency_status"] == "BROKEN"
+    assert vault.calls == 0
+
+    events = read_events(ledger.path)
+    assert len(events) == 1
+    assert events[0]["event_type"] == "SPEND_DENIED"
+    assert events[0]["payload"]["reason"] == "IDEMPOTENCY_UNEXPECTED_STATUS"
+    assert events[0]["payload"]["idempotency_status"] == "BROKEN"
