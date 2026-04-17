@@ -222,6 +222,14 @@ class TestCircuitBreaker:
         assert cb.state == "HALF_OPEN"
         assert cb.allow_request() is True
 
+    def test_half_open_allows_exactly_one_probe_request(self):
+        cb = CircuitBreaker(threshold=1, recovery_timeout_s=0.01)
+        cb.record_failure()
+        time.sleep(0.02)
+        assert cb.state == "HALF_OPEN"
+        assert cb.allow_request() is True
+        assert cb.allow_request() is False
+
     def test_half_open_success_closes(self):
         cb = CircuitBreaker(threshold=1, recovery_timeout_s=0.01)
         cb.record_failure()
@@ -237,6 +245,16 @@ class TestCircuitBreaker:
         assert cb.state == "HALF_OPEN"
         cb.record_failure()
         assert cb.state == "OPEN"
+
+    def test_half_open_failed_probe_reopens_and_blocks(self):
+        cb = CircuitBreaker(threshold=1, recovery_timeout_s=0.01)
+        cb.record_failure()
+        time.sleep(0.02)
+        assert cb.state == "HALF_OPEN"
+        assert cb.allow_request() is True
+        cb.record_failure()
+        assert cb.state == "OPEN"
+        assert cb.allow_request() is False
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -377,3 +395,28 @@ class TestLiveModeCircuitBreaker:
 
         assert result == fake_payload
         assert client._breaker.state == "CLOSED"
+
+    def test_half_open_failed_probe_blocks_following_live_request(self):
+        client = _client(live=True)
+        client._breaker.threshold = 1
+        client._breaker.recovery_timeout_s = 0.01
+
+        with patch.object(client._http, "post_json", side_effect=HttpClientError("boom")):
+            with pytest.raises(HttpClientError):
+                client.get_products()
+
+        assert client._breaker.state == "OPEN"
+        time.sleep(0.02)
+        assert client._breaker.state == "HALF_OPEN"
+
+        with patch.object(client._http, "post_json", side_effect=HttpClientError("boom")) as mock_post:
+            with pytest.raises(HttpClientError, match="boom"):
+                client.get_products()
+            assert mock_post.call_count == 1
+
+        assert client._breaker.state == "OPEN"
+
+        with patch.object(client._http, "post_json") as mock_post_blocked:
+            with pytest.raises(CircuitOpenError, match="Circuit breaker OPEN"):
+                client.get_products()
+            mock_post_blocked.assert_not_called()

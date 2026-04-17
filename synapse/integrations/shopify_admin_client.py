@@ -4,7 +4,7 @@ Shopify Admin API Client (GraphQL, lectura).
 ACERO, NO HUMO:
 - stdlib-only (urllib), cero deps externas.
 - Feature-flag gated: shopify_live_api=False → fixtures mock.
-- Circuit breaker simple: tras N fallos consecutivos abre el circuito.
+- Circuit breaker canónico: importado desde synapse.infra.circuit_breaker.
 - Timeout 30s en todas las llamadas.
 """
 
@@ -12,19 +12,21 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from config.feature_flags import FeatureFlags
+from synapse.infra.circuit_breaker import CircuitBreaker, CircuitOpenError as InfraCircuitOpenError
 from synapse.integrations.http_client import (
     HttpClientError,
     HttpTimeoutError,
     SimpleHttpClient,
 )
 
-# ── GraphQL queries ──────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# GraphQL queries
+# ──────────────────────────────────────────────────────────────────────────────
 
 _PRODUCTS_QUERY = """
 query GetProducts($first: Int!) {
@@ -151,57 +153,14 @@ query GetOrder($id: ID!) {
 }
 """
 
-# ── Circuit Breaker ──────────────────────────────────────────────────
 
-
-@dataclass
-class CircuitBreaker:
-    """
-    Circuit breaker simple: tras `threshold` fallos consecutivos,
-    abre el circuito por `recovery_timeout_s` segundos.
-
-    Estados: CLOSED (normal) → OPEN (rechaza) → HALF_OPEN (prueba 1).
-    """
-
-    threshold: int = 5
-    recovery_timeout_s: float = 60.0
-
-    _failure_count: int = field(default=0, init=False, repr=False)
-    _last_failure_time: float = field(default=0.0, init=False, repr=False)
-    _state: str = field(default="CLOSED", init=False, repr=False)
-
-    @property
-    def state(self) -> str:
-        if self._state == "OPEN":
-            elapsed = time.monotonic() - self._last_failure_time
-            if elapsed >= self.recovery_timeout_s:
-                self._state = "HALF_OPEN"
-        return self._state
-
-    def record_success(self) -> None:
-        self._failure_count = 0
-        self._state = "CLOSED"
-
-    def record_failure(self) -> None:
-        self._failure_count += 1
-        self._last_failure_time = time.monotonic()
-        if self._failure_count >= self.threshold:
-            self._state = "OPEN"
-
-    def allow_request(self) -> bool:
-        s = self.state
-        if s == "CLOSED":
-            return True
-        if s == "HALF_OPEN":
-            return True  # permite 1 intento de prueba
-        return False
-
-
-class CircuitOpenError(HttpClientError):
+class CircuitOpenError(InfraCircuitOpenError, HttpClientError):
     """El circuit breaker está abierto; no se envían requests."""
 
 
-# ── Fixtures loader ──────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Fixtures loader
+# ──────────────────────────────────────────────────────────────────────────────
 
 _FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent / "fixtures" / "shopify_admin"
 
@@ -213,7 +172,9 @@ def _load_fixture(name: str) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
 
-# ── Client ───────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Client
+# ──────────────────────────────────────────────────────────────────────────────
 
 _API_VERSION = "2024-10"
 _TIMEOUT_S = 30.0
@@ -246,7 +207,9 @@ class ShopifyAdminClient:
             user_agent="synapse-shopify-admin/1.0",
         )
 
-    # ── Public API ───────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────────
+    # Public API
+    # ──────────────────────────────────────────────────────────────────────────
 
     def get_products(self, *, first: int = 50) -> Dict[str, Any]:
         if not self.flags.shopify_live_api:
@@ -255,7 +218,6 @@ class ShopifyAdminClient:
 
     def get_product(self, product_id: str) -> Dict[str, Any]:
         if not self.flags.shopify_live_api:
-            # Intenta cargar fixture específica, fallback a genérica
             numeric = product_id.split("/")[-1] if "/" in product_id else product_id
             fixture = _load_fixture(f"product_{numeric}")
             if fixture.get("data") is not None:
@@ -281,7 +243,9 @@ class ShopifyAdminClient:
         gid = order_id if order_id.startswith("gid://") else f"gid://shopify/Order/{order_id}"
         return self._graphql(_ORDER_QUERY, {"id": gid})
 
-    # ── Internal ─────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────────
+    # Internal
+    # ──────────────────────────────────────────────────────────────────────────
 
     def _endpoint(self) -> str:
         shop = self.shop.rstrip("/")
