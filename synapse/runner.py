@@ -167,6 +167,86 @@ def _ledger_for(cfg: RunnerConfig) -> NdjsonLedger | NullLedger:
     return NdjsonLedger(cfg.ledger_path)
 
 
+def _make_learning_loop_config(*, root, ledger, quiet):
+    import inspect
+    from synapse.learning.learning_loop import LearningLoopConfig
+
+    sig = inspect.signature(LearningLoopConfig)
+    params = {
+        name: param
+        for name, param in sig.parameters.items()
+        if name != "self"
+    }
+
+    kwargs = {}
+    if "root" in params:
+        kwargs["root"] = root
+    if "ledger" in params:
+        kwargs["ledger"] = ledger
+    if "quiet" in params:
+        kwargs["quiet"] = quiet
+
+    missing = [
+        name
+        for name, param in params.items()
+        if param.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        and param.default is inspect._empty
+        and name not in kwargs
+    ]
+    if missing:
+        raise TypeError(
+            f"LearningLoopConfig missing required params unsupported by runner adapter: {missing}"
+        )
+
+    return LearningLoopConfig(**kwargs)
+
+
+def _run_learning_loop(loop, *, ledger, cfg, force=False, dry_run=False):
+    import inspect
+
+    sig = inspect.signature(loop.run)
+    params = {
+        name: param
+        for name, param in sig.parameters.items()
+        if name != "self"
+    }
+
+    kwargs = {}
+    if "ledger_obj" in params:
+        kwargs["ledger_obj"] = ledger
+    elif "ledger" in params:
+        kwargs["ledger"] = ledger
+
+    if "cfg" in params:
+        kwargs["cfg"] = cfg
+    if "force" in params:
+        kwargs["force"] = force
+    if "dry_run" in params:
+        kwargs["dry_run"] = dry_run
+
+    missing = [
+        name
+        for name, param in params.items()
+        if param.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        and param.default is inspect._empty
+        and name not in kwargs
+    ]
+    if missing:
+        raise TypeError(
+            f"LearningLoop.run missing required params unsupported by runner adapter: {missing}"
+        )
+
+    return loop.run(**kwargs)
+
+
 @deal.pre(lambda argv=None: True, message="main contract")
 @deal.post(lambda result: isinstance(result, int), message="main must return int")
 @deal.raises(deal.RaisesContractError)
@@ -177,9 +257,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     from synapse.learning.learning_loop import LearningLoop, LearningLoopConfig
 
-    llc = LearningLoopConfig(root=str(cfg.root), ledger=str(cfg.ledger_path), quiet=cfg.quiet)
+    _ll_cli = (
+        locals().get("args")
+        or locals().get("ns")
+        or locals().get("parsed_args")
+        or locals().get("cli")
+    )
+    _ll_root = locals().get("root")
+    if _ll_root is None and _ll_cli is not None:
+        _ll_root = getattr(_ll_cli, "root", None)
+    _ll_quiet = locals().get("quiet")
+    if _ll_quiet is None:
+        if _ll_cli is not None and hasattr(_ll_cli, "quiet"):
+            _ll_quiet = getattr(_ll_cli, "quiet")
+        else:
+            _ll_quiet = False
+    llc = _make_learning_loop_config(root=_ll_root, ledger=ledger, quiet=_ll_quiet)
     loop = LearningLoop(llc)
-    rc = loop.run(ledger=ledger)
+    rc = _run_learning_loop(loop, ledger=ledger, cfg=llc, force=False, dry_run=False)
     return int(rc)
 
 
