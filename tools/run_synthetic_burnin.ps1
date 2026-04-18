@@ -285,7 +285,7 @@ for ($i = 1; $i -le $Iterations; $i++) {
       Write-Host ("STEP_ERROR={0}" -f $result.error)
     }
 
-    Write-SummaryFile -Path $summaryPath -Iterations $Iterations -Results @($allResults)
+    Write-SummaryFile -Path $summaryPath -Iterations $Iterations -Results $allResults.ToArray()
 
     if ($StopOnFirstFailure -and -not $result.ok) {
       break
@@ -297,7 +297,7 @@ for ($i = 1; $i -le $Iterations; $i++) {
   }
 }
 
-Write-SummaryFile -Path $summaryPath -Iterations $Iterations -Results @($allResults)
+Write-SummaryFile -Path $summaryPath -Iterations $Iterations -Results $allResults.ToArray()
 
 $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
 
@@ -317,4 +317,5 @@ if ([int]$summary.failed_steps -ne 0) {
 }
 
 exit 0
+
 
