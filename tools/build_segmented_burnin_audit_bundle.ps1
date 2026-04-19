@@ -1,7 +1,8 @@
 ﻿param(
   [string]$OutputRoot = "C:\Temp\synapse_segmented_burnin_audit",
   [int]$Iterations = 1,
-  [string]$Secret = "shpss_test_secret"
+  [string]$Secret = "shpss_test_secret",
+  [string[]]$AllowedDirtyPaths = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,6 +10,22 @@ Set-StrictMode -Version Latest
 
 function New-Dir([string]$Path) {
   New-Item -ItemType Directory -Force -Path $Path | Out-Null
+}
+
+function Normalize-DirtyList([string[]]$Items) {
+  [string[]]$normalized = @()
+
+  foreach ($entry in $Items) {
+    if ($null -eq $entry) { continue }
+    $parts = @(
+      ($entry.ToString() -split '[,\s]+' | Where-Object { $_ -and $_.Trim().Length -gt 0 })
+    )
+    foreach ($part in $parts) {
+      $normalized += $part.Trim()
+    }
+  }
+
+  return @($normalized | Select-Object -Unique | Sort-Object)
 }
 
 $repo = (Resolve-Path ".").Path
@@ -23,19 +40,21 @@ $head = (git rev-parse --short HEAD).Trim()
 $status = @($status | Where-Object { $_ -and $_.Trim().Length -gt 0 })
 
 $dirtyPaths = @($status | ForEach-Object { $_.Substring(3).Trim() } | Sort-Object)
-$expectedSelfDirty = @("tools/build_segmented_burnin_audit_bundle.ps1")
+$allowedDirtyNormalized = Normalize-DirtyList -Items $AllowedDirtyPaths
 
-$unexpectedDirty = @($dirtyPaths | Where-Object { $_ -notin $expectedSelfDirty })
-$missingExpectedDirty = @($expectedSelfDirty | Where-Object { $_ -notin $dirtyPaths })
+$unexpectedDirty = @($dirtyPaths | Where-Object { $_ -notin $allowedDirtyNormalized })
+$missingAllowedDirty = @($allowedDirtyNormalized | Where-Object { $_ -notin $dirtyPaths })
 
 $treeClean = [int]($status.Count -eq 0)
-$selfDirtyOnly = [int](($status.Count -eq 1) -and ($unexpectedDirty.Count -eq 0) -and ($missingExpectedDirty.Count -eq 0))
+$allowedDirtyExact = [int](($allowedDirtyNormalized.Count -gt 0) -and ($unexpectedDirty.Count -eq 0) -and ($missingAllowedDirty.Count -eq 0) -and ($dirtyPaths.Count -eq $allowedDirtyNormalized.Count))
 
 Write-Host "INNER_STATUS_DIRTY_COUNT=$($status.Count)"
+Write-Host ("INNER_DIRTY_PATHS={0}" -f ($dirtyPaths -join ","))
+Write-Host ("INNER_ALLOWED_DIRTY={0}" -f ($allowedDirtyNormalized -join ","))
 Write-Host "INNER_TREE_CLEAN=$treeClean"
-Write-Host "INNER_SELF_DIRTY_ONLY=$selfDirtyOnly"
+Write-Host "INNER_ALLOWED_DIRTY_EXACT=$allowedDirtyExact"
 
-if (($treeClean -ne 1) -and ($selfDirtyOnly -ne 1)) {
+if (($treeClean -ne 1) -and ($allowedDirtyExact -ne 1)) {
   throw "TREE_NOT_CLEAN=$($status.Count)"
 }
 
@@ -62,15 +81,17 @@ $gitLogFile = Join-Path $evidenceRoot "git_log_1.txt"
 Remove-Item -LiteralPath $stdoutLog -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $stderrLog -Force -ErrorAction SilentlyContinue
 
-$proc = Start-Process `
-  -FilePath "powershell.exe" `
-  -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $segmented, "-Iterations", $Iterations.ToString(), "-OutputRoot", $runRoot, "-Secret", $Secret) `
-  -RedirectStandardOutput $stdoutLog `
-  -RedirectStandardError $stderrLog `
-  -Wait `
-  -PassThru
+[object[]]$captured = @(
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $segmented -Iterations $Iterations -OutputRoot $runRoot -Secret $Secret *>&1
+)
+$exitCode = $LASTEXITCODE
 
-$exitCode = $proc.ExitCode
+if ($captured.Count -gt 0) {
+  $captured | Tee-Object -FilePath $stdoutLog | Out-Host
+}
+else {
+  "" | Set-Content -LiteralPath $stdoutLog -Encoding UTF8
+}
 
 Write-Host "SEGMENTED_EXIT_CODE=$exitCode"
 Write-Host "RUN_ROOT=$runRoot"
