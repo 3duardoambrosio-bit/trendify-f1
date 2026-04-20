@@ -332,7 +332,42 @@ class SpendGateway:
                     self._log_event("SPEND_DENIED", event_payload)
                     return SpendGatewayDecision(False, "CAP_LEARNING_TOTAL", amount, pool, str(product_id), day, {"cap": str(self.caps.max_total_learning), "so_far": str(total_so_far), "layer0": layer0_meta}).to_dict()
 
-            dec = self.vault.request_spend(req)
+            try:
+                dec = self.vault.request_spend(req)
+            except Exception as e:
+                if self._circuit_breaker is not None:
+                    self._circuit_breaker.record_failure()
+
+                reason = f"VAULT_REQUEST_ERROR:{e.__class__.__name__}:{e}"
+                event_payload = {
+                    "reason": reason,
+                    "request_id": str(req_id),
+                    "product_id": str(product_id),
+                    "amount": str(amount),
+                    "day": day,
+                    "pool": pool,
+                    "channel": channel,
+                    "country": country,
+                    "currency": currency,
+                    "layer0": layer0_meta,
+                }
+                self._log_event("SPEND_ERROR", event_payload)
+                return SpendGatewayDecision(
+                    False,
+                    reason,
+                    amount,
+                    pool,
+                    str(product_id),
+                    day,
+                    {
+                        "layer0": layer0_meta,
+                        "error_type": e.__class__.__name__,
+                    },
+                ).to_dict()
+
+            if self._circuit_breaker is not None:
+                self._circuit_breaker.record_success()
+
             allowed = self._allowed_from(dec)
             reason = self._reason_from(dec, allowed)
 
