@@ -666,7 +666,11 @@ class MetaSafeClient:
 
             sink = get_alert_sink()
             sink.send(
-                f"META ERROR: {error_code} - {str(exc)[:100]}",
+                f"META ERROR: code={error_code} "
+                f"type={type(exc).__name__} "
+                f"corr={correlation_id} "
+                f"idem={idempotency_key} "
+                f"msg={str(exc)[:100]}",
                 level="ERROR",
                 dedupe_key=f"meta_error:{error_code}:{correlation_id}",
             )

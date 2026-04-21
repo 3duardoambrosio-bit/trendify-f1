@@ -107,3 +107,49 @@ def test_safe_client_alerts_include_gate_reason_and_correlation(tmp_path):
     assert "capital_shield:test_block" in calls[0]
     assert "corr=corr-alert-1" in calls[0]
 
+def test_safe_client_error_alerts_include_code_type_corr_and_idem(tmp_path):
+    mock_sink = NullAlertSink()
+    calls = []
+    original_send = mock_sink.send
+
+    def tracking_send(text, **kwargs):
+        calls.append(text)
+        return original_send(text, **kwargs)
+
+    mock_sink.send = tracking_send
+
+    with patch("synapse.infra.alert_wiring.get_alert_sink", return_value=mock_sink):
+        with patch(
+            "synapse.meta.safe_client.call_pause_campaign",
+            side_effect=RuntimeError("pause_boom"),
+        ):
+            from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
+            from synapse.infra.circuit_breaker import CircuitBreaker
+            from synapse.infra.feature_flags import FeatureFlags
+            from synapse.infra.retry_policy import RetryPolicy
+
+            client = MetaSafeClient(
+                feature_flags=FeatureFlags(values={"meta_live_api": True}),
+                retry_policy=RetryPolicy(max_attempts=2, base_delay_s=0.0, max_delay_s=0.0),
+                circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
+                idempotency_store=SimpleNamespace(path=tmp_path / "idem.sqlite3"),
+                ledger=SimpleNamespace(path=tmp_path / "ledger.ndjson"),
+                config=MetaSafeClientConfig(),
+            )
+
+            result = client.maybe_autopause(
+                spend_today_mxn=100,
+                cap_mxn=100,
+                campaign_id="camp-alert-err",
+                correlation_id="corr-alert-err",
+            )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "autopause_error"
+    assert len(calls) >= 1
+    assert "META ERROR:" in calls[0]
+    assert "code=autopause_error" in calls[0]
+    assert "type=RuntimeError" in calls[0]
+    assert "corr=corr-alert-err" in calls[0]
+    assert "idem=autopause:camp-alert-err:100" in calls[0]
+
