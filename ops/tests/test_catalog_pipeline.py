@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -136,3 +137,88 @@ def test_summarize_catalog_counts_decisions() -> None:
     assert summary.approved == 1
     assert summary.rejected == 1
     assert summary.unknown == 1
+
+def test_evaluate_catalog_respects_capital_shield_when_provided(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from synapse import product_evaluator
+
+    class FakeDecision:
+        def __init__(self, allocated: Decimal, reason: str) -> None:
+            self.allocated = allocated
+            self.reason = reason
+
+    class FakeShield:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Decimal]] = []
+
+        def decide_for_product(self, *, final_decision: str, requested_amount: Decimal) -> FakeDecision:
+            amt = Decimal(str(requested_amount))
+            self.calls.append((final_decision, amt))
+            return FakeDecision(allocated=Decimal("0"), reason="insufficient_budget")
+
+    def fake_eval(product: Dict[str, Any]) -> Tuple[str, Dict[str, Any], QualityResult]:
+        pid = product["product_id"]
+
+        if pid == "p1":
+            buyer_decision = "approved"
+            record: Dict[str, Any] = {
+                "product_id": pid,
+                "buyer_decision": "approved",
+                "buyer_scores": {"composite_score": 0.8},
+                "quality_score": 0.9,
+                "final_decision": "approved",
+            }
+        else:
+            buyer_decision = "rejected"
+            record = {
+                "product_id": pid,
+                "buyer_decision": "rejected",
+                "buyer_scores": {"composite_score": 0.3},
+                "quality_score": 0.4,
+                "final_decision": "rejected",
+            }
+
+        quality = QualityResult(global_score=record["quality_score"])
+        return buyer_decision, record, quality
+
+    monkeypatch.setattr(product_evaluator, "evaluate_product", fake_eval)
+
+    catalog_path = tmp_path / "demo_catalog.csv"
+    catalog_path.write_text(
+        "product_id,name,cost,price,shipping_cost,supplier_rating,reviews_count\n"
+        "p1,Prod 1,10,30,0,4.5,100\n"
+        "p2,Prod 2,10,30,0,4.5,100\n",
+        encoding="utf-8",
+    )
+
+    shield = FakeShield()
+
+    results, summary = evaluate_catalog(
+        catalog_path=catalog_path,
+        total_test_budget=100.0,
+        capital_shield=shield,
+    )
+
+    approved = [r for r in results if r.final_decision == "approved"]
+    rejected = [r for r in results if r.final_decision == "rejected"]
+
+    assert len(approved) == 1
+    assert len(rejected) == 1
+    assert len(shield.calls) == 1
+
+    assert shield.calls[0][0] == "approved"
+    assert shield.calls[0][1] > Decimal("0")
+
+    assert approved[0].product_id == "p1"
+    assert approved[0].allocated_test_budget == 0.0
+    assert approved[0].capital_reason == "insufficient_budget"
+
+    assert rejected[0].product_id == "p2"
+    assert rejected[0].allocated_test_budget == 0.0
+    assert rejected[0].capital_reason == "not_approved"
+
+    assert summary.total_products == 2
+    assert summary.approved == 1
+

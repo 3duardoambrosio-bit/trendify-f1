@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -219,12 +220,22 @@ def _evaluate_catalog_core(
     n_approved = len(approved_items)
 
     if n_approved > 0:
-        # Estrategia simple: repartir el budget total entre aprobados
+        # Estrategia simple base: repartir el budget total entre aprobados.
+        # Si hay CapitalShieldV2, el shield es la autoridad final por producto.
         per_product_budget = total_test_budget / float(n_approved)
 
         for item in approved_items:
-            item.allocated_test_budget = per_product_budget
-            item.capital_reason = "approved"
+            if capital_shield is None:
+                item.allocated_test_budget = per_product_budget
+                item.capital_reason = "approved"
+                continue
+
+            decision = capital_shield.decide_for_product(
+                final_decision=item.final_decision,
+                requested_amount=Decimal(str(per_product_budget)),
+            )
+            item.allocated_test_budget = float(decision.allocated)
+            item.capital_reason = str(decision.reason)
 
     # Rechazados / demás se quedan con 0 y reason "not_approved"
     return results
