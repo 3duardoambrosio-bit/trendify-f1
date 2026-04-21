@@ -313,8 +313,8 @@ class TestCapitalShieldIntegration:
         shield = CapitalShieldV2(vault=vault)
 
         decision = shield.decide_for_product("approved", Decimal("1"))
-        # Corrupted vault returns SpendResult(allowed=False) → shield sees insufficient_budget
-        assert decision.reason == "insufficient_budget"
+        # Corrupted vault returns fail-closed signal → shield preserves vault_error
+        assert decision.reason == "vault_error"
         assert decision.allocated == Decimal("0")
 
 

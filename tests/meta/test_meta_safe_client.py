@@ -484,3 +484,17 @@ def test_safety_middleware_gate_internal_exception_fails_closed(tmp_path: Path, 
     assert result["error_code"] == "pre_spend_gate_blocked"
     assert "safety_middleware" in result["blocked_by"]
     assert result["safety_middleware"]["reason"] == "gate_execution_error:RuntimeError"
+
+def test_capital_shield_uses_vault_error_when_vault_state_corrupted(tmp_path: Path, monkeypatch) -> None:
+    from synapse.meta.safe_client import _check_capital_shield
+
+    state_file = tmp_path / "vault_state.json"
+    state_file.write_text("THIS IS NOT JSON {{{{", encoding="utf-8")
+    monkeypatch.setenv("SYNAPSE_VAULT_STATE_FILE", str(state_file))
+
+    result = _check_capital_shield(Decimal("10"), "corr-vault-state")
+
+    assert result["gate"] == "capital_shield"
+    assert result["allowed"] is False
+    assert result["reason"] == "vault_error"
+

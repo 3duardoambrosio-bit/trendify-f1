@@ -102,3 +102,28 @@ def test_float_helper_wraps_decision_correctly() -> None:
     assert isinstance(allocated, float)
     assert allocated == 5.0
     assert reason == "approved"
+
+class FakeCorruptedResult:
+    def __init__(self) -> None:
+        self.reason = "VAULT_STATE_CORRUPTED"
+
+    def is_ok(self) -> bool:
+        return False
+
+
+class FakeCorruptedVault:
+    def request_spend(self, amount: Decimal, budget_type: str):
+        return FakeCorruptedResult()
+
+
+def test_corrupted_vault_result_maps_to_vault_error() -> None:
+    shield = CapitalShieldV2(vault=FakeCorruptedVault())
+
+    decision = shield.decide_for_product(
+        final_decision="approved",
+        requested_amount=Decimal("10"),
+    )
+
+    assert decision.allocated == Decimal("0")
+    assert decision.reason == "vault_error"
+
