@@ -196,3 +196,45 @@ def test_safe_client_alerts_on_autopause_action(tmp_path):
     assert "campaign_id=camp-alert-pause" in calls[0]
     assert "corr=corr-ap-alert" in calls[0]
 
+def test_safe_client_alerts_on_create_campaign_action(tmp_path):
+    mock_sink = NullAlertSink()
+    calls = []
+    original_send = mock_sink.send
+
+    def tracking_send(text, **kwargs):
+        calls.append(text)
+        return original_send(text, **kwargs)
+
+    mock_sink.send = tracking_send
+
+    with patch("synapse.infra.alert_wiring.get_alert_sink", return_value=mock_sink):
+        from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
+        from synapse.infra.circuit_breaker import CircuitBreaker
+        from synapse.infra.feature_flags import FeatureFlags
+        from synapse.infra.retry_policy import RetryPolicy
+
+        client = MetaSafeClient(
+            feature_flags=FeatureFlags(values={}),
+            retry_policy=RetryPolicy(max_attempts=2, base_delay_s=0.0, max_delay_s=0.0),
+            circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
+            idempotency_store=SimpleNamespace(path=tmp_path / "idem.sqlite3"),
+            ledger=SimpleNamespace(path=tmp_path / "ledger.ndjson"),
+            config=MetaSafeClientConfig(),
+        )
+
+        result = client.create_campaign_safe(
+            payload={"name": "Camp Alert", "budget_mxn": "100"},
+            idempotency_key="idem-create-alert",
+            correlation_id="corr-create-alert",
+        )
+
+    assert result["ok"] is True
+    assert result["mode"] == "mock"
+    assert result["status"] == "PAUSED"
+    assert len(calls) >= 1
+    assert "CREATE_CAMPAIGN" in calls[0]
+    assert "mode=mock" in calls[0]
+    assert "status=PAUSED" in calls[0]
+    assert "campaign_id=" in calls[0]
+    assert "corr=corr-create-alert" in calls[0]
+

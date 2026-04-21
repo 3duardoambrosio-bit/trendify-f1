@@ -401,6 +401,20 @@ class MetaSafeClient:
                     payload=result,
                     critical=True,
                 )
+                try:
+                    from synapse.infra.alert_wiring import get_alert_sink
+
+                    sink = get_alert_sink()
+                    sink.send(
+                        f"CREATE_CAMPAIGN mode={result['mode']} "
+                        f"status={result['status']} "
+                        f"campaign_id={result['campaign_id']} "
+                        f"corr={correlation_id}",
+                        level="INFO",
+                        dedupe_key=f"create_campaign:{correlation_id}",
+                    )
+                except Exception:
+                    pass
                 return result
 
             campaign_contract = _to_campaign_contract(payload)
@@ -428,6 +442,20 @@ class MetaSafeClient:
                 payload=result,
                 critical=True,
             )
+            try:
+                from synapse.infra.alert_wiring import get_alert_sink
+
+                sink = get_alert_sink()
+                sink.send(
+                    f"CREATE_CAMPAIGN mode={result['mode']} "
+                    f"status={result['status']} "
+                    f"campaign_id={result['campaign_id']} "
+                    f"corr={correlation_id}",
+                    level="INFO",
+                    dedupe_key=f"create_campaign:{correlation_id}",
+                )
+            except Exception:
+                pass
             return result
 
         try:
