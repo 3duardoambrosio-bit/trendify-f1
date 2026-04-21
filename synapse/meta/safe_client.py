@@ -324,10 +324,17 @@ class MetaSafeClient:
 
         if not cs_result["allowed"] or not sm_result["allowed"]:
             blocked_by = []
+            blocked_details = []
             if not cs_result["allowed"]:
                 blocked_by.append("capital_shield")
+                blocked_details.append(
+                    f"capital_shield:{str(cs_result.get('reason', 'unknown'))}"
+                )
             if not sm_result["allowed"]:
                 blocked_by.append("safety_middleware")
+                blocked_details.append(
+                    f"safety_middleware:{str(sm_result.get('reason', 'unknown'))}"
+                )
             result: Dict[str, Any] = {
                 "ok": False,
                 "error_code": "pre_spend_gate_blocked",
@@ -351,6 +358,7 @@ class MetaSafeClient:
                 sink = get_alert_sink()
                 sink.send(
                     f"SPEND BLOCKED by {','.join(blocked_by)} "
+                    f"details={';'.join(blocked_details)} "
                     f"budget={budget_mxn} corr={correlation_id}",
                     level="WARN",
                     dedupe_key=f"spend_blocked:{correlation_id}",
