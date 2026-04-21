@@ -1,15 +1,15 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
-from pathlib import Path
 from decimal import Decimal
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import Any, Dict, List
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ops.autopilot_v2 import AutopilotV2, AutopilotContext, AutopilotDecision
+from ops.autopilot_runtime_v1 import AutopilotRuntimeRequest, run_autopilot_runtime
 
 
 class FakeVault:
@@ -89,32 +89,32 @@ def _build_scenarios() -> List[Dict[str, Any]]:
 def main() -> None:
     _print_header("AUTOPILOT V2 DEMO")
 
-    # Vault con 60 de presupuesto total para el demo
     vault = FakeVault(Decimal("60"))
-    autopilot = AutopilotV2(vault=vault)
-
     scenarios = _build_scenarios()
 
     for scen in scenarios:
-        ctx = AutopilotContext(
-            product_id=scen["product_id"],
-            final_decision=scen["final_decision"],
-            current_roas=scen["roas"],
-            spend=scen["spend"],
-            requested_budget=scen["requested"],
+        result = run_autopilot_runtime(
+            AutopilotRuntimeRequest(
+                product_id=scen["product_id"],
+                final_decision=scen["final_decision"],
+                current_roas=scen["roas"],
+                spend=scen["spend"],
+                requested_budget=scen["requested"],
+                correlation_id=f"demo-{scen['product_id']}",
+            ),
+            vault=vault,
         )
 
-        decision: AutopilotDecision = autopilot.decide(ctx)
-
-        print(f"- [{ctx.product_id}] {scen['label']}")
+        print(f"- [{result.product_id}] {scen['label']}")
         print(
-            f"    roas={ctx.current_roas:.2f} | spend={ctx.spend:.2f} "
-            f"| requested={ctx.requested_budget:.2f}"
+            f"    roas={result.current_roas:.2f} | spend={result.spend:.2f} "
+            f"| requested={result.requested_budget:.2f}"
         )
         print(
-            f"    -> action={decision.action.upper()} "
-            f"| allocated={decision.allocated_budget:.2f} "
-            f"| reason={decision.reason}"
+            f"    -> action={result.action.upper()} "
+            f"| allocated={result.allocated_budget:.2f} "
+            f"| reason={result.reason} "
+            f"| publisher_action={result.publisher_action}"
         )
 
     _print_header("ESTADO FINAL DEL VAULT (DEMO)")
