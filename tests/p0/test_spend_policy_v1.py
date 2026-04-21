@@ -57,7 +57,11 @@ def test_cashflow_guard_rolls_back_learning_state_and_emits_audit():
     assert v._learning_spent_by_product.get("r004", Decimal("0")) == Decimal("0")
     assert [event_type for event_type, _ in ledger.events] == ["SPEND_ROLLED_BACK", "SPEND_DENIED"]
     assert ledger.events[0][1]["reason"] == "CASHFLOW_GUARD_ROLLBACK"
+    assert ledger.events[0][1]["vault_reason"] == "APPROVED"
+    assert ledger.events[0][1]["cashflow_ok"] is False
     assert ledger.events[1][1]["reason"] == "CASHFLOW_GUARD"
+    assert ledger.events[1][1]["vault_reason"] == "APPROVED"
+    assert ledger.events[1][1]["cashflow_ok"] is False
 
 
 def test_cashflow_guard_rolls_back_operational_state_exactly():
@@ -90,4 +94,48 @@ def test_private_rollback_clamps_learning_tracking_to_zero():
 
     assert v.learning.spent == Decimal("0")
     assert v._learning_spent_by_product.get("ghost", Decimal("0")) == Decimal("0")
+
+def test_policy_approved_emits_audit_payload_with_reason_and_flags():
+    ledger = _FakeLedger()
+    v = VaultV1(
+        learning=BudgetPool("learning", Decimal("30")),
+        operational=BudgetPool("operational", Decimal("55")),
+        reserve=BudgetPool("reserve", Decimal("15")),
+    )
+    cash = CashFlowState(available_cash=Decimal("999"), safety_buffer_cash=Decimal("0"))
+    p = SpendPolicyV1(v, cash, ledger=ledger)
+
+    d = p.request(pool="learning", product_id="r004", amount=Decimal("1"), day=1)
+
+    assert d.allowed is True
+    assert d.reason == "APPROVED"
+    assert d.vault_reason == "APPROVED"
+    assert d.cashflow_ok is True
+    assert [event_type for event_type, _ in ledger.events] == ["SPEND_APPROVED"]
+    assert ledger.events[0][1]["reason"] == "APPROVED"
+    assert ledger.events[0][1]["vault_reason"] == "APPROVED"
+    assert ledger.events[0][1]["cashflow_ok"] is True
+
+
+def test_policy_vault_denial_emits_audit_payload_with_vault_reason():
+    ledger = _FakeLedger()
+    v = VaultV1(
+        learning=BudgetPool("learning", Decimal("30")),
+        operational=BudgetPool("operational", Decimal("55")),
+        reserve=BudgetPool("reserve", Decimal("15")),
+    )
+    cash = CashFlowState(available_cash=Decimal("999"), safety_buffer_cash=Decimal("0"))
+    p = SpendPolicyV1(v, cash, ledger=ledger)
+
+    p.request(pool="learning", product_id="r004", amount=Decimal("10"), day=1)
+    d = p.request(pool="learning", product_id="r004", amount=Decimal("0.01"), day=1)
+
+    assert d.allowed is False
+    assert d.reason in ("DAY1_CAP_REACHED", "PRODUCT_TOTAL_CAP_REACHED", "INSUFFICIENT_POOL_FUNDS")
+    assert d.vault_reason == d.reason
+    assert d.cashflow_ok is True
+    assert ledger.events[-1][0] == "SPEND_DENIED"
+    assert ledger.events[-1][1]["reason"] == d.reason
+    assert ledger.events[-1][1]["vault_reason"] == d.reason
+    assert ledger.events[-1][1]["cashflow_ok"] is True
 
