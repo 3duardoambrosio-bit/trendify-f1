@@ -179,3 +179,34 @@ def test_hold_when_vault_has_insufficient_budget() -> None:
     assert decision.reason == "insufficient_budget_from_vault"
     # Se intentó el gasto, pero quedó intacto porque no alcanza para el monto
     assert vault.remaining == Decimal("5")
+
+class BoomVault:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Decimal, str]] = []
+
+    def request_spend(self, amount: Decimal, budget_type: str) -> bool:
+        amount = Decimal(amount)
+        self.calls.append((amount, budget_type))
+        raise RuntimeError("vault_boom")
+
+
+def test_hold_when_vault_errors_preserves_reason_fidelity() -> None:
+    vault = BoomVault()
+    autopilot = AutopilotV2(vault=vault)
+
+    ctx = _make_ctx(
+        final_decision="approved",
+        roas=1.2,
+        spend=MIN_SPEND_FOR_SCALING,
+        requested=Decimal("10"),
+    )
+
+    decision = autopilot.decide(ctx)
+
+    assert decision.action == "hold"
+    assert decision.allocated_budget == Decimal("0")
+    assert decision.reason == "vault_error_from_vault"
+    assert decision.capital_decision is not None
+    assert decision.capital_decision.reason == "vault_error"
+    assert vault.calls == [(Decimal("10"), "learning")]
+
