@@ -565,6 +565,23 @@ class MetaSafeClient:
                     payload=result,
                     critical=True,
                 )
+                try:
+                    from synapse.infra.alert_wiring import get_alert_sink
+
+                    sink = get_alert_sink()
+                    sink.send(
+                        f"AUTOPAUSE action={result['action']} "
+                        f"mode={result['mode']} "
+                        f"reason={result['reason']} "
+                        f"spend={result['spend_today_mxn']} "
+                        f"threshold={result['threshold_mxn']} "
+                        f"campaign_id={campaign_id} "
+                        f"corr={correlation_id}",
+                        level="WARN",
+                        dedupe_key=f"autopause:{correlation_id}",
+                    )
+                except Exception:
+                    pass
                 return result
 
             pause_request = MetaPauseRequest(campaign_id=campaign_id)
@@ -592,6 +609,23 @@ class MetaSafeClient:
                 payload=result,
                 critical=True,
             )
+            try:
+                from synapse.infra.alert_wiring import get_alert_sink
+
+                sink = get_alert_sink()
+                sink.send(
+                    f"AUTOPAUSE action={result['action']} "
+                    f"mode={result['mode']} "
+                    f"reason={result['reason']} "
+                    f"spend={result['spend_today_mxn']} "
+                    f"threshold={result['threshold_mxn']} "
+                    f"campaign_id={campaign_id} "
+                    f"corr={correlation_id}",
+                    level="WARN",
+                    dedupe_key=f"autopause:{correlation_id}",
+                )
+            except Exception:
+                pass
             return result
 
         try:
