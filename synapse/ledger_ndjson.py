@@ -9,6 +9,7 @@ from synapse.infra.time_utc import build_clock_stamp
 
 LEDGER_DIR = Path("runtime/ledger")
 LEDGER_FILE = LEDGER_DIR / "events.ndjson"
+_TAIL_CHUNK_SIZE = 4096
 
 
 def _canonical_json(value: Any) -> str:
@@ -19,11 +20,58 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def next_offset(path: Path = LEDGER_FILE) -> int:
+def _count_nonempty_lines(path: Path) -> int:
     if not path.exists():
         return 0
     with path.open("r", encoding="utf-8") as handle:
         return sum(1 for line in handle if line.strip())
+
+
+def _read_last_nonempty_line(path: Path) -> Optional[str]:
+    if not path.exists():
+        return None
+
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+
+    if size <= 0:
+        return None
+
+    with path.open("rb") as handle:
+        position = size
+        buffer = b""
+
+        while position > 0:
+            read_size = min(_TAIL_CHUNK_SIZE, position)
+            position -= read_size
+            handle.seek(position)
+            chunk = handle.read(read_size)
+            buffer = chunk + buffer
+
+            for raw in reversed(buffer.splitlines()):
+                if raw.strip():
+                    return raw.decode("utf-8")
+
+    return None
+
+
+def next_offset(path: Path = LEDGER_FILE) -> int:
+    last_line = _read_last_nonempty_line(path)
+    if last_line is None:
+        return 0
+
+    try:
+        record = json.loads(last_line)
+    except json.JSONDecodeError:
+        return _count_nonempty_lines(path)
+
+    offset = record.get("offset")
+    if isinstance(offset, int) and offset >= 0:
+        return offset + 1
+
+    return _count_nonempty_lines(path)
 
 
 def build_event(
