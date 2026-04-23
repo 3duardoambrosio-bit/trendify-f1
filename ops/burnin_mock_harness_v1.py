@@ -43,6 +43,8 @@ class BurnInSummary:
     dispatch_count: int
     ledger_event_count: int
     status_counts: dict[str, int]
+    normalized_outcome_counts: dict[str, int]
+    blocked_error_counts: dict[str, int]
     action_counts: dict[str, int]
     publisher_action_counts: dict[str, int]
     output_dir: str
@@ -72,6 +74,38 @@ def _read_ledger_events(ledger_path: Path) -> list[dict[str, Any]]:
     return [json.loads(ln) for ln in lines]
 
 
+def _classify_outcome(dispatch_result: Any) -> tuple[str, str | None]:
+    publish_result = getattr(dispatch_result, "publish_result", None)
+    if isinstance(publish_result, dict):
+        error_code = publish_result.get("error_code")
+        if error_code == "pre_spend_gate_blocked":
+            return "BLOCKED", error_code
+
+    status = str(getattr(dispatch_result, "status", "UNKNOWN"))
+    return status, None
+
+
+def _record_dispatch(
+    *,
+    dispatch_result: Any,
+    runtime_result: Any,
+    raw_status_counts: Counter[str],
+    normalized_outcome_counts: Counter[str],
+    blocked_error_counts: Counter[str],
+    action_counts: Counter[str],
+    publisher_action_counts: Counter[str],
+) -> None:
+    raw_status_counts[str(dispatch_result.status)] += 1
+
+    normalized_outcome, blocked_error_code = _classify_outcome(dispatch_result)
+    normalized_outcome_counts[normalized_outcome] += 1
+    if blocked_error_code:
+        blocked_error_counts[blocked_error_code] += 1
+
+    action_counts[str(runtime_result.action)] += 1
+    publisher_action_counts[str(runtime_result.publisher_action)] += 1
+
+
 def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
     if cycles <= 0:
         raise ValueError("cycles_must_be_positive")
@@ -82,7 +116,9 @@ def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
     safe_client = _make_safe_client(out)
     orchestrator = OpsOrchestratorV1(safe_client=safe_client)
 
-    status_counts: Counter[str] = Counter()
+    raw_status_counts: Counter[str] = Counter()
+    normalized_outcome_counts: Counter[str] = Counter()
+    blocked_error_counts: Counter[str] = Counter()
     action_counts: Counter[str] = Counter()
     publisher_action_counts: Counter[str] = Counter()
     dispatch_count = 0
@@ -109,9 +145,15 @@ def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
             )
         )
         dispatch_count += 1
-        status_counts[create_dispatch.status] += 1
-        action_counts[create_runtime.action] += 1
-        publisher_action_counts[str(create_runtime.publisher_action)] += 1
+        _record_dispatch(
+            dispatch_result=create_dispatch,
+            runtime_result=create_runtime,
+            raw_status_counts=raw_status_counts,
+            normalized_outcome_counts=normalized_outcome_counts,
+            blocked_error_counts=blocked_error_counts,
+            action_counts=action_counts,
+            publisher_action_counts=publisher_action_counts,
+        )
 
         pause_runtime = run_autopilot_runtime(
             AutopilotRuntimeRequest(
@@ -133,9 +175,15 @@ def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
             )
         )
         dispatch_count += 1
-        status_counts[pause_dispatch.status] += 1
-        action_counts[pause_runtime.action] += 1
-        publisher_action_counts[str(pause_runtime.publisher_action)] += 1
+        _record_dispatch(
+            dispatch_result=pause_dispatch,
+            runtime_result=pause_runtime,
+            raw_status_counts=raw_status_counts,
+            normalized_outcome_counts=normalized_outcome_counts,
+            blocked_error_counts=blocked_error_counts,
+            action_counts=action_counts,
+            publisher_action_counts=publisher_action_counts,
+        )
 
         hold_runtime = run_autopilot_runtime(
             AutopilotRuntimeRequest(
@@ -152,9 +200,15 @@ def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
             OpsOrchestratorRequest(runtime_result=hold_runtime)
         )
         dispatch_count += 1
-        status_counts[hold_dispatch.status] += 1
-        action_counts[hold_runtime.action] += 1
-        publisher_action_counts[str(hold_runtime.publisher_action)] += 1
+        _record_dispatch(
+            dispatch_result=hold_dispatch,
+            runtime_result=hold_runtime,
+            raw_status_counts=raw_status_counts,
+            normalized_outcome_counts=normalized_outcome_counts,
+            blocked_error_counts=blocked_error_counts,
+            action_counts=action_counts,
+            publisher_action_counts=publisher_action_counts,
+        )
 
         vault_error_runtime = run_autopilot_runtime(
             AutopilotRuntimeRequest(
@@ -171,9 +225,15 @@ def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
             OpsOrchestratorRequest(runtime_result=vault_error_runtime)
         )
         dispatch_count += 1
-        status_counts[vault_error_dispatch.status] += 1
-        action_counts[vault_error_runtime.action] += 1
-        publisher_action_counts[str(vault_error_runtime.publisher_action)] += 1
+        _record_dispatch(
+            dispatch_result=vault_error_dispatch,
+            runtime_result=vault_error_runtime,
+            raw_status_counts=raw_status_counts,
+            normalized_outcome_counts=normalized_outcome_counts,
+            blocked_error_counts=blocked_error_counts,
+            action_counts=action_counts,
+            publisher_action_counts=publisher_action_counts,
+        )
 
     ledger_path = out / "ledger.ndjson"
     summary_path = out / "burnin_summary.json"
@@ -186,7 +246,9 @@ def run_burnin_mock(*, cycles: int, output_dir: Path | str) -> BurnInSummary:
         scenario_count_per_cycle=4,
         dispatch_count=dispatch_count,
         ledger_event_count=len(ledger_events),
-        status_counts=dict(status_counts),
+        status_counts=dict(raw_status_counts),
+        normalized_outcome_counts=dict(normalized_outcome_counts),
+        blocked_error_counts=dict(blocked_error_counts),
         action_counts=dict(action_counts),
         publisher_action_counts=dict(publisher_action_counts),
         output_dir=str(out),
