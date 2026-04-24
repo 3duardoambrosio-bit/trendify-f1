@@ -307,7 +307,7 @@ def _coerce_stock(value: Any) -> Optional[int]:
         f = float(s)
         if f.is_integer():
             return int(f)
-    except Exception:
+    except (TypeError, ValueError, OverflowError):
         return None
     return None
 
@@ -362,7 +362,7 @@ def _inventory_preflight(product_id: str, effective_readonly: bool) -> Dict[str,
     try:
         payload = _load_inventory_any(catalog_path)
         rows = _extract_inventory_rows(payload)
-    except Exception as e:
+    except (OSError, UnicodeError, ValueError, TypeError) as e:
         result = {
             "gate": "inventory",
             "status": "BLOCKED",
@@ -519,7 +519,7 @@ def _reconcile_preflight() -> Dict[str, Any]:
 
         return result
 
-    except Exception as e:
+    except (OSError, UnicodeError, ValueError, TypeError) as e:
         result = {
             "gate": "reconcile",
             "status": "ERROR",
