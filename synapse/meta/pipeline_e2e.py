@@ -112,7 +112,7 @@ class PipelineE2E:
         if self._config.enable_health_check:
             try:
                 health_status = self._health_checker.check(account_metrics)
-            except Exception as e:
+            except (OSError, UnicodeError, ValueError, TypeError, ArithmeticError, KeyError) as e:
                 errors.append({"stage": "health_check", "error": str(e)})
                 return PipelineE2EResult(
                     products_processed=0,
@@ -152,7 +152,7 @@ class PipelineE2E:
             try:
                 day = self._warm_up.get_current_day()
                 warm_limit = self._warm_up.get_daily_limit(day=max(day, 1), daily_cap=self._config.daily_cap_usd)
-            except Exception as e:
+            except (OSError, UnicodeError, ValueError, TypeError, ArithmeticError, KeyError) as e:
                 errors.append({"stage": "warm_up", "error": str(e)})
                 warm_limit = Decimal("0")
 
@@ -209,14 +209,14 @@ class PipelineE2E:
                 if self._config.enable_publish:
                     try:
                         _ = self._safe_client.create_campaign(payload)
-                    except Exception as e:
+                    except (OSError, UnicodeError, ValueError, TypeError, ArithmeticError, KeyError) as e:
                         blocked += 1
                         errors.append({"stage": "publish", "product": payload.get("product_ref"), "error": str(e)})
                         continue
 
                 created += 1
 
-            except Exception as e:
+            except (OSError, UnicodeError, ValueError, TypeError, ArithmeticError, KeyError) as e:
                 blocked += 1
                 errors.append({"stage": "pipeline", "error": str(e)})
 
