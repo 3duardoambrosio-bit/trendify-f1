@@ -1,4 +1,4 @@
-﻿"""Meta Safe Client: canonical idempotency + ndjson ledger with legacy-compatible constructor."""
+"""Meta Safe Client: canonical idempotency + ndjson ledger with legacy-compatible constructor."""
 
 from __future__ import annotations
 
