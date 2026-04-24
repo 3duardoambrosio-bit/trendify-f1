@@ -383,6 +383,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     mode = _safe_str(args.mode, "dry").lower()
 
+    if mode == "live" and bool(args.ledger_disable):
+        raise RuntimeError("--ledger-disable is forbidden in --mode live")
+
     # Dry mode: keep it fast and readable
     if mode == "dry":
         _dry_print_steps(plan)
@@ -680,6 +683,21 @@ def main(argv: Optional[List[str]] = None) -> int:
             if isinstance(resp, dict) and ("error" in resp):
                 step_report["status"] = "FAIL"
                 errors.append({"key": key, "op": op, "response_error": resp.get("error")})
+                results.append(step_report)
+                if not args.continue_on_error:
+                    break
+                continue
+
+            if not rid:
+                step_report["status"] = "FAIL"
+                step_report["error"] = "missing_created_id"
+                step_report["payload_sha256_12"] = payload_sha256[:12]
+                errors.append({
+                    "key": key,
+                    "op": op,
+                    "error": "missing_created_id",
+                    "response": resp,
+                })
                 results.append(step_report)
                 if not args.continue_on_error:
                     break

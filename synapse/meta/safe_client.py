@@ -296,6 +296,72 @@ class MetaSafeClient:
         record["critical"] = bool(critical)
         append_event(record, path=self._ledger_path)
 
+    def _recover_governed_payload(
+        self,
+        *,
+        event_types: tuple[str, ...],
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        import json
+        from pathlib import Path
+
+        ledger_path = Path(self._ledger_path)
+        if not ledger_path.exists():
+            return None
+
+        try:
+            lines = ledger_path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return None
+
+        for raw_line in reversed(lines):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except Exception:
+                continue
+
+            if str(record.get("event_type", "")) not in event_types:
+                continue
+            if str(record.get("idempotency_key", "")) != idempotency_key:
+                continue
+            if str(record.get("correlation_id", "")) != correlation_id:
+                continue
+
+            payload = record.get("payload")
+            if isinstance(payload, Mapping):
+                return dict(payload)
+
+        return None
+
+    def _recover_idempotent_result(
+        self,
+        *,
+        event_types: tuple[str, ...],
+        idempotency_key: str,
+        correlation_id: str,
+        status: str,
+        fallback_mode: str,
+    ) -> Optional[Dict[str, Any]]:
+        recovered = self._recover_governed_payload(
+            event_types=event_types,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+        )
+        if recovered is None:
+            return None
+
+        result = dict(recovered)
+        result.setdefault("idempotency_key", idempotency_key)
+        result.setdefault("correlation_id", correlation_id)
+        result.setdefault("mode", fallback_mode)
+        result["recovered_from"] = "governed_ledger"
+        result["idempotency_status"] = status
+        return result
+
     def create_campaign_safe(
         self,
         payload: Dict[str, Any] | MetaCampaignPayload,
@@ -487,6 +553,17 @@ class MetaSafeClient:
                 "correlation_id": correlation_id,
                 "result": response_dict,
             }
+
+        if status in {"CONFLICT", "IN_FLIGHT"}:
+            recovered = self._recover_idempotent_result(
+                event_types=("meta.create_campaign.result",),
+                idempotency_key=idempotency_key,
+                correlation_id=correlation_id,
+                status=status,
+                fallback_mode="recovered",
+            )
+            if recovered is not None:
+                return recovered
 
         if status == "CONFLICT":
             return self._handle_error(
@@ -686,6 +763,17 @@ class MetaSafeClient:
                 "correlation_id": correlation_id,
                 "result": response_dict,
             }
+
+        if status in {"CONFLICT", "IN_FLIGHT"}:
+            recovered = self._recover_idempotent_result(
+                event_types=("meta.autopause.result",),
+                idempotency_key=idem_key,
+                correlation_id=correlation_id,
+                status=status,
+                fallback_mode="recovered",
+            )
+            if recovered is not None:
+                return recovered
 
         if status == "CONFLICT":
             return self._handle_error(RuntimeError("idempotency_conflict"), idem_key, correlation_id, error_code="idempotency_conflict")
