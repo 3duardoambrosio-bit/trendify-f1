@@ -312,7 +312,7 @@ class MetaSafeClient:
 
         try:
             lines = ledger_path.read_text(encoding="utf-8").splitlines()
-        except Exception:
+        except (OSError, UnicodeError):
             return None
 
         for raw_line in reversed(lines):
@@ -321,7 +321,7 @@ class MetaSafeClient:
                 continue
             try:
                 record = json.loads(line)
-            except Exception:
+            except (json.JSONDecodeError, TypeError, ValueError):
                 continue
 
             if str(record.get("event_type", "")) not in event_types:
