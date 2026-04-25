@@ -54,7 +54,7 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
     try:
         from vault.vault_file_backed import VaultFileBacked  # type: ignore[import-untyped]
         vault = VaultFileBacked()
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, ArithmeticError, ImportError, RuntimeError) as exc:
         import logging as _log
 
         _log.getLogger(__name__).critical("VAULT_LOAD_FAILED: %s - blocking spend", exc)
@@ -71,7 +71,7 @@ def _check_capital_shield(spend_mxn: Decimal, correlation_id: str) -> Dict[str, 
             final_decision="approved",
             requested_amount=spend_mxn,
         )
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, ArithmeticError, ImportError, RuntimeError) as exc:
         return {
             "gate": "capital_shield",
             "allowed": False,
@@ -110,7 +110,7 @@ def _check_safety_middleware(spend_mxn: Decimal, correlation_id: str) -> Dict[st
     try:
         result = check_safety_before_spend(amount=spend_mxn, operation_id=correlation_id)
         is_ok = bool(getattr(result, "is_ok", lambda: bool(result))())
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, ArithmeticError, ImportError, RuntimeError) as exc:
         return {
             "gate": "safety_middleware",
             "allowed": False,
@@ -533,7 +533,7 @@ class MetaSafeClient:
             )
         except CircuitOpenError as exc:
             return self._handle_error(exc, idempotency_key, correlation_id, error_code="circuit_open")
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, ArithmeticError, KeyError, NotImplementedError) as exc:
             return self._handle_error(exc, idempotency_key, correlation_id, error_code="create_campaign_error")
 
         status = str(idem_result.get("status") or "").strip().upper()
@@ -742,7 +742,7 @@ class MetaSafeClient:
             )
         except CircuitOpenError as exc:
             return self._handle_error(exc, idem_key, correlation_id, error_code="circuit_open")
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, ArithmeticError, KeyError, NotImplementedError) as exc:
             return self._handle_error(exc, idem_key, correlation_id, error_code="autopause_error")
 
         status = str(idem_result.get("status") or "").strip().upper()
