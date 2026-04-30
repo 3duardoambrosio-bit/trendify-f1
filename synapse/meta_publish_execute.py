@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from synapse.meta.graph_version import resolve_meta_graph_version
 from synapse.infra.cli_logging import cli_print
 
 
@@ -413,7 +414,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # env knobs (safe)
     meta_aid = _safe_str(os.getenv("META_AD_ACCOUNT_ID"), "")
-    graph_version = _safe_str(plan.get("graph_version"), "v22.0")
+    graph_version = _safe_str(plan.get("graph_version"), "v25.0")
 
     repo_root = _repo_root_from_plan(plan_path)
 

@@ -1,6 +1,7 @@
-﻿"""Adapter wrapping the existing Meta publisher for safe_client use. S7."""
-
+"""Adapter wrapping the existing Meta publisher for safe_client use. S7."""
 from __future__ import annotations
+
+from synapse.meta.graph_version import DEFAULT_META_GRAPH_VERSION, resolve_meta_graph_version
 
 import json
 import os
@@ -19,7 +20,7 @@ from synapse.infra.feature_flags import FeatureFlags
 from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaPauseRequest
 
 _GRAPH_BASE_URL = "https://graph.facebook.com"
-_DEFAULT_GRAPH_VERSION = "v25.0"
+_DEFAULT_GRAPH_VERSION = DEFAULT_META_GRAPH_VERSION
 _DEFAULT_TIMEOUT_S = 60.0
 
 
@@ -43,7 +44,7 @@ def _require_env(name: str) -> str:
 
 
 def _graph_version() -> str:
-    value = str(os.getenv("META_GRAPH_VERSION", _DEFAULT_GRAPH_VERSION)).strip()
+    value = str(resolve_meta_graph_version()).strip()
     return value or _DEFAULT_GRAPH_VERSION
 
 

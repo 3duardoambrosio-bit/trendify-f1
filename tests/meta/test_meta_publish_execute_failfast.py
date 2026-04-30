@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -263,7 +263,7 @@ def test_live_missing_dependency_fails_before_http(tmp_path: Path, monkeypatch: 
                 "--out", str(out),
                 "--out-dir", str(hist),
                 "--mode", "live",
-                "--ledger-disable",
+                "--ledger-dir", str(tmp_path / "ledger"),
             ]
         )
 
@@ -311,7 +311,7 @@ def test_live_unresolved_placeholders_fail_before_http(tmp_path: Path, monkeypat
                 "--out", str(out),
                 "--out-dir", str(hist),
                 "--mode", "live",
-                "--ledger-disable",
+                "--ledger-dir", str(tmp_path / "ledger"),
             ]
         )
 
@@ -357,7 +357,7 @@ def test_live_upload_video_source_without_file_ref_fails(tmp_path: Path, monkeyp
                 "--out", str(out),
                 "--out-dir", str(hist),
                 "--mode", "live",
-                "--ledger-disable",
+                "--ledger-dir", str(tmp_path / "ledger"),
             ]
         )
 
@@ -405,7 +405,7 @@ def test_live_success_create_campaign_sets_created_id_and_id_map(tmp_path: Path,
                 "--out", str(out),
                 "--out-dir", str(hist),
                 "--mode", "live",
-                "--ledger-disable",
+                "--ledger-dir", str(tmp_path / "ledger"),
             ]
         )
 
@@ -465,7 +465,7 @@ def test_live_upload_video_success_uses_multipart_and_maps_video_id(tmp_path: Pa
                 "--out", str(out),
                 "--out-dir", str(hist),
                 "--mode", "live",
-                "--ledger-disable",
+                "--ledger-dir", str(tmp_path / "ledger"),
             ]
         )
 
@@ -532,7 +532,7 @@ def test_live_continue_on_error_keeps_next_step_running(tmp_path: Path, monkeypa
                 "--out-dir", str(hist),
                 "--mode", "live",
                 "--continue-on-error",
-                "--ledger-disable",
+                "--ledger-dir", str(tmp_path / "ledger"),
             ]
         )
 

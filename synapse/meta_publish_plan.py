@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from synapse.meta.graph_version import resolve_meta_graph_version
 from synapse.infra.cli_logging import cli_print
 
 import argparse
@@ -103,7 +104,7 @@ def build_plan(
     campaigns = _dedupe(campaigns, "campaign")
 
     act = _normalize_act(ad_account_id)
-    gv = _safe_str(graph_version, "v22.0").lstrip("v")
+    gv = _safe_str(graph_version, "v25.0").lstrip("v")
     gv = f"v{gv}"
 
     # Plan steps (dry-run friendly): we only prepare payloads + dependencies
@@ -200,12 +201,12 @@ def build_plan(
         })
         step_i += 1
 
-        # 3) Create creative (requires page_id / ig_actor_id typically)
+        # 3) Create creative (requires page_id / ig_user_id typically)
         creative_payload = {
             "name": f"{utm}_CREATIVE",
             "object_story_spec": {
                 "page_id": "<META_PAGE_ID>",
-                "instagram_actor_id": "<META_IG_ACTOR_ID>",
+                "instagram_user_id": "<META_IG_USER_ID>",
                 "video_data": {
                     "video_id": f"<ID:meta:video:{utm}>",
                     "message": primary_text,
@@ -228,7 +229,7 @@ def build_plan(
             "graph_version": gv,
             "payload": creative_payload,
             "idempotency_key": creative_idk,
-            "placeholders": ["META_PAGE_ID", "META_IG_ACTOR_ID"],
+            "placeholders": ["META_PAGE_ID", "META_IG_USER_ID"],
         })
         step_i += 1
 
@@ -288,7 +289,7 @@ def _write_checklist(path: Path, plan: Dict[str, Any]) -> None:
     lines.append("ANTES DE EJECUTAR (manual / futuro):")
     lines.append("- [ ] Tener META_ACCESS_TOKEN con permisos Ads")
     lines.append("- [ ] Tener META_AD_ACCOUNT_ID (sin act_)")
-    lines.append("- [ ] Tener META_PAGE_ID + META_IG_ACTOR_ID")
+    lines.append("- [ ] Tener META_PAGE_ID + META_IG_USER_ID")
     lines.append("- [ ] Tener META_PIXEL_ID (si vas a trackear conversiones)")
     lines.append("- [ ] Definir TARGETING_JSON (país/edad/intereses/etc.)")
     lines.append("- [ ] Definir DAILY_BUDGET_MINOR_UNITS (ej: 500 = $5.00 si moneda usa centavos)")
@@ -314,7 +315,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--checklist", default=str(DEFAULT_CHECKLIST), help="Output checklist TXT")
 
     # Meta-ish knobs (plan only)
-    ap.add_argument("--graph-version", default=os.getenv("META_GRAPH_VERSION", "v22.0"), help="Graph/Marketing API version (plan tag).")
+    ap.add_argument("--graph-version", default=resolve_meta_graph_version(), help="Graph/Marketing API version (plan tag).")
     ap.add_argument("--ad-account-id", default=os.getenv("META_AD_ACCOUNT_ID", ""), help="Ad account id (digits).")
     ap.add_argument("--status", default="PAUSED", help="PAUSED|ACTIVE (keep PAUSED in Phase-1).")
     ap.add_argument("--objective", default="OUTCOME_SALES", help="Campaign objective (plan placeholder).")
