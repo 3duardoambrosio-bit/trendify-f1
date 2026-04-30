@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from synapse.meta.publisher_contracts import (
+    FORBIDDEN_META_API_KEYS,
     MetaCampaignPayload,
     MetaCampaignResponse,
     MetaPauseRequest,
@@ -108,3 +109,28 @@ def test_pause_response_from_error() -> None:
     assert r.error_code == "pause_campaign_error"
     assert r.error_message == "api unavailable"
     assert r.api_response == {"raw": "y"}
+
+
+@pytest.mark.parametrize("forbidden_key", sorted(FORBIDDEN_META_API_KEYS))
+def test_campaign_payload_rejects_forbidden_meta_api_keys(forbidden_key: str) -> None:
+    payload = MetaCampaignPayload(name="Forbidden Runtime Key", extra={forbidden_key: "legacy"})
+    with pytest.raises(ValueError, match=forbidden_key):
+        payload.to_api_dict()
+
+
+@pytest.mark.parametrize("forbidden_key", sorted(FORBIDDEN_META_API_KEYS))
+def test_pause_request_rejects_forbidden_meta_api_keys(forbidden_key: str) -> None:
+    request = MetaPauseRequest(campaign_id="camp-123", extra={forbidden_key: "legacy"})
+    with pytest.raises(ValueError, match=forbidden_key):
+        request.to_api_dict()
+
+
+@pytest.mark.parametrize("forbidden_key", sorted(FORBIDDEN_META_API_KEYS))
+def test_campaign_payload_rejects_nested_forbidden_meta_api_keys(forbidden_key: str) -> None:
+    payload = MetaCampaignPayload(
+        name="Nested Forbidden Runtime Key",
+        targeting={"geo_locations": {"countries": ["MX"]}, forbidden_key: "legacy"},
+    )
+
+    with pytest.raises(ValueError, match=forbidden_key):
+        payload.to_api_dict()

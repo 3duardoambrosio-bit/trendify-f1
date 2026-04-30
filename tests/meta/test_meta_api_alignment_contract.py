@@ -29,6 +29,10 @@ def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
+def test_publisher_adapter_has_no_local_graph_version_constant() -> None:
+    assert "_DEFAULT_GRAPH_VERSION" not in _read("synapse/meta/publisher_adapter.py")
+
+
 def test_meta_graph_version_default_is_v25(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("META_GRAPH_VERSION", raising=False)
 

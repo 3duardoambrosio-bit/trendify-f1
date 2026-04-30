@@ -1,7 +1,7 @@
 """Adapter wrapping the existing Meta publisher for safe_client use. S7."""
 from __future__ import annotations
 
-from synapse.meta.graph_version import DEFAULT_META_GRAPH_VERSION, resolve_meta_graph_version
+from synapse.meta.graph_version import resolve_meta_graph_version
 
 import json
 import os
@@ -17,17 +17,19 @@ from synapse.integrations.http_client import (
     SimpleHttpClient,
 )
 from synapse.infra.feature_flags import FeatureFlags
-from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaPauseRequest
+from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaPauseRequest, reject_forbidden_meta_api_keys
 
 _GRAPH_BASE_URL = "https://graph.facebook.com"
-_DEFAULT_GRAPH_VERSION = DEFAULT_META_GRAPH_VERSION
 _DEFAULT_TIMEOUT_S = 60.0
 
 
 def _campaign_payload_to_api_dict(payload: MetaCampaignPayload | Mapping[str, Any]) -> Dict[str, Any]:
     if isinstance(payload, MetaCampaignPayload):
         return payload.to_api_dict()
-    return dict(payload)
+
+    api_payload = dict(payload)
+    reject_forbidden_meta_api_keys(api_payload, context="Meta campaign mapping payload")
+    return api_payload
 
 
 def _pause_request_to_api_dict(request: MetaPauseRequest | str) -> Dict[str, Any]:
@@ -44,8 +46,7 @@ def _require_env(name: str) -> str:
 
 
 def _graph_version() -> str:
-    value = str(resolve_meta_graph_version()).strip()
-    return value or _DEFAULT_GRAPH_VERSION
+    return str(resolve_meta_graph_version()).strip()
 
 
 def _timeout_s() -> float:

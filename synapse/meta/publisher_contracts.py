@@ -4,6 +4,43 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Dict, Mapping, Optional
 
+FORBIDDEN_META_API_KEYS = frozenset(
+    {
+        "interests",
+        "exclusions",
+        "detailed_targeting",
+        "interest_targeting",
+        "instagram_actor_id",
+    }
+)
+
+
+def _collect_forbidden_meta_api_key_paths(value: Any, *, path: str = "$") -> list[str]:
+    found: list[str] = []
+
+    if isinstance(value, Mapping):
+        for raw_key, child in value.items():
+            key = str(raw_key)
+            child_path = f"{path}.{key}"
+            if key in FORBIDDEN_META_API_KEYS:
+                found.append(child_path)
+            found.extend(_collect_forbidden_meta_api_key_paths(child, path=child_path))
+        return found
+
+    if isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            found.extend(_collect_forbidden_meta_api_key_paths(child, path=f"{path}[{index}]"))
+
+    return found
+
+
+def reject_forbidden_meta_api_keys(payload: Mapping[str, Any], *, context: str) -> None:
+    forbidden = sorted(set(_collect_forbidden_meta_api_key_paths(payload)))
+    if forbidden:
+        joined = ", ".join(forbidden)
+        raise ValueError(f"{context} contains forbidden Meta API keys: {joined}")
+
+
 
 def _copy_mapping(value: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
     if value is None:
@@ -23,6 +60,9 @@ class MetaCampaignPayload:
     extra: Mapping[str, Any] = field(default_factory=dict)
 
     def to_api_dict(self) -> Dict[str, Any]:
+        extra = dict(self.extra)
+        reject_forbidden_meta_api_keys(extra, context="MetaCampaignPayload.extra")
+
         payload: Dict[str, Any] = {
             "name": self.name,
             "objective": self.objective,
@@ -36,7 +76,8 @@ class MetaCampaignPayload:
             payload["targeting"] = _copy_mapping(self.targeting)
         if self.promoted_object is not None:
             payload["promoted_object"] = _copy_mapping(self.promoted_object)
-        payload.update(dict(self.extra))
+        payload.update(extra)
+        reject_forbidden_meta_api_keys(payload, context="MetaCampaignPayload")
         return payload
 
 
@@ -91,11 +132,15 @@ class MetaPauseRequest:
     extra: Mapping[str, Any] = field(default_factory=dict)
 
     def to_api_dict(self) -> Dict[str, Any]:
+        extra = dict(self.extra)
+        reject_forbidden_meta_api_keys(extra, context="MetaPauseRequest.extra")
+
         payload: Dict[str, Any] = {
             "campaign_id": self.campaign_id,
             "status": self.status,
         }
-        payload.update(dict(self.extra))
+        payload.update(extra)
+        reject_forbidden_meta_api_keys(payload, context="MetaPauseRequest")
         return payload
 
 

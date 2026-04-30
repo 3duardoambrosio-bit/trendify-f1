@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
@@ -27,7 +27,7 @@ def _make_client(tmp_path: Path, *, live: bool = False) -> MetaSafeClient:
 
 def test_safe_client_mock_accepts_meta_campaign_payload(tmp_path: Path) -> None:
     client = _make_client(tmp_path, live=False)
-    payload = MetaCampaignPayload(name="Contract Mock", budget_mxn=Decimal("10.00"))
+    payload = MetaCampaignPayload(name="Contract Mock")
     result = client.create_campaign_safe(
         payload=payload,
         idempotency_key="contract-mock",

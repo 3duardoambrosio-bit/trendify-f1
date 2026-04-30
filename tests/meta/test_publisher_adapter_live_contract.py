@@ -1,12 +1,20 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from unittest.mock import patch
 
 import pytest
 
-from synapse.meta.publisher_adapter import call_create_campaign, call_pause_campaign
-from synapse.meta.publisher_contracts import MetaCampaignPayload, MetaPauseRequest
+from synapse.meta.publisher_adapter import (
+    _campaign_payload_to_api_dict,
+    call_create_campaign,
+    call_pause_campaign,
+)
+from synapse.meta.publisher_contracts import (
+    FORBIDDEN_META_API_KEYS,
+    MetaCampaignPayload,
+    MetaPauseRequest,
+)
 
 
 def _live_env() -> dict[str, str]:
@@ -124,3 +132,9 @@ def test_pause_campaign_live_requires_campaign_id() -> None:
     ):
         with pytest.raises(RuntimeError, match="campaign_id"):
             call_pause_campaign(MetaPauseRequest(campaign_id=""))
+
+
+@pytest.mark.parametrize("forbidden_key", sorted(FORBIDDEN_META_API_KEYS))
+def test_mapping_campaign_payload_rejects_forbidden_meta_api_keys(forbidden_key: str) -> None:
+    with pytest.raises(ValueError, match=forbidden_key):
+        _campaign_payload_to_api_dict({"name": "Mapping Payload", forbidden_key: "legacy"})
