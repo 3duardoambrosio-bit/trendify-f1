@@ -742,7 +742,7 @@ class MetaSafeClient:
             )
         except CircuitOpenError as exc:
             return self._handle_error(exc, idem_key, correlation_id, error_code="circuit_open")
-        except (OSError, ValueError, TypeError, ArithmeticError, KeyError, NotImplementedError) as exc:
+        except Exception as exc:
             return self._handle_error(exc, idem_key, correlation_id, error_code="autopause_error")
 
         status = str(idem_result.get("status") or "").strip().upper()
