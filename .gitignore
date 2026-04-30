@@ -1,4 +1,4 @@
-# === Python ===
+﻿# === Python ===
 __pycache__/
 *.py[cod]
 *.pyo
@@ -30,7 +30,7 @@ dist/
 *.egg-info/
 *.egg
 wheels/
-# === Runtime / data NO determinÃ­stica ===
+# === Runtime / data NO determinÃƒÂ­stica ===
 data/ledger/
 data/backups/
 data/evidence/
@@ -111,13 +111,18 @@ data/bitacora/bitacora.jsonl
 # Local runtime outputs (NO versionar)
 # CSVs reales (los tuyos), dejamos demos como plantillas
 data/catalog/candidates_real*.csv
-# CSVs reales (ruido); demos sâ”œÂ»â”¬â”â”¬Â¢ pueden vivir
+# CSVs reales (ruido); demos sÃ¢â€Å“Ã‚Â»Ã¢â€Â¬Ã¢â€ÂÃ¢â€Â¬Ã‚Â¢ pueden vivir
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
 **/__pycache__/
 # Env & secrets
-# Data sensible / no determinâ”œÃ¢â”¬Â¡stica
-data/
+# Data sensible / no determinÃ¢â€Å“ÃƒÂ¢Ã¢â€Â¬Ã‚Â¡stica
+# Runtime data is ignored by default; keep only the genesis ledger seed tracked
+# so clean-clone cockpit audits can resolve the canonical default ledger path.
+data/*
+!data/ledger/
+data/ledger/*
+!data/ledger/events.ndjson
 # OS
 # === LOCAL / SECRETS ===
 # === PYTHON CACHE ===
