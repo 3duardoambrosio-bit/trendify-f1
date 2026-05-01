@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("dev","ops","release","precommit")] [string]$Mode = "dev"
+  [ValidateSet("dev","ops","release","precommit","hook")] [string]$Mode = "dev"
 )
 
 Set-StrictMode -Version Latest
@@ -123,6 +123,24 @@ Write-Host ("DOCTOR_EXIT={0} DOCTOR_OVERALL={1}" -f $doctorExit,$doctorOverall)
 if ($Mode -in @("ops","release")) {
   if ($doctorExit -ne 0) { Fail 20 ("DOCTOR_EXIT={0}" -f $doctorExit) }
   if ($doctorOverall -notmatch "^GREEN") { Fail 21 ("DOCTOR_OVERALL={0}" -f $doctorOverall) }
+}
+
+# HOOK: rápido, determinista, sin full pytest.
+# El full gate se ejecuta manualmente antes de commit final en frentes F1.
+if ($Mode -eq "hook") {
+  $hookTargets = @(
+    "tests/meta/test_safe_client_alerts.py::test_no_utf8_bom_in_tracked_policy_files"
+  )
+
+  "HOOK_TEST_TARGETS_FOUND={0}" -f $hookTargets.Count | Out-Host
+  & python -B -m pytest @($hookTargets) -q --tb=no
+  $hookPytestExit = $LASTEXITCODE
+
+  if ($hookPytestExit -ne 0) { Fail 31 ("HOOK_PYTEST_EXIT={0}" -f $hookPytestExit) }
+
+  Write-Host "=== SYNAPSE F1 GATE: PASS ==="
+  Write-Host ("ACCEPTANCE: hook_pytest_exit=0 doctor_exit={0} doctor_overall={1} bootstrap_used={2}" -f $doctorExit,$doctorOverall,$bootstrapUsed)
+  exit 0
 }
 
 # TESTS: HARD siempre (robusto si faltan dirs)

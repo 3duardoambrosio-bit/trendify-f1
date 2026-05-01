@@ -135,3 +135,4 @@ websockets==15.0.1
 win32_setctime==1.2.0
 yarg==0.1.9
 yarl==1.22.0
+pillow==12.2.0

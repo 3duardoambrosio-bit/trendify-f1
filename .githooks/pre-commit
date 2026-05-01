@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+echo "=== SYNAPSE F1 HOOK: START ==="
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ROOT/scripts/gate_f1.ps1" hook
+echo "=== SYNAPSE F1 HOOK: END ==="
