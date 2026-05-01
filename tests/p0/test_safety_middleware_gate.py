@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 from types import SimpleNamespace
 
 from infra.result import Err, Ok

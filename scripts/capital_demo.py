@@ -1,4 +1,4 @@
-﻿# scripts/capital_demo.py
+# scripts/capital_demo.py
 
 from ops.capital_shield_v2 import CapitalShieldV2 as CapitalShield
 from infra.bitacora_auto import bitacora, EntryType

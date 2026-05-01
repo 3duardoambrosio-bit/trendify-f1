@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict
 from math import ceil, inf
 import json, csv, os, argparse
 from typing import Any, Dict, List, Optional, Tuple

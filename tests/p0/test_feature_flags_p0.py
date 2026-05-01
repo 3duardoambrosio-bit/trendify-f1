@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from infra.feature_flags import FeatureFlags, _parse_bool
 

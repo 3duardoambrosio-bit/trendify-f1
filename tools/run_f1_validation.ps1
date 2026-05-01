@@ -1,4 +1,4 @@
-﻿param(
+param(
   [ValidateSet("status","burnin","bundle","both")]
   [string]$Mode = "status",
 

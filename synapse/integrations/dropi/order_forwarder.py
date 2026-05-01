@@ -1,4 +1,4 @@
-﻿# synapse/integrations/dropi/order_forwarder.py
+# synapse/integrations/dropi/order_forwarder.py
 from __future__ import annotations
 
 from dataclasses import dataclass

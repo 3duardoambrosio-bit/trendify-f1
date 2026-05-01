@@ -237,4 +237,91 @@ def test_safe_client_alerts_on_create_campaign_action(tmp_path):
     assert "status=PAUSED" in calls[0]
     assert "campaign_id=" in calls[0]
     assert "corr=corr-create-alert" in calls[0]
+def test_maybe_autopause_runtime_error_returns_structured_autopause_error(tmp_path):
+    from decimal import Decimal
 
+    from synapse.infra.circuit_breaker import CircuitBreaker
+    from synapse.infra.feature_flags import FeatureFlags
+    from synapse.infra.retry_policy import RetryPolicy
+    from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
+
+    client = MetaSafeClient(
+        feature_flags=FeatureFlags(values={"meta_live_api": True}),
+        retry_policy=RetryPolicy(max_attempts=1, base_delay_s=0.0, max_delay_s=0.0),
+        circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
+        idempotency_store=SimpleNamespace(path=tmp_path / "idem_runtime.sqlite3"),
+        ledger=SimpleNamespace(path=tmp_path / "ledger_runtime.ndjson"),
+        config=MetaSafeClientConfig(),
+    )
+
+    with patch("synapse.meta.safe_client.call_pause_campaign", side_effect=RuntimeError("pause_boom")):
+        result = client.maybe_autopause(
+            spend_today_mxn=Decimal("100"),
+            cap_mxn=Decimal("100"),
+            campaign_id="camp-runtime",
+            correlation_id="corr-runtime",
+        )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "autopause_error"
+    assert result["idempotency_key"] == "autopause:camp-runtime:100"
+    assert result["correlation_id"] == "corr-runtime"
+
+
+def test_maybe_autopause_assertion_error_propagates_programming_errors(tmp_path):
+    from decimal import Decimal
+
+    import pytest
+
+    from synapse.infra.circuit_breaker import CircuitBreaker
+    from synapse.infra.feature_flags import FeatureFlags
+    from synapse.infra.retry_policy import RetryPolicy
+    from synapse.meta.safe_client import MetaSafeClient, MetaSafeClientConfig
+
+    client = MetaSafeClient(
+        feature_flags=FeatureFlags(values={"meta_live_api": True}),
+        retry_policy=RetryPolicy(max_attempts=1, base_delay_s=0.0, max_delay_s=0.0),
+        circuit_breaker=CircuitBreaker(failure_threshold=5, reset_timeout_s=30.0),
+        idempotency_store=SimpleNamespace(path=tmp_path / "idem_assertion.sqlite3"),
+        ledger=SimpleNamespace(path=tmp_path / "ledger_assertion.ndjson"),
+        config=MetaSafeClientConfig(),
+    )
+
+    with patch("synapse.meta.safe_client.call_pause_campaign", side_effect=AssertionError("invariant broken")):
+        with pytest.raises(AssertionError, match="invariant broken"):
+            client.maybe_autopause(
+                spend_today_mxn=Decimal("100"),
+                cap_mxn=Decimal("100"),
+                campaign_id="camp-assertion",
+                correlation_id="corr-assertion",
+            )
+
+
+def test_no_utf8_bom_in_tracked_policy_files():
+    import subprocess
+    from pathlib import Path
+
+    suffixes = {".py", ".ps1", ".ini", ".toml", ".yaml", ".yml"}
+
+    result = subprocess.run(
+        ["git", "ls-files"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    offenders = []
+    for raw_name in result.stdout.splitlines():
+        if not raw_name.strip():
+            continue
+
+        path = Path(raw_name)
+        if path.suffix.lower() not in suffixes:
+            continue
+        if not path.exists():
+            continue
+        if path.read_bytes().startswith(b"\xef\xbb\xbf"):
+            offenders.append(path.as_posix())
+
+    assert offenders == []

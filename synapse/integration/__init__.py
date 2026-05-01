@@ -1,4 +1,4 @@
-﻿"""Legacy compatibility exports for synapse.integration."""
+"""Legacy compatibility exports for synapse.integration."""
 
 from __future__ import annotations
 

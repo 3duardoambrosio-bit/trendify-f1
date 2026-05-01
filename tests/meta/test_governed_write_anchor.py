@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from infra.ledger_v2 import AMENDMENT_DOCUMENT_TYPE, APPEND_ONLY_DOCUMENT_TYPE
 from synapse.meta.governed_write_anchor import (

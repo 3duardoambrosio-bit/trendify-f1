@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$OutDir = "artifacts",
   [switch]$Quiet
 )

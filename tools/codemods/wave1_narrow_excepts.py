@@ -1,4 +1,4 @@
-﻿import ast, re, json
+import ast, re, json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

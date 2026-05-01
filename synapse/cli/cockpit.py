@@ -1,4 +1,4 @@
-﻿"""Cockpit status CLI: health/tests/flags/budget/safety/last-ledger/all.
+"""Cockpit status CLI: health/tests/flags/budget/safety/last-ledger/all.
 
 Usage:
     python -m synapse.cli.cockpit <subcommand> [--json|--pretty] [--timeout-s N] [--ledger-path PATH]

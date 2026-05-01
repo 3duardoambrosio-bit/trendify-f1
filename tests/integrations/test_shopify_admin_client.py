@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests para ShopifyAdminClient — mock + live contract.
 No se hacen llamadas reales a Shopify.
 """

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """Compatibility shim for legacy infra.feature_flags imports."""
 

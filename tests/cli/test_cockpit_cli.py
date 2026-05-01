@@ -1,4 +1,4 @@
-﻿"""Tests for synapse.cli.cockpit CLI."""
+"""Tests for synapse.cli.cockpit CLI."""
 
 from __future__ import annotations
 

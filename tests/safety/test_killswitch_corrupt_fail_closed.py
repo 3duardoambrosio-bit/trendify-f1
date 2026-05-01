@@ -1,4 +1,4 @@
-﻿from synapse.safety.killswitch import KillSwitch, KillSwitchLevel
+from synapse.safety.killswitch import KillSwitch, KillSwitchLevel
 
 
 def test_killswitch_corrupt_state_file_fail_closed(tmp_path):

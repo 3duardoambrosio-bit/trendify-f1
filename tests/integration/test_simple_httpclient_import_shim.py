@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from synapse.integration.http_client import (
     HttpClientError as SingularHttpClientError,

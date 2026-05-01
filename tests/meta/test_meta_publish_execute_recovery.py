@@ -1,4 +1,4 @@
-﻿"""Regression tests for live-ledger safety in meta_publish_execute."""
+"""Regression tests for live-ledger safety in meta_publish_execute."""
 
 from __future__ import annotations
 

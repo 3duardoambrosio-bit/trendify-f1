@@ -1,4 +1,4 @@
-﻿import os, urllib.request, urllib.parse
+import os, urllib.request, urllib.parse
 from urllib.error import HTTPError
 from infra.network_guard import enforce_url_policy
 

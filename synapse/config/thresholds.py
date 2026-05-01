@@ -1,4 +1,4 @@
-﻿"""Canonical thresholds for Meta Safe Client. S7: meta safe client."""
+"""Canonical thresholds for Meta Safe Client. S7: meta safe client."""
 
 from __future__ import annotations
 

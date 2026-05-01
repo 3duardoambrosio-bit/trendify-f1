@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 from infra.network_guard import enforce_url_policy
 
 import json

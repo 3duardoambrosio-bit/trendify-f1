@@ -1,4 +1,4 @@
-﻿"""Regression tests for governed-ledger recovery in MetaSafeClient."""
+"""Regression tests for governed-ledger recovery in MetaSafeClient."""
 
 from __future__ import annotations
 

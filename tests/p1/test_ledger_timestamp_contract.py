@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from synapse.infra.time_utc import (
     CLOCK_SOURCE_ID,

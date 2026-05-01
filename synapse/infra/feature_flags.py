@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """Compatibility shim for synapse.infra.feature_flags imports."""
 

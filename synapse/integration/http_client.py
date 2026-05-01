@@ -1,4 +1,4 @@
-﻿"""Legacy compatibility wrapper for synapse.integration.http_client.
+"""Legacy compatibility wrapper for synapse.integration.http_client.
 
 Canonical implementation lives in synapse.integrations.http_client.
 

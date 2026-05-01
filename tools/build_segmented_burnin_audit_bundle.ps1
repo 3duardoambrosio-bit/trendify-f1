@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$OutputRoot = "C:\Temp\synapse_segmented_burnin_audit",
   [int]$Iterations = 1,
   [string]$Secret = "shpss_test_secret",
