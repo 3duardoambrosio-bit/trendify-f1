@@ -4,5 +4,27 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 
 echo "=== SYNAPSE F1 HOOK: START ==="
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ROOT/scripts/gate_f1.ps1" hook
+
+if command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ROOT/scripts/gate_f1.ps1" hook
+elif command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -File "$ROOT/scripts/gate_f1.ps1" hook
+else
+  echo "SYNAPSE_HOOK_FALLBACK=python_minimal_no_powershell"
+  if [[ -x "$ROOT/venv/Scripts/python.exe" ]]; then
+    PY="$ROOT/venv/Scripts/python.exe"
+  elif [[ -x "$ROOT/.venv/Scripts/python.exe" ]]; then
+    PY="$ROOT/.venv/Scripts/python.exe"
+  elif [[ -x "$ROOT/venv/bin/python" ]]; then
+    PY="$ROOT/venv/bin/python"
+  elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+    PY="$ROOT/.venv/bin/python"
+  else
+    PY="python"
+  fi
+
+  echo "PYTHON_PATH=$PY"
+  "$PY" -B -m pytest tests/meta/test_safe_client_alerts.py::test_no_utf8_bom_in_tracked_policy_files -q --tb=no
+fi
+
 echo "=== SYNAPSE F1 HOOK: END ==="

@@ -35,9 +35,40 @@ function Assert-NoBom([string]$Path) {
   Write-Host ("NO_BOM_OK {0} HEAD3={1}" -f $Path,$h3)
 }
 
+$script:SynapsePythonVenvDetected = 0
+
+function Resolve-SynapsePython {
+  $candidates = @(
+    "venv\Scripts\python.exe",
+    ".venv\Scripts\python.exe",
+    "venv/bin/python",
+    ".venv/bin/python"
+  )
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path -LiteralPath $candidate) {
+      $script:SynapsePythonVenvDetected = 1
+      return (Resolve-Path -LiteralPath $candidate).Path
+    }
+  }
+
+  $script:SynapsePythonVenvDetected = 0
+  return "python"
+}
+
 # Root guard
 if (-not (Test-Path ".git")) { Fail 10 "NO .git (root incorrecto)" }
 if (-not (Test-Path "pyproject.toml")) { Fail 11 "NO pyproject.toml (root incorrecto)" }
+
+$pythonExe = Resolve-SynapsePython
+Write-Host ("PYTHON_PATH={0}" -f $pythonExe)
+Write-Host ("PYTHON_VENV_DETECTED={0}" -f $script:SynapsePythonVenvDetected)
+
+if ($Mode -in @("hook","precommit","ops","release")) {
+  if ($script:SynapsePythonVenvDetected -ne 1) {
+    Fail 22 ("PYTHON_VENV_NOT_DETECTED mode={0} python={1}" -f $Mode,$pythonExe)
+  }
+}
 
 # Guardrail anti-BOM
 Assert-NoBom "pytest.ini"
@@ -109,7 +140,7 @@ if ($Mode -in @("ops","release")) {
 $doctorExit = 0
 $doctorOverall = "UNKNOWN"
 try {
-  $out = & python -X utf8 -m synapse.infra.doctor 2>&1
+  $out = & $pythonExe -X utf8 -m synapse.infra.doctor 2>&1
   $doctorExit = $LASTEXITCODE
   $ov = ($out | Select-String -Pattern "OVERALL:" -ErrorAction SilentlyContinue | Select-Object -Last 1).Line
   if ($ov) { $doctorOverall = ($ov -replace "^.*OVERALL:\s*","").Trim() }
@@ -119,8 +150,8 @@ try {
 }
 Write-Host ("DOCTOR_EXIT={0} DOCTOR_OVERALL={1}" -f $doctorExit,$doctorOverall)
 
-# Doctor HARD en ops/release; SOFT en dev/precommit
-if ($Mode -in @("ops","release")) {
+# Doctor HARD en hook/precommit/ops/release.
+if ($Mode -in @("hook","precommit","ops","release")) {
   if ($doctorExit -ne 0) { Fail 20 ("DOCTOR_EXIT={0}" -f $doctorExit) }
   if ($doctorOverall -notmatch "^GREEN") { Fail 21 ("DOCTOR_OVERALL={0}" -f $doctorOverall) }
 }
@@ -129,17 +160,21 @@ if ($Mode -in @("ops","release")) {
 # El full gate se ejecuta manualmente antes de commit final en frentes F1.
 if ($Mode -eq "hook") {
   $hookTargets = @(
-    "tests/meta/test_safe_client_alerts.py::test_no_utf8_bom_in_tracked_policy_files"
+    "tests/meta/test_safe_client_alerts.py::test_no_utf8_bom_in_tracked_policy_files",
+    "tests/meta/test_safe_client_alerts.py::test_maybe_autopause_runtime_error_returns_structured_autopause_error",
+    "tests/meta/test_safe_client_alerts.py::test_maybe_autopause_assertion_error_propagates_programming_errors",
+    "tests/p0/test_eol_lf_gate_p0.py",
+    "tests/meta/test_publisher_contracts.py"
   )
 
   "HOOK_TEST_TARGETS_FOUND={0}" -f $hookTargets.Count | Out-Host
-  & python -B -m pytest @($hookTargets) -q --tb=no
+  & $pythonExe -B -m pytest @($hookTargets) -q --tb=no
   $hookPytestExit = $LASTEXITCODE
 
   if ($hookPytestExit -ne 0) { Fail 31 ("HOOK_PYTEST_EXIT={0}" -f $hookPytestExit) }
 
   Write-Host "=== SYNAPSE F1 GATE: PASS ==="
-  Write-Host ("ACCEPTANCE: hook_pytest_exit=0 doctor_exit={0} doctor_overall={1} bootstrap_used={2}" -f $doctorExit,$doctorOverall,$bootstrapUsed)
+  Write-Host ("ACCEPTANCE: hook_pytest_exit=0 hook_targets={0} doctor_exit={1} doctor_overall={2} python_venv_detected={3} bootstrap_used={4}" -f $hookTargets.Count,$doctorExit,$doctorOverall,$script:SynapsePythonVenvDetected,$bootstrapUsed)
   exit 0
 }
 
@@ -150,7 +185,7 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 "TEST_ROOTS_FOUND={0}" -f $existing.Count | Out-Host
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
-& python -B -m pytest @($existing) -q --tb=no
+& $pythonExe -B -m pytest @($existing) -q --tb=no
 $pytestExit = $LASTEXITCODE
 if ($pytestExit -ne 0) { Fail 3 ("PYTEST_EXIT={0}" -f $pytestExit) }
 
@@ -164,5 +199,5 @@ if ($Mode -in @("ops","release")) {
 }
 
 Write-Host "=== SYNAPSE F1 GATE: PASS ==="
-Write-Host ("ACCEPTANCE: pytest_exit=0 doctor_exit={0} doctor_overall={1} bootstrap_used={2}" -f $doctorExit,$doctorOverall,$bootstrapUsed)
+Write-Host ("ACCEPTANCE: pytest_exit=0 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3}" -f $doctorExit,$doctorOverall,$script:SynapsePythonVenvDetected,$bootstrapUsed)
 exit 0
