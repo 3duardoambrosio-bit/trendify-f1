@@ -238,5 +238,76 @@ def test_orchestrator_pause_readiness_uses_mock_safe_client_only() -> None:
     assert safe_client.pause_calls[0]["campaign_id"] == "camp-readiness"
     assert safe_client.pause_calls[0]["spend_today_mxn"] == "100"
     assert safe_client.pause_calls[0]["cap_mxn"] == "100"
+def test_feature_flags_dry_run_false_with_live_false_blocks_network() -> None:
+    flags = FeatureFlags(
+        values={
+            "dry_run": False,
+            "meta_live_api": False,
+            "shopify_live_api": False,
+            "dropi_live_api": False,
+        }
+    )
+
+    assert flags.dry_run is False
+    assert flags.meta_live is False
+    assert flags.shopify_live is False
+    assert flags.dropi_live is False
+
+    assert flags.allow_network("meta") is False
+    assert flags.allow_network("shopify") is False
+    assert flags.allow_network("dropi") is False
+    assert flags.allow_network("unknown") is False
 
 
+def test_simple_http_client_dry_run_does_not_leak_authorization_header(capsys) -> None:
+    secret = "SHOULD_NOT_LEAVE_PROCESS"
+    client = SimpleHttpClient(dry_run=True)
+
+    with patch("urllib.request.urlopen") as urlopen:
+        response = client.request(
+            HttpRequest(
+                method="POST",
+                url="https://example.test/no-live-readiness",
+                headers={
+                    "Authorization": f"Bearer {secret}",
+                    "X-Api-Key": secret,
+                },
+                body=b'{"dry_run":true}',
+                timeout_s=0.1,
+            )
+        )
+
+    captured = capsys.readouterr()
+    body_text = response.body.decode("utf-8", errors="replace")
+    header_text = json.dumps(response.headers, sort_keys=True)
+
+    assert response.status == 200
+    assert response.headers["x-dry-run"] == "1"
+    assert secret not in body_text
+    assert secret not in header_text
+    assert secret not in captured.out
+    assert secret not in captured.err
+    urlopen.assert_not_called()
+
+
+def test_feature_flags_keep_network_and_spend_gates_independent() -> None:
+    flags = FeatureFlags(
+        values={
+            "dry_run": False,
+            "meta_live_api": True,
+            "shopify_live_api": False,
+            "dropi_live_api": False,
+            "spend_real_money": False,
+        }
+    )
+
+    assert flags.dry_run is False
+    assert flags.meta_live is True
+    assert flags.shopify_live is False
+    assert flags.dropi_live is False
+    assert flags.spend_real_money is False
+
+    assert flags.allow_network("meta") is True
+    assert flags.allow_network("shopify") is False
+    assert flags.allow_network("dropi") is False
+    assert flags.as_dict()["spend_real_money"] is False
