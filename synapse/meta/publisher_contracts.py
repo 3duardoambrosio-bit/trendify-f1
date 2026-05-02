@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+from dataclasses import asdict, dataclass, field, is_dataclass
 from decimal import Decimal
 from typing import Any, Dict, Mapping, Optional
+
+_logger = logging.getLogger(__name__)
+
 
 FORBIDDEN_META_API_KEYS = frozenset(
     {
@@ -15,31 +19,91 @@ FORBIDDEN_META_API_KEYS = frozenset(
 )
 
 
-def _collect_forbidden_meta_api_key_paths(value: Any, *, path: str = "$") -> list[str]:
+def _collect_forbidden_meta_api_key_paths(
+    value: Any,
+    *,
+    path: str = "$",
+    _seen: set[int] | None = None,
+) -> list[str]:
+    if _seen is None:
+        _seen = set()
+
+    if value is None or isinstance(value, (str, bytes, bytearray, int, float, bool)):
+        return []
+
+    value_id = id(value)
+    if value_id in _seen:
+        return []
+    _seen.add(value_id)
+
     found: list[str] = []
 
     if isinstance(value, Mapping):
-        for raw_key, child in value.items():
-            key = str(raw_key)
-            child_path = f"{path}.{key}"
-            if key in FORBIDDEN_META_API_KEYS:
-                found.append(child_path)
-            found.extend(_collect_forbidden_meta_api_key_paths(child, path=child_path))
-        return found
+        items = value.items()
+        path_builder = lambda key: f"{path}.{key}"
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        items = enumerate(value)
+        path_builder = lambda key: f"{path}[{key}]"
+    elif is_dataclass(value) and not isinstance(value, type):
+        try:
+            items = asdict(value).items()
+        except (TypeError, ValueError):
+            items = ()
+        path_builder = lambda key: f"{path}.{key}"
+    elif hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
+        try:
+            dumped = value.model_dump()
+        except (TypeError, ValueError, RuntimeError):
+            dumped = {}
+        items = dumped.items() if isinstance(dumped, Mapping) else ()
+        path_builder = lambda key: f"{path}.{key}"
+    elif hasattr(value, "dict") and callable(getattr(value, "dict")):
+        try:
+            dumped = value.dict()
+        except (TypeError, ValueError, RuntimeError):
+            dumped = {}
+        items = dumped.items() if isinstance(dumped, Mapping) else ()
+        path_builder = lambda key: f"{path}.{key}"
+    elif hasattr(value, "__dict__"):
+        items = vars(value).items()
+        path_builder = lambda key: f"{path}.{key}"
+    else:
+        return []
 
-    if isinstance(value, (list, tuple)):
-        for index, child in enumerate(value):
-            found.extend(_collect_forbidden_meta_api_key_paths(child, path=f"{path}[{index}]"))
+    for raw_key, child in items:
+        key = str(raw_key)
+        child_path = path_builder(key)
+
+        if key in FORBIDDEN_META_API_KEYS:
+            found.append(child_path)
+
+        found.extend(
+            _collect_forbidden_meta_api_key_paths(
+                child,
+                path=child_path,
+                _seen=_seen,
+            )
+        )
 
     return found
-
-
 def reject_forbidden_meta_api_keys(payload: Mapping[str, Any], *, context: str) -> None:
     forbidden = sorted(set(_collect_forbidden_meta_api_key_paths(payload)))
     if forbidden:
         joined = ", ".join(forbidden)
         raise ValueError(f"{context} contains forbidden Meta API keys: {joined}")
 
+
+
+
+def _warn_on_deprecated_meta_response_keys(api_response: Optional[Mapping[str, Any]], *, context: str) -> None:
+    forbidden = sorted(set(_collect_forbidden_meta_api_key_paths(api_response)))
+    if not forbidden:
+        return
+    _logger.warning(
+        "deprecated_meta_response_keys_detected context=%s paths=%s",
+        context,
+        ", ".join(forbidden),
+    )
 
 
 def _copy_mapping(value: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -90,6 +154,12 @@ class MetaCampaignResponse:
     api_response: Optional[Mapping[str, Any]] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _warn_on_deprecated_meta_response_keys(
+            self.api_response,
+            context=type(self).__name__,
+        )
 
     @classmethod
     def from_mock(cls, campaign_id: str, status: str = "PAUSED") -> "MetaCampaignResponse":
@@ -153,6 +223,12 @@ class MetaPauseResponse:
     api_response: Optional[Mapping[str, Any]] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _warn_on_deprecated_meta_response_keys(
+            self.api_response,
+            context=type(self).__name__,
+        )
 
     @classmethod
     def from_mock(cls, campaign_id: str, status: str = "PAUSED") -> "MetaPauseResponse":

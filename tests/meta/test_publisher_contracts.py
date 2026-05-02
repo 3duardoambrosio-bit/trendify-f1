@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, dataclass
 from decimal import Decimal
+
+import logging
 
 import pytest
 
@@ -134,3 +136,86 @@ def test_campaign_payload_rejects_nested_forbidden_meta_api_keys(forbidden_key: 
 
     with pytest.raises(ValueError, match=forbidden_key):
         payload.to_api_dict()
+
+def test_campaign_payload_rejects_forbidden_keys_inside_dataclass_targeting() -> None:
+    @dataclass
+    class NestedTargeting:
+        instagram_actor_id: str
+
+    payload = MetaCampaignPayload(
+        name="Dataclass Forbidden",
+        targeting={"nested": NestedTargeting(instagram_actor_id="legacy")},
+    )
+
+    with pytest.raises(ValueError) as exc:
+        payload.to_api_dict()
+
+    assert "MetaCampaignPayload" in str(exc.value)
+    assert "$.targeting.nested.instagram_actor_id" in str(exc.value)
+
+
+def test_campaign_payload_rejects_forbidden_keys_inside_custom_object_targeting() -> None:
+    class NestedTargeting:
+        def __init__(self) -> None:
+            self.instagram_actor_id = "legacy"
+
+    payload = MetaCampaignPayload(
+        name="Custom Object Forbidden",
+        targeting={"nested": NestedTargeting()},
+    )
+
+    with pytest.raises(ValueError) as exc:
+        payload.to_api_dict()
+
+    assert "MetaCampaignPayload" in str(exc.value)
+    assert "$.targeting.nested.instagram_actor_id" in str(exc.value)
+
+
+def test_campaign_payload_rejects_forbidden_keys_inside_pydantic_like_targeting() -> None:
+    class PydanticLikeTargeting:
+        def model_dump(self):
+            return {"interests": ["legacy"]}
+
+    payload = MetaCampaignPayload(
+        name="Pydantic Like Forbidden",
+        targeting={"nested": PydanticLikeTargeting()},
+    )
+
+    with pytest.raises(ValueError) as exc:
+        payload.to_api_dict()
+
+    assert "MetaCampaignPayload" in str(exc.value)
+    assert "$.targeting.nested.interests" in str(exc.value)
+
+
+def test_campaign_response_warns_on_deprecated_api_response_keys(caplog) -> None:
+    caplog.set_level(logging.WARNING)
+
+    response = MetaCampaignResponse.from_error(
+        "create_campaign_error",
+        "legacy echo",
+        api_response={"data": {"instagram_actor_id": "legacy"}},
+    )
+
+    assert response.ok is False
+    assert response.api_response == {"data": {"instagram_actor_id": "legacy"}}
+    assert "deprecated_meta_response_keys_detected" in caplog.text
+    assert "MetaCampaignResponse" in caplog.text
+    assert "$.data.instagram_actor_id" in caplog.text
+
+
+def test_pause_response_warns_on_deprecated_api_response_keys(caplog) -> None:
+    caplog.set_level(logging.WARNING)
+
+    response = MetaPauseResponse.from_error(
+        "camp-123",
+        "pause_campaign_error",
+        "legacy echo",
+        api_response={"data": {"interests": ["legacy"]}},
+    )
+
+    assert response.ok is False
+    assert response.api_response == {"data": {"interests": ["legacy"]}}
+    assert "deprecated_meta_response_keys_detected" in caplog.text
+    assert "MetaPauseResponse" in caplog.text
+    assert "$.data.interests" in caplog.text
