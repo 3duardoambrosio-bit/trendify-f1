@@ -42,3 +42,12 @@ Los artefactos generados NO se versionan (exports/releases, sha256, etc).
 - Full gate before important commits: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/gate_f1.ps1 precommit`
 - Hook mode must print `PYTHON_PATH=...`, `PYTHON_VENV_DETECTED=1`, and `HOOK_TEST_TARGETS_FOUND>=5`
 - Do not use `--no-verify` unless an audit explicitly authorizes it and the follow-up records why.
+
+## Operational readiness gates
+
+Before any live API activation, real ad spend, real customer-facing launch, or real secrets handling, consult and complete:
+
+- `docs/operational_readiness_checklist.md`
+- `docs/go_no_go_template.md`
+
+A GO decision is invalid without explicit human sign-off, numeric capital cap, numeric stop-loss, first SKU selected, kill switch verified, and zero exposed secrets.
