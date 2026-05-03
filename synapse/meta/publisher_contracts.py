@@ -95,16 +95,47 @@ def reject_forbidden_meta_api_keys(payload: Mapping[str, Any], *, context: str) 
 
 
 
+def _emit_meta_response_drift_alert(*, context: str, paths: list[str]) -> None:
+    """Emit a best-effort alert for deprecated Meta response drift.
+
+    The alert intentionally includes only the response class context and forbidden key
+    paths. It must never include raw response values.
+    """
+    if not paths:
+        return
+
+    joined_paths = ",".join(paths)
+
+    try:
+        from synapse.infra.alert_wiring import get_alert_sink
+
+        sink = get_alert_sink()
+        sink.send(
+            (
+                "META_RESPONSE_DRIFT_DETECTED "
+                f"error_code=meta_response_drift_detected "
+                f"context={context} "
+                f"paths={joined_paths}"
+            ),
+            level="WARN",
+            dedupe_key=f"meta_response_drift:{context}:{joined_paths}",
+        )
+    except Exception:
+        pass
+
+
 def _warn_on_deprecated_meta_response_keys(api_response: Optional[Mapping[str, Any]], *, context: str) -> None:
     forbidden = sorted(set(_collect_forbidden_meta_api_key_paths(api_response)))
     if not forbidden:
         return
+
+    joined_paths = ", ".join(forbidden)
     _logger.warning(
         "deprecated_meta_response_keys_detected context=%s paths=%s",
         context,
-        ", ".join(forbidden),
+        joined_paths,
     )
-
+    _emit_meta_response_drift_alert(context=context, paths=forbidden)
 
 def _copy_mapping(value: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
     if value is None:

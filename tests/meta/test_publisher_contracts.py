@@ -219,3 +219,65 @@ def test_pause_response_warns_on_deprecated_api_response_keys(caplog) -> None:
     assert "deprecated_meta_response_keys_detected" in caplog.text
     assert "MetaPauseResponse" in caplog.text
     assert "$.data.interests" in caplog.text
+
+def test_campaign_response_drift_emits_alert_sink_without_values(monkeypatch) -> None:
+    from synapse.infra import alert_wiring
+
+    calls = []
+
+    class CaptureSink:
+        def send(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    monkeypatch.setattr(alert_wiring, "get_alert_sink", lambda: CaptureSink())
+
+    response = MetaCampaignResponse.from_error(
+        "create_campaign_error",
+        "legacy echo",
+        api_response={"data": {"instagram_actor_id": "legacy"}},
+    )
+
+    assert response.ok is False
+    assert len(calls) == 1
+
+    text, kwargs = calls[0]
+    assert "META_RESPONSE_DRIFT_DETECTED" in text
+    assert "error_code=meta_response_drift_detected" in text
+    assert "MetaCampaignResponse" in text
+    assert "$.data.instagram_actor_id" in text
+    assert "legacy" not in text
+
+    assert kwargs["level"] == "WARN"
+    assert kwargs["dedupe_key"].startswith("meta_response_drift:MetaCampaignResponse:")
+
+
+def test_pause_response_drift_emits_alert_sink_without_values(monkeypatch) -> None:
+    from synapse.infra import alert_wiring
+
+    calls = []
+
+    class CaptureSink:
+        def send(self, text, **kwargs):
+            calls.append((text, kwargs))
+
+    monkeypatch.setattr(alert_wiring, "get_alert_sink", lambda: CaptureSink())
+
+    response = MetaPauseResponse.from_error(
+        "camp-123",
+        "pause_campaign_error",
+        "legacy echo",
+        api_response={"data": {"interests": ["legacy"]}},
+    )
+
+    assert response.ok is False
+    assert len(calls) == 1
+
+    text, kwargs = calls[0]
+    assert "META_RESPONSE_DRIFT_DETECTED" in text
+    assert "error_code=meta_response_drift_detected" in text
+    assert "MetaPauseResponse" in text
+    assert "$.data.interests" in text
+    assert "legacy" not in text
+
+    assert kwargs["level"] == "WARN"
+    assert kwargs["dedupe_key"].startswith("meta_response_drift:MetaPauseResponse:")
