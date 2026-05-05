@@ -94,3 +94,28 @@ def test_system_kill_switch_blocks_pre_spend_in_under_one_second_and_persists(tm
     snapshot_text = str(reloaded.snapshot())
     assert "a8_r19_e2e_contract" in snapshot_text
     assert "test_kill_switch_e2e_v1" in snapshot_text
+
+
+def test_inactive_system_kill_switch_allows_pre_spend_in_under_one_second(tmp_path) -> None:
+    state_file = tmp_path / "inactive_killswitch_state.json"
+    kill_switch = KillSwitch(state_file=state_file)
+
+    assert not kill_switch.is_active(KillSwitchLevel.SYSTEM)
+
+    started = perf_counter()
+    result = check_safety_before_spend(
+        Decimal("1.00"),
+        "a8-r21-kill-switch-inactive-allows",
+        killswitch=kill_switch,
+    )
+    elapsed = perf_counter() - started
+
+    assert elapsed < 1.0
+    assert _result_allows_spend(result)
+
+    result_text = _result_text(result)
+    assert "KILLSWITCH_ACTIVE" not in result_text
+    assert "kill switch is on" not in result_text.lower()
+
+    reloaded = KillSwitch(state_file=state_file)
+    assert not reloaded.is_active(KillSwitchLevel.SYSTEM)
