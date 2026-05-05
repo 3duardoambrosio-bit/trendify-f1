@@ -22,7 +22,7 @@ A go decision is invalid if any required item is no-check.
 | 08 | First SKU is selected with margin, supplier, shipping, refund, and stock assumptions documented | human | no-check | SKU decision sheet/document reference | yes |
 | 09 | Creative assets for first campaign are produced and reviewed | human | no-check | Asset folder/reference and approval status | yes |
 | 10 | Initial capital cap and per-campaign risk cap are declared before any spend | human | no-check | Numeric budget cap and stop-loss value | yes |
-| 11 | Kill switch / pause path is verified before live campaign execution | system | no-check | Test or documented manual procedure | yes |
+| 11 | Kill switch / pause path is verified before live campaign execution | system | no-check | Executable evidence required: tests/p0/test_kill_switch_e2e_v1.py PASS; documented manual procedure alone is insufficient | yes |
 | 12 | Monitoring runbook exists for first live window | system | no-check | Runbook reference with metrics and response owner | yes |
 | 13 | Customer support path is defined before customer-facing traffic | human | no-check | Email/DM/channel and response SLA | yes |
 | 14 | Refund / cancellation process is documented | human | no-check | Refund workflow reference | yes |
@@ -32,7 +32,7 @@ A go decision is invalid if any required item is no-check.
 
 - required checklist items marked check: 15
 - required checklist items marked no-check: 0
-- required checklist items marked deferred: 0 unless explicitly accepted
+- required checklist items marked deferred: 0 unless explicitly accepted with compensating control and owner
 - real secrets pasted in chat/docs: 0
 - live spend before signed go/no-go: 0
 - human sign-off present: 1

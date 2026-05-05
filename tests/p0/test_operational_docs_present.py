@@ -20,6 +20,8 @@ def test_operational_readiness_checklist_exists_and_has_required_gates() -> None
     assert "no live API" in text
     assert "no real ad spend" in text
     assert "real secrets pasted in chat/docs: 0" in text
+    assert "tests/p0/test_kill_switch_e2e_v1.py PASS" in text
+    assert "documented manual procedure alone is insufficient" in text
 
     required_items = [
         "Facebook Business Page",
@@ -63,6 +65,9 @@ def test_go_no_go_template_exists_and_has_numeric_decision_fields() -> None:
         "Stop-loss condition",
         "First SKU",
         "Human signature",
+        "Signature timestamp",
+        "GO valid until",
+        "Template HEAD at signature",
         "GO",
         "NO-GO",
         "HOLD",
@@ -75,6 +80,8 @@ def test_go_no_go_template_exists_and_has_numeric_decision_fields() -> None:
     assert "Decision owner | human" in text
     assert "no real secrets" in text
     assert "A GO is invalid unless" in text
+    assert "GO validity is at most 72 hours from signature" in text
+    assert "kill switch is verified by executable evidence" in text
     assert text.count("TODO") >= 20
 
 
