@@ -51,3 +51,12 @@ Before any live API activation, real ad spend, real customer-facing launch, or r
 - `docs/go_no_go_template.md`
 
 A GO decision is invalid without explicit human sign-off, numeric capital cap, numeric stop-loss, first SKU selected, kill switch verified, and zero exposed secrets.
+
+## Local control surface
+
+Before public web, Shopify execution, Meta live API, real spend, or secrets, use the local-only control surface contract:
+
+- docs/local_control_surface_contract.md
+- scripts/synapse_control_surface.py
+
+The control surface must remain whitelist-only, no-live, no-spend, no-secrets, and Shopify-paused until operational go/no-go gates are completed.
