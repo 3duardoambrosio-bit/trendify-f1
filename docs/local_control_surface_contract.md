@@ -1,4 +1,4 @@
-﻿# Local Control Surface Contract
+# Local Control Surface Contract
 
 Status: local-only pre-web surface
 Scope: SYNAPSE / Trendify Fase 1
