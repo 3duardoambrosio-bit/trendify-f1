@@ -94,3 +94,15 @@ Deferred until later gates:
 - API tokens
 - webhook creation
 - domain purchase
+
+## Functional read-only commands
+
+The launcher may evolve beyond help-only commands only when the new command remains local, read-only, non-secret, no-live, no-spend, and Shopify-paused.
+
+Current functional read-only command ids:
+
+- local_health
+
+`local_health` emits a JSON health snapshot for the operator. It may inspect local repository status and control-surface boundaries. It must not perform network calls, spend actions, token reads, Shopify actions, Meta live actions, or filesystem writes.
+
+Additional functional commands must be added one at a time with targeted P0 tests and full-suite validation.

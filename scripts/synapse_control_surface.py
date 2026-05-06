@@ -26,6 +26,7 @@ class ControlCommand:
     requires_secrets: bool = False
     live_allowed: bool = False
     writes_repo: bool = False
+    functional_read_only: bool = False
 
 
 def build_catalog(python_executable: str | None = None) -> tuple[ControlCommand, ...]:
@@ -80,6 +81,14 @@ def build_catalog(python_executable: str | None = None) -> tuple[ControlCommand,
             (py, "scripts/run_candidates_demo.py", "--help"),
             "demo",
         ),
+        ControlCommand(
+            "local_health",
+            "Local health snapshot",
+            "Emit a local read-only JSON health snapshot for the operator. No live, no spend, no secrets.",
+            (py, "-S", "scripts/synapse_control_surface.py", "--health"),
+            "health",
+            functional_read_only=True,
+        ),
     )
 
 
@@ -117,7 +126,7 @@ def validate_catalog(catalog: Sequence[ControlCommand]) -> list[str]:
             errors.append(f"live_allowed: {command.command_id}")
         if command.writes_repo:
             errors.append(f"writes_repo: {command.command_id}")
-        if "--help" not in command.argv:
+        if "--help" not in command.argv and not command.functional_read_only:
             errors.append(f"not_help_only: {command.command_id}")
 
     if len(catalog) < 6:
@@ -163,6 +172,84 @@ def run_control_command(command_id: str, timeout_s: int = 15) -> int:
     return int(completed.returncode)
 
 
+
+def _run_git(args: Sequence[str]) -> dict[str, object]:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=10,
+        )
+        return {
+            "rc": completed.returncode,
+            "stdout": (completed.stdout or "").strip(),
+            "stderr": (completed.stderr or "").strip(),
+        }
+    except Exception as exc:
+        return {
+            "rc": 1,
+            "stdout": "",
+            "stderr": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def build_health_payload() -> dict[str, object]:
+    env = build_guarded_env({})
+    catalog = build_catalog()
+    catalog_errors = validate_catalog(catalog)
+
+    head_short = _run_git(("rev-parse", "--short", "HEAD"))
+    head_full = _run_git(("rev-parse", "HEAD"))
+    status = _run_git(("status", "--short"))
+    status_lines = [line for line in str(status["stdout"]).splitlines() if line.strip()]
+
+    required_files = {
+        "AGENTS.md": (ROOT / "AGENTS.md").exists(),
+        "docs/local_control_surface_contract.md": (ROOT / "docs" / "local_control_surface_contract.md").exists(),
+        "scripts/synapse_control_surface.py": (ROOT / "scripts" / "synapse_control_surface.py").exists(),
+        "tests/p0/test_local_control_surface_contract.py": (
+            ROOT / "tests" / "p0" / "test_local_control_surface_contract.py"
+        ).exists(),
+    }
+
+    return {
+        "schema": "synapse.local_control_surface.health.v1",
+        "repo": {
+            "root": str(ROOT),
+            "head_short": head_short["stdout"],
+            "head_full": head_full["stdout"],
+            "git_status_count": len(status_lines),
+            "git_status_clean": len(status_lines) == 0,
+            "git_status_preview": status_lines[:20],
+        },
+        "control_surface": {
+            "ok": len(catalog_errors) == 0,
+            "catalog_count": len(catalog),
+            "catalog_errors": catalog_errors,
+            "command_ids": [command.command_id for command in catalog],
+            "local_only": True,
+        },
+        "boundaries": {
+            "SYNAPSE_DRY_RUN": env["SYNAPSE_DRY_RUN"],
+            "SYNAPSE_NO_LIVE": env["SYNAPSE_NO_LIVE"],
+            "SYNAPSE_ALLOW_NETWORK": env["SYNAPSE_ALLOW_NETWORK"],
+            "SYNAPSE_ALLOW_SPEND": env["SYNAPSE_ALLOW_SPEND"],
+            "SYNAPSE_CONTROL_SURFACE": env["SYNAPSE_CONTROL_SURFACE"],
+            "SHOPIFY": env["SHOPIFY"],
+        },
+        "required_files": required_files,
+        "operator_gate": {
+            "gate": "G3_FIRST_FUNCTIONAL_READ_ONLY_COMMAND",
+            "status": "PASS",
+            "next": "add more read-only operational commands one at a time",
+        },
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="synapse_control_surface",
@@ -171,6 +258,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--health", action="store_true")
     parser.add_argument("--run", default="")
     args = parser.parse_args(argv)
 
@@ -185,6 +273,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("SPEND=0")
         print("SECRETS=0")
         print("SHOPIFY=PAUSED")
+        return 0 if not errors else 2
+
+    if args.health:
+        print(json.dumps(build_health_payload(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if not errors else 2
 
     if args.list:

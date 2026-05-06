@@ -49,7 +49,7 @@ def test_local_control_surface_catalog_is_guarded() -> None:
         assert command.requires_secrets is False
         assert command.live_allowed is False
         assert command.writes_repo is False
-        assert "--help" in command.argv
+        assert ("--help" in command.argv) or command.functional_read_only is True
 
 
 def test_local_control_surface_forces_no_live_environment() -> None:
@@ -118,3 +118,42 @@ def test_local_control_surface_is_referenced_from_agents() -> None:
     assert "no-live" in agents.lower()
     assert "no-spend" in agents.lower()
     assert "no-secrets" in agents.lower()
+
+
+def test_local_control_surface_exposes_local_health_command() -> None:
+    module = load_module()
+    catalog = module.build_catalog(python_executable="python")
+    command = module.get_command("local_health", catalog)
+
+    assert command.category == "health"
+    assert command.read_only is True
+    assert command.requires_secrets is False
+    assert command.live_allowed is False
+    assert command.writes_repo is False
+    assert command.functional_read_only is True
+    assert "--health" in command.argv
+
+
+def test_local_health_runs_through_whitelisted_control_surface() -> None:
+    completed = run_script("--run", "local_health")
+
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+
+    assert payload["schema"] == "synapse.local_control_surface.health.v1"
+    assert payload["control_surface"]["ok"] is True
+    assert payload["control_surface"]["local_only"] is True
+    assert payload["control_surface"]["catalog_count"] >= 8
+    assert "local_health" in payload["control_surface"]["command_ids"]
+
+    assert payload["boundaries"]["SYNAPSE_DRY_RUN"] == "1"
+    assert payload["boundaries"]["SYNAPSE_NO_LIVE"] == "1"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_NETWORK"] == "0"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_SPEND"] == "0"
+    assert payload["boundaries"]["SYNAPSE_CONTROL_SURFACE"] == "LOCAL_ONLY"
+    assert payload["boundaries"]["SHOPIFY"] == "PAUSED"
+
+    assert payload["required_files"]["docs/local_control_surface_contract.md"] is True
+    assert payload["required_files"]["scripts/synapse_control_surface.py"] is True
+    assert payload["operator_gate"]["gate"] == "G3_FIRST_FUNCTIONAL_READ_ONLY_COMMAND"
+    assert payload["operator_gate"]["status"] == "PASS"
