@@ -97,6 +97,14 @@ def build_catalog(python_executable: str | None = None) -> tuple[ControlCommand,
             "health",
             functional_read_only=True,
         ),
+        ControlCommand(
+            "local_safety_status",
+            "Local safety status",
+            "Emit local read-only safety gate status. No live, no spend, no secrets.",
+            (py, "-S", "scripts/synapse_control_surface.py", "--safety-status"),
+            "health",
+            functional_read_only=True,
+        ),
     )
 
 
@@ -354,6 +362,179 @@ def _run_local_recent_decisions() -> int:
     return 0
 
 
+
+
+def _control_surface_bool(value: object, default: bool = False) -> bool:
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _local_source_record(path: str, role: str) -> dict[str, object]:
+    local_path = Path(path)
+    return {
+        "path": path.replace("\\", "/"),
+        "role": role,
+        "exists": local_path.exists(),
+    }
+
+
+def _load_kill_switch_snapshot() -> dict[str, object]:
+    candidate_paths = [
+        "data/safety/killswitch.json",
+        "data/safety/kill_switch.json",
+        "data/runtime/killswitch.json",
+        "data/runtime/kill_switch.json",
+        ".synapse/killswitch.json",
+        ".synapse/kill_switch.json",
+    ]
+
+    checked = []
+    errors = []
+
+    for candidate in candidate_paths:
+        path = Path(candidate)
+        checked.append(candidate.replace("\\", "/"))
+        if not path.exists():
+            continue
+
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            return {
+                "state": "corrupt_fail_closed",
+                "active": True,
+                "fail_closed": True,
+                "source": candidate.replace("\\", "/"),
+                "source_exists": True,
+                "checked_sources": checked,
+                "errors": ["KILL_SWITCH_STATE_INVALID_JSON"],
+            }
+        except OSError as exc:
+            return {
+                "state": "read_error_fail_closed",
+                "active": True,
+                "fail_closed": True,
+                "source": candidate.replace("\\", "/"),
+                "source_exists": True,
+                "checked_sources": checked,
+                "errors": [f"KILL_SWITCH_STATE_READ_ERROR:{exc.__class__.__name__}"],
+            }
+
+        if not isinstance(payload, dict):
+            return {
+                "state": "invalid_shape_fail_closed",
+                "active": True,
+                "fail_closed": True,
+                "source": candidate.replace("\\", "/"),
+                "source_exists": True,
+                "checked_sources": checked,
+                "errors": ["KILL_SWITCH_STATE_NON_OBJECT"],
+            }
+
+        active = _control_surface_bool(
+            payload.get("active", payload.get("enabled", payload.get("tripped"))),
+            False,
+        )
+
+        return {
+            "state": "active" if active else "inactive",
+            "active": active,
+            "fail_closed": False,
+            "source": candidate.replace("\\", "/"),
+            "source_exists": True,
+            "checked_sources": checked,
+            "level": payload.get("level"),
+            "reason": payload.get("reason"),
+            "errors": errors,
+        }
+
+    return {
+        "state": "no_state_file",
+        "active": False,
+        "fail_closed": False,
+        "source": None,
+        "source_exists": False,
+        "checked_sources": checked,
+        "errors": errors,
+    }
+
+
+def _load_local_safety_status() -> dict[str, object]:
+    guarded_env = build_guarded_env()
+
+    dry_run_effective = _control_surface_bool(guarded_env.get("SYNAPSE_DRY_RUN"), True)
+    no_live = _control_surface_bool(guarded_env.get("SYNAPSE_NO_LIVE"), True)
+    network_allowed = _control_surface_bool(guarded_env.get("SYNAPSE_ALLOW_NETWORK"), False)
+    spend_allowed = _control_surface_bool(guarded_env.get("SYNAPSE_ALLOW_SPEND"), False)
+
+    sources = [
+        _local_source_record("config/feature_flags.py", "feature_flags"),
+        _local_source_record("infra/network_guard.py", "network_guard"),
+        _local_source_record("synapse/infra/dry_run.py", "dry_run"),
+        _local_source_record("synapse/safety/killswitch.py", "kill_switch"),
+        _local_source_record("synapse/infra/circuit_breaker.py", "circuit_breaker"),
+        _local_source_record("synapse/safety/gate.py", "safety_gate"),
+        _local_source_record("synapse/safety/limits.py", "risk_limits"),
+        _local_source_record("ops/safety_middleware.py", "safety_middleware"),
+        _local_source_record("ops/spend_gateway_v1.py", "spend_gateway"),
+        _local_source_record("ops/capital_shield.py", "capital_shield_v1"),
+        _local_source_record("ops/capital_shield_v2.py", "capital_shield_v2"),
+        _local_source_record("synapse/meta/safe_client.py", "meta_safe_client"),
+        _local_source_record("synapse/meta/publisher_contracts.py", "publisher_contracts"),
+    ]
+
+    source_map = {str(item["role"]): bool(item["exists"]) for item in sources}
+
+    return {
+        "command_id": "local_safety_status",
+        "local_only": True,
+        "read_only": True,
+        "live_allowed": not no_live,
+        "network_allowed": network_allowed,
+        "spend_allowed": spend_allowed,
+        "dry_run_effective": dry_run_effective,
+        "shopify": guarded_env.get("SHOPIFY", "PAUSED"),
+        "boundaries": {
+            "SHOPIFY": guarded_env.get("SHOPIFY", "PAUSED"),
+            "SYNAPSE_ALLOW_NETWORK": guarded_env.get("SYNAPSE_ALLOW_NETWORK", "0"),
+            "SYNAPSE_ALLOW_SPEND": guarded_env.get("SYNAPSE_ALLOW_SPEND", "0"),
+            "SYNAPSE_CONTROL_SURFACE": guarded_env.get("SYNAPSE_CONTROL_SURFACE", "LOCAL_ONLY"),
+            "SYNAPSE_DRY_RUN": guarded_env.get("SYNAPSE_DRY_RUN", "1"),
+            "SYNAPSE_NO_LIVE": guarded_env.get("SYNAPSE_NO_LIVE", "1"),
+        },
+        "kill_switch": _load_kill_switch_snapshot(),
+        "capital_shield": {
+            "source_exists": source_map.get("capital_shield_v1", False) or source_map.get("capital_shield_v2", False),
+            "v1_source_exists": source_map.get("capital_shield_v1", False),
+            "v2_source_exists": source_map.get("capital_shield_v2", False),
+            "spend_gateway_source_exists": source_map.get("spend_gateway", False),
+        },
+        "safety_modules": {
+            "network_guard_source_exists": source_map.get("network_guard", False),
+            "dry_run_source_exists": source_map.get("dry_run", False),
+            "kill_switch_source_exists": source_map.get("kill_switch", False),
+            "circuit_breaker_source_exists": source_map.get("circuit_breaker", False),
+            "safety_gate_source_exists": source_map.get("safety_gate", False),
+            "risk_limits_source_exists": source_map.get("risk_limits", False),
+            "safety_middleware_source_exists": source_map.get("safety_middleware", False),
+            "meta_safe_client_source_exists": source_map.get("meta_safe_client", False),
+            "publisher_contracts_source_exists": source_map.get("publisher_contracts", False),
+        },
+        "sources": sources,
+        "errors": [],
+    }
+
+
+def _run_local_safety_status() -> int:
+    print(json.dumps(_load_local_safety_status(), sort_keys=True, ensure_ascii=False))
+    return 0
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="synapse_control_surface",
@@ -364,6 +545,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--health", action="store_true")
     parser.add_argument("--recent-decisions", action="store_true")
+    parser.add_argument("--safety-status", action="store_true")
     parser.add_argument("--run", default="")
     args = parser.parse_args(argv)
 
@@ -391,6 +573,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         return _run_local_recent_decisions()
 
+
+    if args.safety_status:
+        if errors:
+            for error in errors:
+                print(f"CATALOG_ERROR={error}")
+            return 2
+        return _run_local_safety_status()
 
     if args.list:
         for command in catalog:

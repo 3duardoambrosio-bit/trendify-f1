@@ -123,3 +123,38 @@ It reads the local event/decision ledger from `data/ledger/events.ndjson` and em
 - `errors`
 
 It must not open network access, spend money, mutate Shopify, mutate Dropi, mutate Meta, or bypass local-only boundaries.
+
+
+## local_safety_status
+
+`local_safety_status` is an operational read-only control surface command.
+
+It emits a local JSON snapshot of safety-related execution boundaries and local safety module availability.
+
+It must not:
+
+- open network access
+- spend money
+- mutate Shopify
+- mutate Dropi
+- mutate Meta
+- read secrets
+- write state
+- bypass local-only boundaries
+
+Expected JSON fields include:
+
+- `command_id`
+- `local_only`
+- `read_only`
+- `live_allowed`
+- `network_allowed`
+- `spend_allowed`
+- `dry_run_effective`
+- `shopify`
+- `boundaries`
+- `kill_switch`
+- `capital_shield`
+- `safety_modules`
+- `sources`
+- `errors`

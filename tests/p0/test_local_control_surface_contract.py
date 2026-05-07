@@ -195,3 +195,57 @@ def test_local_recent_decisions_runs_read_only_json() -> None:
     assert isinstance(payload["count"], int)
     assert isinstance(payload["decisions"], list)
     assert isinstance(payload["errors"], list)
+
+
+
+def test_local_control_surface_exposes_local_safety_status_command() -> None:
+    result = run_control_surface("--json")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    commands = payload if isinstance(payload, list) else payload.get("commands", [])
+    command_by_id = {
+        item.get("id") or item.get("command_id") or item.get("name"): item
+        for item in commands
+    }
+    assert "local_safety_status" in command_by_id
+    assert command_by_id["local_safety_status"]["functional_read_only"] is True
+    assert command_by_id["local_safety_status"]["category"] == "health"
+
+
+def test_local_safety_status_runs_read_only_json() -> None:
+    result = run_control_surface("--run", "local_safety_status")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["command_id"] == "local_safety_status"
+    assert payload["local_only"] is True
+    assert payload["read_only"] is True
+    assert payload["live_allowed"] is False
+    assert payload["network_allowed"] is False
+    assert payload["spend_allowed"] is False
+    assert payload["dry_run_effective"] is True
+    assert payload["shopify"] == "PAUSED"
+    assert payload["boundaries"]["SYNAPSE_CONTROL_SURFACE"] == "LOCAL_ONLY"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_NETWORK"] == "0"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_SPEND"] == "0"
+    assert payload["boundaries"]["SYNAPSE_DRY_RUN"] == "1"
+    assert payload["boundaries"]["SYNAPSE_NO_LIVE"] == "1"
+    assert isinstance(payload["kill_switch"], dict)
+    assert isinstance(payload["capital_shield"], dict)
+    assert isinstance(payload["safety_modules"], dict)
+    assert isinstance(payload["sources"], list)
+    assert isinstance(payload["errors"], list)
+
+
+def test_local_safety_status_direct_flag_matches_run_shape() -> None:
+    direct = run_control_surface("--safety-status")
+    via_run = run_control_surface("--run", "local_safety_status")
+    assert direct.returncode == 0
+    assert via_run.returncode == 0
+    direct_payload = json.loads(direct.stdout)
+    via_run_payload = json.loads(via_run.stdout)
+    assert direct_payload["command_id"] == "local_safety_status"
+    assert via_run_payload["command_id"] == "local_safety_status"
+    assert direct_payload["boundaries"] == via_run_payload["boundaries"]
+    assert direct_payload["live_allowed"] is False
+    assert direct_payload["network_allowed"] is False
+    assert direct_payload["spend_allowed"] is False
