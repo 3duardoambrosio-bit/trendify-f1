@@ -89,6 +89,14 @@ def build_catalog(python_executable: str | None = None) -> tuple[ControlCommand,
             "health",
             functional_read_only=True,
         ),
+        ControlCommand(
+            "local_recent_decisions",
+            "Local recent decisions",
+            "Emit recent local decision/event ledger entries as JSON. No live, no spend, no secrets.",
+            (py, "-S", "scripts/synapse_control_surface.py", "--recent-decisions"),
+            "health",
+            functional_read_only=True,
+        ),
     )
 
 
@@ -250,6 +258,102 @@ def build_health_payload() -> dict[str, object]:
     }
 
 
+def _load_local_recent_decisions(limit: int = 5) -> dict:
+    """Read recent local decision/event ledger entries without network, spend, or live writes."""
+    ledger_path = Path("data/ledger/events.ndjson")
+    entries = []
+    errors = []
+
+    if limit < 1:
+        limit = 1
+    if limit > 50:
+        limit = 50
+
+    if not ledger_path.exists():
+        return {
+            "command_id": "local_recent_decisions",
+            "source": str(ledger_path).replace("\\", "/"),
+            "source_exists": False,
+            "limit": limit,
+            "count": 0,
+            "decisions": [],
+            "errors": [],
+        }
+
+    try:
+        raw_lines = ledger_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return {
+            "command_id": "local_recent_decisions",
+            "source": str(ledger_path).replace("\\", "/"),
+            "source_exists": True,
+            "limit": limit,
+            "count": 0,
+            "decisions": [],
+            "errors": [f"LEDGER_READ_ERROR:{exc.__class__.__name__}"],
+        }
+
+    for line_no, line in enumerate(raw_lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            errors.append(f"INVALID_JSON_LINE:{line_no}")
+            continue
+
+        if not isinstance(payload, dict):
+            errors.append(f"NON_OBJECT_LINE:{line_no}")
+            continue
+
+        event_type = str(
+            payload.get("event_type")
+            or payload.get("type")
+            or payload.get("kind")
+            or payload.get("decision_type")
+            or "unknown"
+        )
+
+        looks_like_decision = (
+            "decision" in event_type.lower()
+            or "gate" in event_type.lower()
+            or "route" in event_type.lower()
+            or "status" in payload
+            or "decision" in payload
+        )
+
+        if not looks_like_decision:
+            continue
+
+        entries.append(
+            {
+                "line": line_no,
+                "event_type": event_type,
+                "status": payload.get("status"),
+                "decision": payload.get("decision"),
+                "reason": payload.get("reason"),
+                "timestamp": payload.get("timestamp") or payload.get("ts") or payload.get("created_at"),
+            }
+        )
+
+    recent = entries[-limit:]
+    return {
+        "command_id": "local_recent_decisions",
+        "source": str(ledger_path).replace("\\", "/"),
+        "source_exists": True,
+        "limit": limit,
+        "count": len(recent),
+        "decisions": recent,
+        "errors": errors[-10:],
+    }
+
+
+def _run_local_recent_decisions() -> int:
+    print(json.dumps(_load_local_recent_decisions(), sort_keys=True, ensure_ascii=False))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="synapse_control_surface",
@@ -259,6 +363,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--health", action="store_true")
+    parser.add_argument("--recent-decisions", action="store_true")
     parser.add_argument("--run", default="")
     args = parser.parse_args(argv)
 
@@ -278,6 +383,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.health:
         print(json.dumps(build_health_payload(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if not errors else 2
+
+    if args.recent_decisions:
+        if errors:
+            for error in errors:
+                print(f"CATALOG_ERROR={error}")
+            return 2
+        return _run_local_recent_decisions()
+
 
     if args.list:
         for command in catalog:

@@ -35,6 +35,20 @@ def run_script(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+
+
+
+def run_control_surface(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "scripts/synapse_control_surface.py", *args],
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+
 def test_local_control_surface_catalog_is_guarded() -> None:
     module = load_module()
     catalog = module.build_catalog(python_executable="python")
@@ -157,3 +171,27 @@ def test_local_health_runs_through_whitelisted_control_surface() -> None:
     assert payload["required_files"]["scripts/synapse_control_surface.py"] is True
     assert payload["operator_gate"]["gate"] == "G3_FIRST_FUNCTIONAL_READ_ONLY_COMMAND"
     assert payload["operator_gate"]["status"] == "PASS"
+
+
+
+def test_local_control_surface_exposes_local_recent_decisions_command() -> None:
+    result = run_control_surface("--json")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    if isinstance(payload, list):
+        command_ids = {item.get("id") or item.get("command_id") or item.get("name") for item in payload}
+    else:
+        command_ids = {item.get("id") or item.get("command_id") or item.get("name") for item in payload.get("commands", [])}
+    assert "local_recent_decisions" in command_ids
+
+
+def test_local_recent_decisions_runs_read_only_json() -> None:
+    result = run_control_surface("--run", "local_recent_decisions")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["command_id"] == "local_recent_decisions"
+    assert payload["source"] == "data/ledger/events.ndjson"
+    assert isinstance(payload["source_exists"], bool)
+    assert isinstance(payload["count"], int)
+    assert isinstance(payload["decisions"], list)
+    assert isinstance(payload["errors"], list)

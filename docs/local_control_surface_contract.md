@@ -106,3 +106,20 @@ Current functional read-only command ids:
 `local_health` emits a JSON health snapshot for the operator. It may inspect local repository status and control-surface boundaries. It must not perform network calls, spend actions, token reads, Shopify actions, Meta live actions, or filesystem writes.
 
 Additional functional commands must be added one at a time with targeted P0 tests and full-suite validation.
+
+
+## local_recent_decisions
+
+`local_recent_decisions` is an operational read-only control surface command.
+
+It reads the local event/decision ledger from `data/ledger/events.ndjson` and emits JSON with:
+
+- `command_id`
+- `source`
+- `source_exists`
+- `limit`
+- `count`
+- `decisions`
+- `errors`
+
+It must not open network access, spend money, mutate Shopify, mutate Dropi, mutate Meta, or bypass local-only boundaries.
