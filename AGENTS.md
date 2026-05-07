@@ -1,34 +1,34 @@
 # AGENTS.md  Trendify F1 / SYNAPSE
-Regla: ACERO, NO HUMO. Cambios pequeños, verificables, y con comandos reproducibles.
+Regla: ACERO, NO HUMO. Cambios pequeÃ±os, verificables, y con comandos reproducibles.
 
 ## Objetivo
 Este repo es un sistema operativo para e-commerce (SYNAPSE/Trendify F1).
 Los artefactos generados NO se versionan (exports/releases, sha256, etc).
 
-## Comandos de verificación (los 3 sagrados)
+## Comandos de verificaciÃ³n (los 3 sagrados)
 - python -m synapse.infra.doctor
 - pytest -q
 - git status
 
-## Políticas de repo
+## PolÃ­ticas de repo
 - No versionar outputs generados:
   - exports/releases/**
   - exports/**/*.sha256
-  - exports/** (salvo templates explícitos)
+  - exports/** (salvo templates explÃ­citos)
 - No tocar secretos:
   - Nunca commitear .env, llaves, credenciales.
   - Usar exports/secrets_template.env como plantilla.
 
-## Qué sí es source of truth
-- Código: synapse/**
-- Config / data determinística: data/**
+## QuÃ© sÃ­ es source of truth
+- CÃ³digo: synapse/**
+- Config / data determinÃ­stica: data/**
 - Tests: tests/**
 
-## Qué es output
+## QuÃ© es output
 - exports/** (artefactos generados)
-- data/run, data/ledger, evidence, backups, etc (según .gitignore)
+- data/run, data/ledger, evidence, backups, etc (segÃºn .gitignore)
 
-## Estándar de cambios
+## EstÃ¡ndar de cambios
 - Cada cambio debe dejar el repo pasando doctor + pytest.
 - Si se mueven rutas, actualizar docs y scripts asociados.
 
@@ -60,3 +60,36 @@ Before public web, Shopify execution, Meta live API, real spend, or secrets, use
 - scripts/synapse_control_surface.py
 
 The control surface must remain whitelist-only, no-live, no-spend, no-secrets, and Shopify-paused until operational go/no-go gates are completed.
+
+## A8-R28 Tooling and Evidence Hardening
+
+Canonical F1 tooling rules:
+
+- `scripts/gate_f1.ps1` is the canonical local F1 gate.
+- `scripts/run_pytest_stable.ps1` is the canonical pytest wrapper.
+- `tools/build_full_audit_bundle.ps1` is the canonical full evidence bundle builder.
+- Hook and gate pytest execution must use a stable `--basetemp` under `C:/Temp`.
+- Do not use repo-relative `Temp*` pytest directories.
+- Do not normalize `git commit --no-verify`.
+- If a hook is interrupted by `KeyboardInterrupt`, collect manual validation evidence and fix tooling before adding product scope.
+
+Minimum evidence bundle for a code island:
+
+1. `git_head.txt`
+2. `git_head_full.txt`
+3. `git_last_msg.txt`
+4. `git_status.txt`
+5. `git_show_head_stat.txt`
+6. `git_diff_cached_name_only.txt`
+7. `git_diff_cached_check.txt`
+8. `control_check.stdout.txt`
+9. `control_json.json`
+10. `local_health.json`
+11. `local_recent_decisions.json`
+12. `local_safety_status.json`
+13. `targeted_control_surface.stdout.txt`
+14. `full_suite.stdout.txt`
+15. `hook_smoke.stdout.txt`
+16. `summary.txt`
+
+A full evidence bundle must contain at least 15 primary files and must not rely on summary-only claims.

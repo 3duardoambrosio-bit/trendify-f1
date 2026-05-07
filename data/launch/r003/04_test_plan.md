@@ -1,4 +1,4 @@
-﻿# r003 — Test Plan (Fase 1)
+# r003 — Test Plan (Fase 1)
 
 ## Objetivo
 Validar si puede sostener ROAS >= 1.0 con spend suficiente.

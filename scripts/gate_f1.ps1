@@ -3,6 +3,109 @@ param(
 )
 
 Set-StrictMode -Version Latest
+# A8-R28_STABLE_PYTEST_BASETEMP_BEGIN
+# Keep pytest temporary cleanup outside the repository on Windows.
+# This prevents repo-relative Temp* folders and reduces pytest cleanup KeyboardInterrupt risk.
+$A8R28PytestBaseTempRoot = "C:\Temp"
+if (-not (Test-Path -LiteralPath $A8R28PytestBaseTempRoot)) {
+  New-Item -ItemType Directory -Path $A8R28PytestBaseTempRoot -Force | Out-Null
+}
+$A8R28PytestBaseTemp = (Join-Path $A8R28PytestBaseTempRoot ("trendify_pytest_{0}_{1}" -f $PID, (Get-Date -Format "yyyyMMdd_HHmmss"))) -replace "\\", "/"
+if ([string]::IsNullOrWhiteSpace($env:PYTEST_ADDOPTS)) {
+  $env:PYTEST_ADDOPTS = "--basetemp=$A8R28PytestBaseTemp"
+} elseif ($env:PYTEST_ADDOPTS -notmatch "(^|\s)--basetemp(=|\s)") {
+  $env:PYTEST_ADDOPTS = "$($env:PYTEST_ADDOPTS) --basetemp=$A8R28PytestBaseTemp"
+}
+Write-Host "PYTEST_BASETEMP_STABLE=1"
+Write-Host "PYTEST_BASETEMP_PATH=$A8R28PytestBaseTemp"
+Write-Host "PYTEST_ADDOPTS_EFFECTIVE=$env:PYTEST_ADDOPTS"
+# A8-R28_STABLE_PYTEST_BASETEMP_END
+
+# A8-R28_GATE_FAIL_HARD_BEGIN
+function Invoke-A8R28CheckedPytest {
+  param(
+    [string]$Label,
+    [string]$PythonExe,
+    [object[]]$Targets
+  )
+
+  $tmpRoot = "C:\Temp"
+  if (-not (Test-Path -LiteralPath $tmpRoot)) {
+    New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
+  }
+
+  $captureStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+  $captureDir = Join-Path $tmpRoot ("trendify_gate_pytest_capture_{0}_{1}_{2}" -f $PID, $Label, $captureStamp)
+  New-Item -ItemType Directory -Path $captureDir -Force | Out-Null
+
+  $stdout = Join-Path $captureDir "$Label.stdout.txt"
+  $stderr = Join-Path $captureDir "$Label.stderr.txt"
+
+  Write-Host "A8R28_PYTEST_LABEL=$Label"
+  Write-Host "A8R28_PYTEST_STDOUT=$stdout"
+  Write-Host "A8R28_PYTEST_STDERR=$stderr"
+
+  & $PythonExe -B -m pytest @($Targets) -q --tb=no > $stdout 2> $stderr
+  $rc = $LASTEXITCODE
+  if ($null -eq $rc) { $rc = 0 }
+
+  [string]$outText = ""
+  [string]$errText = ""
+
+  if (Test-Path $stdout) {
+    $rawOut = Get-Content $stdout -Raw
+    if ($null -ne $rawOut) { $outText = [string]$rawOut }
+  }
+
+  if (Test-Path $stderr) {
+    $rawErr = Get-Content $stderr -Raw
+    if ($null -ne $rawErr) { $errText = [string]$rawErr }
+  }
+
+  $combined = "$outText`n$errText"
+  $keyboardCount = ([regex]::Matches($combined, "KeyboardInterrupt")).Count
+  $tracebackCount = ([regex]::Matches($combined, "Traceback")).Count
+  $failedCount = ([regex]::Matches($combined, "FAILED")).Count
+
+  Write-Host "A8R28_PYTEST_RC=$rc"
+  Write-Host "A8R28_PYTEST_KEYBOARD_INTERRUPT_COUNT=$keyboardCount"
+  Write-Host "A8R28_PYTEST_TRACEBACK_COUNT=$tracebackCount"
+  Write-Host "A8R28_PYTEST_FAILED_TEXT_COUNT=$failedCount"
+
+  Write-Host "A8R28_PYTEST_STDOUT_TAIL_BEGIN"
+  if (Test-Path $stdout) { Get-Content $stdout -Tail 120 }
+  Write-Host "A8R28_PYTEST_STDOUT_TAIL_END"
+
+  if ((Test-Path $stderr) -and ((Get-Item $stderr).Length -gt 0)) {
+    Write-Host "A8R28_PYTEST_STDERR_TAIL_BEGIN"
+    Get-Content $stderr -Tail 120
+    Write-Host "A8R28_PYTEST_STDERR_TAIL_END"
+  }
+
+  if ($keyboardCount -ne 0) {
+    Write-Host "A8R28_GATE_FAIL_HARD_REASON=KeyboardInterrupt"
+    exit 130
+  }
+
+  if ($tracebackCount -ne 0) {
+    Write-Host "A8R28_GATE_FAIL_HARD_REASON=Traceback"
+    exit 1
+  }
+
+  if ($failedCount -ne 0) {
+    Write-Host "A8R28_GATE_FAIL_HARD_REASON=FailedText"
+    exit 1
+  }
+
+  if ($rc -ne 0) {
+    Write-Host "A8R28_GATE_FAIL_HARD_REASON=PytestNonZero"
+    exit $rc
+  }
+
+  return 0
+}
+# A8-R28_GATE_FAIL_HARD_END
+
 $ErrorActionPreference = "Stop"
 
 Write-Host "=== SYNAPSE F1 GATE: START ==="
@@ -156,7 +259,7 @@ if ($Mode -in @("hook","precommit","ops","release")) {
   if ($doctorOverall -notmatch "^GREEN") { Fail 21 ("DOCTOR_OVERALL={0}" -f $doctorOverall) }
 }
 
-# HOOK: rápido, determinista, sin full pytest.
+# HOOK: rÃ¡pido, determinista, sin full pytest.
 # El full gate se ejecuta manualmente antes de commit final en frentes F1.
 if ($Mode -eq "hook") {
   $hookTargets = @(
@@ -168,7 +271,7 @@ if ($Mode -eq "hook") {
   )
 
   "HOOK_TEST_TARGETS_FOUND={0}" -f $hookTargets.Count | Out-Host
-  & $pythonExe -B -m pytest @($hookTargets) -q --tb=no
+  Invoke-A8R28CheckedPytest -Label "gate_pytest_hook_targets" -PythonExe $pythonExe -Targets @($hookTargets)
   $hookPytestExit = $LASTEXITCODE
 
   if ($hookPytestExit -ne 0) { Fail 31 ("HOOK_PYTEST_EXIT={0}" -f $hookPytestExit) }
@@ -185,7 +288,7 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 "TEST_ROOTS_FOUND={0}" -f $existing.Count | Out-Host
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
-& $pythonExe -B -m pytest @($existing) -q --tb=no
+Invoke-A8R28CheckedPytest -Label "gate_pytest_existing_roots" -PythonExe $pythonExe -Targets @($existing)
 $pytestExit = $LASTEXITCODE
 if ($pytestExit -ne 0) { Fail 3 ("PYTEST_EXIT={0}" -f $pytestExit) }
 

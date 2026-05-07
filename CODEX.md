@@ -1,4 +1,4 @@
-﻿# CODEX.md  Onboarding rápido para agentes (Codex / ChatGPT / Claude)
+# CODEX.md  Onboarding rápido para agentes (Codex / ChatGPT / Claude)
 
 ## Objetivo
 Operar en SYNAPSE/Trendify F1 con cambios pequeños, verificables, y reproducibles.

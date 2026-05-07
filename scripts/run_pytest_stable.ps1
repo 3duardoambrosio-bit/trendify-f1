@@ -7,6 +7,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+# A8-R28_STABLE_PYTEST_BASETEMP_BEGIN
+# Keep pytest temporary cleanup outside the repository on Windows.
+# This prevents repo-relative Temp* folders and reduces pytest cleanup KeyboardInterrupt risk.
+$A8R28PytestBaseTempRoot = "C:\Temp"
+if (-not (Test-Path -LiteralPath $A8R28PytestBaseTempRoot)) {
+  New-Item -ItemType Directory -Path $A8R28PytestBaseTempRoot -Force | Out-Null
+}
+$A8R28PytestBaseTemp = (Join-Path $A8R28PytestBaseTempRoot ("trendify_pytest_{0}_{1}" -f $PID, (Get-Date -Format "yyyyMMdd_HHmmss"))) -replace "\\", "/"
+if ([string]::IsNullOrWhiteSpace($env:PYTEST_ADDOPTS)) {
+  $env:PYTEST_ADDOPTS = "--basetemp=$A8R28PytestBaseTemp"
+} elseif ($env:PYTEST_ADDOPTS -notmatch "(^|\s)--basetemp(=|\s)") {
+  $env:PYTEST_ADDOPTS = "$($env:PYTEST_ADDOPTS) --basetemp=$A8R28PytestBaseTemp"
+}
+Write-Host "PYTEST_BASETEMP_STABLE=1"
+Write-Host "PYTEST_BASETEMP_PATH=$A8R28PytestBaseTemp"
+Write-Host "PYTEST_ADDOPTS_EFFECTIVE=$env:PYTEST_ADDOPTS"
+# A8-R28_STABLE_PYTEST_BASETEMP_END
 
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo

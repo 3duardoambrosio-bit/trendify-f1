@@ -1,4 +1,4 @@
-﻿# r003 — Copy Shopify (MX)
+# r003 — Copy Shopify (MX)
 
 ## Título
 Soplador de Aire Eléctrico Recargable “Turbo” — Limpieza Brutal para Teclado, PC y Auto

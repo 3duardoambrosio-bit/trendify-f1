@@ -1,4 +1,4 @@
-﻿# r004 — Barra de Luz Monitor Screenbar LED
+# r004 — Barra de Luz Monitor Screenbar LED
 
 ## DECISIÓN
 BACKUP (posible). Gana con estética + posicionamiento mid-tier.

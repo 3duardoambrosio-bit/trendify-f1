@@ -1,4 +1,4 @@
-﻿# r003 — Creative Pack (TikTok/Reels)
+# r003 — Creative Pack (TikTok/Reels)
 
 ## 15 Hooks MX
 1) Wey, deja de gastar en latas de aire, esto es otro nivel.

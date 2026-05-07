@@ -1,4 +1,4 @@
-﻿# Claims Registry (MVP)
+# Claims Registry (MVP)
 
 Regla: ningún claim numérico en decks públicos/internos sin fuente verificable.
 Si no hay fuente, se marca como "HYPOTHESIS" o se elimina.
