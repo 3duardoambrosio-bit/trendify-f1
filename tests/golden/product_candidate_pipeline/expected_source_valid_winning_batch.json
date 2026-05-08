@@ -1,0 +1,12 @@
+{
+    "golden_id":  "expected_source_valid_winning_batch",
+    "fixture_id":  "a8_r36_valid_winning_batch",
+    "expected_candidate_count":  3,
+    "expected_rejected_rows":  0,
+    "expected_skus":  [
+                          "A8R36-CHAMPION-001",
+                          "A8R36-CONTENDER-002",
+                          "A8R36-CONTENDER-003"
+                      ],
+    "expected_local_only_execution":  true
+}

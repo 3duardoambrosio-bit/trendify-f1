@@ -1,0 +1,29 @@
+{
+    "golden_id":  "expected_manifest_valid_winning_batch",
+    "fixture_id":  "a8_r36_valid_winning_batch",
+    "expected_output_files":  [
+                                  "normalized_candidate_source.json",
+                                  "product_decision_artifact.json",
+                                  "product_candidate_pipeline_manifest.json"
+                              ],
+    "expected_champion_sku":  "A8R36-CHAMPION-001",
+    "expected_manual_selection_used":  false,
+    "expected_manual_champion_provided":  false,
+    "expected_local_only_execution":  true,
+    "expected_network_marker_count":  0,
+    "minimum_required_hash_fields":  2,
+    "resolved_source_flag":  "--input",
+    "resolved_output_flag":  "--output-dir",
+    "resolved_template_name":  "--input + --output-dir",
+    "observed_hash_path_count":  2,
+    "observed_hash_paths":  [
+                                "decision_input_sha256",
+                                "source_sha256"
+                            ],
+    "observed_valid_source_candidates":  3,
+    "observed_valid_rejected_rows":  0,
+    "observed_mixed_source_candidates":  2,
+    "observed_mixed_rejected_rows":  2,
+    "observed_empty_source_rc":  2,
+    "observed_empty_pipeline_rc":  2
+}

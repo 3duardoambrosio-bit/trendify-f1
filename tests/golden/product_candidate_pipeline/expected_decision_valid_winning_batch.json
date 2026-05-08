@@ -1,0 +1,7 @@
+{
+    "golden_id":  "expected_decision_valid_winning_batch",
+    "fixture_id":  "a8_r36_valid_winning_batch",
+    "expected_champion_sku":  "A8R36-CHAMPION-001",
+    "expected_manual_selection_used":  false,
+    "expected_manual_champion_provided":  false
+}

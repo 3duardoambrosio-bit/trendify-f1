@@ -1,0 +1,71 @@
+{
+    "schema_version":  "1.0",
+    "fixture_id":  "a8_r36_mixed_quality_batch",
+    "source_id":  "a8_r36_mixed_quality_batch",
+    "source_type":  "local_fixture",
+    "local_only_execution":  true,
+    "manual_selection_used":  false,
+    "manual_champion_provided":  false,
+    "network_access_allowed":  false,
+    "candidates":  [
+                       {
+                           "sku":  "A8R36-MIXED-CHAMPION-001",
+                           "name":  "Mini Magnetic Desk Charger Dock",
+                           "title":  "Mini Magnetic Desk Charger Dock",
+                           "niche":  "tech_gadgets",
+                           "landed_cost":  11.5,
+                           "sell_price":  39.99,
+                           "shipping_days":  6,
+                           "supplier_score":  96,
+                           "demand_score":  96,
+                           "saturation_score":  20,
+                           "content_fit_score":  93,
+                           "problem_severity_score":  86,
+                           "compliance_risk_score":  3,
+                           "return_risk_score":  7,
+                           "source_type":  "local_fixture",
+                           "local_only_execution":  true,
+                           "network_access_allowed":  false
+                       },
+                       {
+                           "sku":  "A8R36-MIXED-VALID-002",
+                           "name":  "Rotating Cable Management Hub",
+                           "title":  "Rotating Cable Management Hub",
+                           "niche":  "tech_gadgets",
+                           "landed_cost":  9.8,
+                           "sell_price":  27.99,
+                           "shipping_days":  9,
+                           "supplier_score":  84,
+                           "demand_score":  78,
+                           "saturation_score":  34,
+                           "content_fit_score":  76,
+                           "problem_severity_score":  68,
+                           "compliance_risk_score":  4,
+                           "return_risk_score":  13,
+                           "source_type":  "local_fixture",
+                           "local_only_execution":  true,
+                           "network_access_allowed":  false
+                       },
+                       {
+                           "sku":  "A8R36-MIXED-INVALID-MISSING-FIELDS",
+                           "name":  "Invalid Missing Required Fields Candidate",
+                           "niche":  "tech_gadgets",
+                           "landed_cost":  15
+                       },
+                       {
+                           "sku":  "",
+                           "name":  "",
+                           "niche":  "",
+                           "landed_cost":  0,
+                           "sell_price":  0,
+                           "shipping_days":  0,
+                           "supplier_score":  -1,
+                           "demand_score":  -1,
+                           "saturation_score":  200,
+                           "content_fit_score":  -1,
+                           "problem_severity_score":  -1,
+                           "compliance_risk_score":  200,
+                           "return_risk_score":  200
+                       }
+                   ]
+}
