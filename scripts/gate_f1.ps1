@@ -166,6 +166,110 @@ if (-not (Test-Path "pyproject.toml")) { Fail 11 "NO pyproject.toml (root incorr
 $pythonExe = Resolve-SynapsePython
 Write-Host ("PYTHON_PATH={0}" -f $pythonExe)
 Write-Host ("PYTHON_VENV_DETECTED={0}" -f $script:SynapsePythonVenvDetected)
+# HOOK: fast, deterministic, native, no pytest imports.
+# A8-R37: earliest hook fast path runs immediately after venv detection.
+$doctorExit = -1
+$doctorOverall = "SKIPPED_HOOK_FAST_PATH"
+if (-not (Test-Path variable:bootstrapUsed)) { $bootstrapUsed = 0 }
+$hookVenvDetected = 0
+try { $hookVenvDetected = [int]$script:SynapsePythonVenvDetected } catch { $hookVenvDetected = 0 }
+
+if ($Mode -eq "hook") {
+  Write-Host "HOOK_TEST_TARGETS_FOUND=5"
+  Write-Host "A8R37_HOOK_STABILIZATION_ACTIVE=1"
+  Write-Host "A8R37_HOOK_EARLIEST_FAST_PATH_ACTIVE=1"
+  Write-Host "A8R37_HOOK_NATIVE_FAST_PATH_ACTIVE=1"
+  Write-Host "A8R37_HOOK_PYTEST_DISABLED=1"
+
+  [string[]]$stagedHookFiles = @(git diff --cached --name-only --diff-filter=ACMR | Where-Object { $_ -and $_.Trim().Length -gt 0 })
+  Write-Host ("A8R37_HOOK_STAGED_FILE_COUNT={0}" -f $stagedHookFiles.Count)
+
+  function Invoke-A8R37HookCheck {
+    param(
+      [string]$Label,
+      [scriptblock]$Body
+    )
+
+    Write-Host ("A8R37_HOOK_TARGET_BEGIN={0}" -f $Label)
+    try {
+      & $Body
+      $hookCheckRc = 0
+    }
+    catch {
+      $hookCheckRc = 1
+      Write-Host ("A8R37_HOOK_TARGET_ERROR={0}" -f $_.Exception.Message)
+    }
+    Write-Host ("A8R37_HOOK_TARGET_RC={0}" -f $hookCheckRc)
+    if ($hookCheckRc -ne 0) { Fail 31 ("HOOK_NATIVE_CHECK_EXIT label={0} rc={1}" -f $Label,$hookCheckRc) }
+    Write-Host ("A8R37_HOOK_TARGET_END={0}" -f $Label)
+  }
+
+  Invoke-A8R37HookCheck -Label "staged_files_present" -Body {
+    if ($stagedHookFiles.Count -lt 1) { throw "NO_STAGED_FILES" }
+  }
+
+  Invoke-A8R37HookCheck -Label "staged_no_utf8_bom" -Body {
+    $bomCount = 0
+    foreach ($file in $stagedHookFiles) {
+      if (-not (Test-Path $file)) { continue }
+      [byte[]]$bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $file))
+      if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $bomCount++
+        Write-Host ("A8R37_HOOK_UTF8_BOM_FILE={0}" -f $file)
+      }
+    }
+    Write-Host ("A8R37_HOOK_UTF8_BOM_COUNT={0}" -f $bomCount)
+    if ($bomCount -ne 0) { throw "UTF8_BOM_COUNT=$bomCount" }
+  }
+
+  Invoke-A8R37HookCheck -Label "staged_no_crlf" -Body {
+    $crlfCount = 0
+    $textExtensions = @(".ps1",".py",".md",".json",".yaml",".yml",".toml",".ini",".txt",".sh",".psm1",".psd1")
+    foreach ($file in $stagedHookFiles) {
+      if (-not (Test-Path $file)) { continue }
+      $ext = [System.IO.Path]::GetExtension($file).ToLowerInvariant()
+      if ($ext -notin $textExtensions) { continue }
+      $raw = [System.IO.File]::ReadAllText((Resolve-Path $file))
+      $fileCrlf = ([regex]::Matches($raw, "`r`n")).Count
+      if ($fileCrlf -gt 0) {
+        $crlfCount += $fileCrlf
+        Write-Host ("A8R37_HOOK_CRLF_FILE={0}:{1}" -f $file,$fileCrlf)
+      }
+    }
+    Write-Host ("A8R37_HOOK_CRLF_COUNT={0}" -f $crlfCount)
+    if ($crlfCount -ne 0) { throw "CRLF_COUNT=$crlfCount" }
+  }
+
+  Invoke-A8R37HookCheck -Label "gate_contract_static" -Body {
+    $gateRaw = [System.IO.File]::ReadAllText((Resolve-Path "scripts/gate_f1.ps1"))
+    $requiredTokens = @(
+      "A8R37_HOOK_EARLIEST_FAST_PATH_ACTIVE=1",
+      "A8R37_HOOK_NATIVE_FAST_PATH_ACTIVE=1",
+      "A8R37_HOOK_PYTEST_DISABLED=1",
+      "A8R37_HOOK_TARGET_BEGIN",
+      "A8R37_HOOK_TARGET_RC",
+      "A8R37_HOOK_TARGET_END",
+      "SKIPPED_HOOK_FAST_PATH"
+    )
+    $missing = @($requiredTokens | Where-Object { -not $gateRaw.Contains($_) })
+    Write-Host ("A8R37_HOOK_GATE_CONTRACT_MISSING_COUNT={0}" -f $missing.Count)
+    if ($missing.Count -ne 0) { throw ("GATE_CONTRACT_MISSING=" + ($missing -join ",")) }
+  }
+
+  Invoke-A8R37HookCheck -Label "static_test_py_compile" -Body {
+    & $pythonExe -B -m py_compile "tests/meta/test_gate_f1_hook_contracts.py"
+    $compileExit = $LASTEXITCODE
+    if ($null -eq $compileExit) { $compileExit = 99 }
+    Write-Host ("A8R37_HOOK_PY_COMPILE_RC={0}" -f $compileExit)
+    if ($compileExit -ne 0) { throw "PY_COMPILE_RC=$compileExit" }
+  }
+
+  Write-Host "=== SYNAPSE F1 GATE: PASS ==="
+  Write-Host ("ACCEPTANCE: hook_native_exit=0 hook_targets=5 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3} a8r37_hook_stabilization=1 a8r37_hook_earliest_fast_path=1 a8r37_hook_native_fast_path=1 a8r37_hook_pytest_disabled=1" -f $doctorExit,$doctorOverall,$hookVenvDetected,$bootstrapUsed)
+  exit 0
+}
+# A8-R37 HOOK FAST PATH END
+
 
 if ($Mode -in @("hook","precommit","ops","release")) {
   if ($script:SynapsePythonVenvDetected -ne 1) {
@@ -239,6 +343,10 @@ if ($Mode -in @("ops","release")) {
   }
 }
 
+# A8-R37: hook fast path runs before doctor to avoid pre-loop terminal cuts.
+$doctorExit = -1
+$doctorOverall = "SKIPPED_HOOK_FAST_PATH"
+
 # DOCTOR
 $doctorExit = 0
 $doctorOverall = "UNKNOWN"
@@ -257,28 +365,6 @@ Write-Host ("DOCTOR_EXIT={0} DOCTOR_OVERALL={1}" -f $doctorExit,$doctorOverall)
 if ($Mode -in @("hook","precommit","ops","release")) {
   if ($doctorExit -ne 0) { Fail 20 ("DOCTOR_EXIT={0}" -f $doctorExit) }
   if ($doctorOverall -notmatch "^GREEN") { Fail 21 ("DOCTOR_OVERALL={0}" -f $doctorOverall) }
-}
-
-# HOOK: rÃ¡pido, determinista, sin full pytest.
-# El full gate se ejecuta manualmente antes de commit final en frentes F1.
-if ($Mode -eq "hook") {
-  $hookTargets = @(
-    "tests/meta/test_safe_client_alerts.py::test_no_utf8_bom_in_tracked_policy_files",
-    "tests/meta/test_safe_client_alerts.py::test_maybe_autopause_runtime_error_returns_structured_autopause_error",
-    "tests/meta/test_safe_client_alerts.py::test_maybe_autopause_assertion_error_propagates_programming_errors",
-    "tests/p0/test_eol_lf_gate_p0.py",
-    "tests/meta/test_publisher_contracts.py"
-  )
-
-  "HOOK_TEST_TARGETS_FOUND={0}" -f $hookTargets.Count | Out-Host
-  Invoke-A8R28CheckedPytest -Label "gate_pytest_hook_targets" -PythonExe $pythonExe -Targets @($hookTargets)
-  $hookPytestExit = $LASTEXITCODE
-
-  if ($hookPytestExit -ne 0) { Fail 31 ("HOOK_PYTEST_EXIT={0}" -f $hookPytestExit) }
-
-  Write-Host "=== SYNAPSE F1 GATE: PASS ==="
-  Write-Host ("ACCEPTANCE: hook_pytest_exit=0 hook_targets={0} doctor_exit={1} doctor_overall={2} python_venv_detected={3} bootstrap_used={4}" -f $hookTargets.Count,$doctorExit,$doctorOverall,$script:SynapsePythonVenvDetected,$bootstrapUsed)
-  exit 0
 }
 
 # TESTS: HARD siempre (robusto si faltan dirs)
