@@ -107,3 +107,32 @@ def test_a8_r39_hook_fast_path_guards_product_candidate_contract_surface() -> No
     assert "They do not change product-selection behavior." in contract_text
     assert "from synapse." not in contract_text
     assert "import synapse" not in contract_text
+
+def test_a8_r39_hook_target_report_count_matches_native_labels() -> None:
+    """The hook target report must match the native hook label surface."""
+
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    gate_text = (root / "scripts/gate_f1.ps1").read_text(encoding="utf-8")
+
+    hook_match = re.search(
+        r"(?s)# HOOK:.*?# A8-R37 HOOK FAST PATH END",
+        gate_text,
+    )
+    assert hook_match is not None
+
+    hook_block = hook_match.group(0)
+    labels = re.findall(r'Invoke-A8R37HookCheck\s+-Label\s+"([^"]+)"', hook_block)
+    report_match = re.search(r"HOOK_TEST_TARGETS_FOUND=(\d+)", gate_text)
+
+    assert report_match is not None
+    assert len(labels) == 6
+    assert len(set(labels)) == 6
+    assert "a8_r38_product_candidate_contract_surface" in labels
+    assert int(report_match.group(1)) == len(labels)
+    assert "HOOK_TEST_TARGETS_FOUND=5" not in gate_text
+    assert "HOOK_TEST_TARGETS_FOUND=6" in gate_text
+    assert "-m pytest" not in hook_block
+    assert "Invoke-A8R28CheckedPytest" not in hook_block

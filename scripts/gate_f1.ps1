@@ -175,7 +175,7 @@ $hookVenvDetected = 0
 try { $hookVenvDetected = [int]$script:SynapsePythonVenvDetected } catch { $hookVenvDetected = 0 }
 
 if ($Mode -eq "hook") {
-  Write-Host "HOOK_TEST_TARGETS_FOUND=5"
+  Write-Host "HOOK_TEST_TARGETS_FOUND=6"
   Write-Host "A8R37_HOOK_STABILIZATION_ACTIVE=1"
   Write-Host "A8R37_HOOK_EARLIEST_FAST_PATH_ACTIVE=1"
   Write-Host "A8R37_HOOK_NATIVE_FAST_PATH_ACTIVE=1"
