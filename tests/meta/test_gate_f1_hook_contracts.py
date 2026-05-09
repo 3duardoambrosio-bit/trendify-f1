@@ -136,3 +136,39 @@ def test_a8_r39_hook_target_report_count_matches_native_labels() -> None:
     assert "HOOK_TEST_TARGETS_FOUND=6" in gate_text
     assert "-m pytest" not in hook_block
     assert "Invoke-A8R28CheckedPytest" not in hook_block
+
+def test_a8_r39_acceptance_hook_target_report_matches_native_labels() -> None:
+    """The acceptance summary must not drift from the native hook target count."""
+
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    gate_text = (root / "scripts/gate_f1.ps1").read_text(encoding="utf-8")
+
+    hook_match = re.search(
+        r"(?s)# HOOK:.*?# A8-R37 HOOK FAST PATH END",
+        gate_text,
+    )
+    assert hook_match is not None
+
+    hook_block = hook_match.group(0)
+    labels = re.findall(r'Invoke-A8R37HookCheck\s+-Label\s+"([^"]+)"', hook_block)
+
+    assert len(labels) == 6
+    assert len(set(labels)) == 6
+    assert "a8_r38_product_candidate_contract_surface" in labels
+
+    hook_targets_match = re.search(r"HOOK_TEST_TARGETS_FOUND=(\d+)", gate_text)
+    acceptance_match = re.search(r"ACCEPTANCE:.*hook_targets=(\d+)", gate_text)
+
+    assert hook_targets_match is not None
+    assert acceptance_match is not None
+    assert int(hook_targets_match.group(1)) == len(labels)
+    assert int(acceptance_match.group(1)) == len(labels)
+    assert "HOOK_TEST_TARGETS_FOUND=6" in gate_text
+    assert "HOOK_TEST_TARGETS_FOUND=5" not in gate_text
+    assert "hook_targets=6" in gate_text
+    assert "hook_targets=5" not in gate_text
+    assert "-m pytest" not in hook_block
+    assert "Invoke-A8R28CheckedPytest" not in hook_block

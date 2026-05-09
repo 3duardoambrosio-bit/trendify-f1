@@ -265,7 +265,7 @@ if ($Mode -eq "hook") {
   }
 
   Write-Host "=== SYNAPSE F1 GATE: PASS ==="
-  Write-Host ("ACCEPTANCE: hook_native_exit=0 hook_targets=5 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3} a8r37_hook_stabilization=1 a8r37_hook_earliest_fast_path=1 a8r37_hook_native_fast_path=1 a8r37_hook_pytest_disabled=1" -f $doctorExit,$doctorOverall,$hookVenvDetected,$bootstrapUsed)
+  Write-Host ("ACCEPTANCE: hook_native_exit=0 hook_targets=6 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3} a8r37_hook_stabilization=1 a8r37_hook_earliest_fast_path=1 a8r37_hook_native_fast_path=1 a8r37_hook_pytest_disabled=1" -f $doctorExit,$doctorOverall,$hookVenvDetected,$bootstrapUsed)
   exit 0
 }
 
