@@ -268,6 +268,38 @@ if ($Mode -eq "hook") {
   Write-Host ("ACCEPTANCE: hook_native_exit=0 hook_targets=5 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3} a8r37_hook_stabilization=1 a8r37_hook_earliest_fast_path=1 a8r37_hook_native_fast_path=1 a8r37_hook_pytest_disabled=1" -f $doctorExit,$doctorOverall,$hookVenvDetected,$bootstrapUsed)
   exit 0
 }
+
+  Invoke-A8R37HookCheck -Label "a8_r38_product_candidate_contract_surface" -Body {
+    $contractPath = Join-Path ((Resolve-Path (Join-Path $PSScriptRoot "..")).Path) "tests/meta/test_a8_r38_product_candidate_contract_surface.py"
+
+    if (-not (Test-Path $contractPath)) {
+      throw "A8_R39_META_CONTRACT_TEST_MISSING=$contractPath"
+    }
+
+    $contractText = Get-Content $contractPath -Raw
+    $testFunctionCount = ([regex]::Matches($contractText, "(?m)^def test_")).Count
+
+    if ($testFunctionCount -ne 4) {
+      throw "A8_R39_META_CONTRACT_TEST_FUNCTION_COUNT=$testFunctionCount"
+    }
+
+    $requiredNeedles = @(
+      "def _combined_contract_surface()",
+      "SURFACE_TERMS",
+      "CONTRACT_MARKERS",
+      "They do not change product-selection behavior."
+    )
+
+    foreach ($needle in $requiredNeedles) {
+      if (-not $contractText.Contains($needle)) {
+        throw "A8_R39_META_CONTRACT_NEEDLE_MISSING=$needle"
+      }
+    }
+
+    if ($contractText -match "from synapse\.|import synapse") {
+      throw "A8_R39_META_CONTRACT_IMPORTS_RUNTIME"
+    }
+  }
 # A8-R37 HOOK FAST PATH END
 
 

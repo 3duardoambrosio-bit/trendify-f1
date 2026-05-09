@@ -81,3 +81,29 @@ def test_a8_r37_hook_contract_has_no_interactive_prompts() -> None:
     assert "Read-Host" not in text
     assert "Start-Sleep" not in text
     assert re.search(r"(^|[^A-Za-z])pause([^A-Za-z]|$)", text, flags=re.IGNORECASE) is None
+
+def test_a8_r39_hook_fast_path_guards_product_candidate_contract_surface() -> None:
+    """The native hook must protect the A8-R38 product candidate meta-contract."""
+
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    gate_text = (root / "scripts/gate_f1.ps1").read_text(encoding="utf-8")
+    contract_text = (
+        root / "tests/meta/test_a8_r38_product_candidate_contract_surface.py"
+    ).read_text(encoding="utf-8")
+
+    assert "a8_r38_product_candidate_contract_surface" in gate_text
+    assert "tests/meta/test_a8_r38_product_candidate_contract_surface.py" in gate_text
+    assert "A8_R39_META_CONTRACT_TEST_MISSING" in gate_text
+    assert "A8_R39_META_CONTRACT_IMPORTS_RUNTIME" in gate_text
+    assert "-m pytest" not in gate_text
+    assert "Invoke-A8R28CheckedPytest" not in gate_text
+
+    assert contract_text.count("\ndef test_") == 4
+    assert "def _combined_contract_surface()" in contract_text
+    assert "SURFACE_TERMS" in contract_text
+    assert "CONTRACT_MARKERS" in contract_text
+    assert "They do not change product-selection behavior." in contract_text
+    assert "from synapse." not in contract_text
+    assert "import synapse" not in contract_text
