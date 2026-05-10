@@ -120,6 +120,29 @@ $env:PYTHONUTF8 = "1"
 function Status-Lines { return (git status --porcelain | Measure-Object).Count }
 function Fail([int]$Code,[string]$Msg) { Write-Host "=== SYNAPSE F1 GATE: FAIL ==="; Write-Host $Msg; exit $Code }
 
+# A8-R40 01J6H: top-level helper required when scripts/gate_f1.ps1 is executed directly.
+Write-Host "A8_R40_01J6B_TOP_LEVEL_A8R37_HOOK_CHECK=1"
+function Invoke-A8R37HookCheck {
+    param(
+      [string]$Label,
+      [scriptblock]$Body
+    )
+
+    Write-Host ("A8R37_HOOK_TARGET_BEGIN={0}" -f $Label)
+    try {
+      & $Body
+      $hookCheckRc = 0
+    }
+    catch {
+      $hookCheckRc = 1
+      Write-Host ("A8R37_HOOK_TARGET_ERROR={0}" -f $_.Exception.Message)
+    }
+    Write-Host ("A8R37_HOOK_TARGET_RC={0}" -f $hookCheckRc)
+    if ($hookCheckRc -ne 0) { Fail 31 ("HOOK_NATIVE_CHECK_EXIT label={0} rc={1}" -f $Label,$hookCheckRc) }
+    Write-Host ("A8R37_HOOK_TARGET_END={0}" -f $Label)
+  }
+
+
 function Assert-NoBom([string]$Path) {
   if (-not (Test-Path $Path)) { Fail 16 ("MISSING_FILE={0}" -f $Path) }
   $b = [System.IO.File]::ReadAllBytes($Path)
@@ -257,7 +280,7 @@ if ($Mode -eq "hook") {
   }
 
   Invoke-A8R37HookCheck -Label "static_test_py_compile" -Body {
-    & $pythonExe -B -m py_compile "tests/meta/test_gate_f1_hook_contracts.py"
+    & $pythonExe -S -B -m py_compile "tests/meta/test_gate_f1_hook_contracts.py"
     $compileExit = $LASTEXITCODE
     if ($null -eq $compileExit) { $compileExit = 99 }
     Write-Host ("A8R37_HOOK_PY_COMPILE_RC={0}" -f $compileExit)
