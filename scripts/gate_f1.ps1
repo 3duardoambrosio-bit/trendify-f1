@@ -207,26 +207,6 @@ if ($Mode -eq "hook") {
   [string[]]$stagedHookFiles = @(git diff --cached --name-only --diff-filter=ACMR | Where-Object { $_ -and $_.Trim().Length -gt 0 })
   Write-Host ("A8R37_HOOK_STAGED_FILE_COUNT={0}" -f $stagedHookFiles.Count)
 
-  function Invoke-A8R37HookCheck {
-    param(
-      [string]$Label,
-      [scriptblock]$Body
-    )
-
-    Write-Host ("A8R37_HOOK_TARGET_BEGIN={0}" -f $Label)
-    try {
-      & $Body
-      $hookCheckRc = 0
-    }
-    catch {
-      $hookCheckRc = 1
-      Write-Host ("A8R37_HOOK_TARGET_ERROR={0}" -f $_.Exception.Message)
-    }
-    Write-Host ("A8R37_HOOK_TARGET_RC={0}" -f $hookCheckRc)
-    if ($hookCheckRc -ne 0) { Fail 31 ("HOOK_NATIVE_CHECK_EXIT label={0} rc={1}" -f $Label,$hookCheckRc) }
-    Write-Host ("A8R37_HOOK_TARGET_END={0}" -f $Label)
-  }
-
   Invoke-A8R37HookCheck -Label "staged_files_present" -Body {
     if ($stagedHookFiles.Count -lt 1) { throw "NO_STAGED_FILES" }
   }

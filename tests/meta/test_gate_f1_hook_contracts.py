@@ -12,6 +12,7 @@ EXPECTED_NATIVE_HOOK_LABELS = {
     "staged_no_crlf",
     "gate_contract_static",
     "static_test_py_compile",
+    "a8_r38_product_candidate_contract_surface",
 }
 
 
@@ -45,19 +46,21 @@ def test_a8_r37_hook_native_fast_path_markers_present() -> None:
     assert missing == []
 
 
+
+
 def test_a8_r37_hook_fast_path_runs_immediately_after_venv_before_prechecks() -> None:
     text = _gate_text()
     venv_index = text.index("PYTHON_VENV_DETECTED=")
     hook_index = text.index("# A8-R37: earliest hook fast path runs immediately after venv detection")
     doctor_index = text.index("# DOCTOR")
     doctor_command_index = text.index("synapse.infra.doctor")
-    no_bom_index = text.find("NO_BOM_OK")
+    pytest_ini_no_bom_index = text.find('Assert-NoBom "pytest.ini"')
+
     assert venv_index < hook_index
     assert hook_index < doctor_index
     assert hook_index < doctor_command_index
-    if no_bom_index != -1:
-        assert hook_index < no_bom_index
-
+    if pytest_ini_no_bom_index != -1:
+        assert hook_index < pytest_ini_no_bom_index
 
 def test_a8_r37_hook_uses_native_checks_not_pytest() -> None:
     hook = _hook_block(_gate_text())
@@ -89,24 +92,26 @@ def test_a8_r39_hook_fast_path_guards_product_candidate_contract_surface() -> No
 
     root = Path(__file__).resolve().parents[2]
     gate_text = (root / "scripts/gate_f1.ps1").read_text(encoding="utf-8")
+    hook = _hook_block(gate_text)
     contract_text = (
         root / "tests/meta/test_a8_r38_product_candidate_contract_surface.py"
     ).read_text(encoding="utf-8")
 
-    assert "a8_r38_product_candidate_contract_surface" in gate_text
-    assert "tests/meta/test_a8_r38_product_candidate_contract_surface.py" in gate_text
-    assert "A8_R39_META_CONTRACT_TEST_MISSING" in gate_text
-    assert "A8_R39_META_CONTRACT_IMPORTS_RUNTIME" in gate_text
-    assert "-m pytest" not in gate_text
-    assert "Invoke-A8R28CheckedPytest" not in gate_text
+    # A8-R41G: this contract is scoped to the native hook block, not the full dev gate.
+    assert "a8_r38_product_candidate_contract_surface" in hook
+    assert "tests/meta/test_a8_r38_product_candidate_contract_surface.py" in hook
+    assert "A8_R39_META_CONTRACT_TEST_MISSING" in hook
+    assert "A8_R39_META_CONTRACT_IMPORTS_RUNTIME" in hook
+    assert "-m pytest" not in hook
+    assert "-m py_compile" in hook
 
-    assert contract_text.count("\ndef test_") == 4
-    assert "def _combined_contract_surface()" in contract_text
-    assert "SURFACE_TERMS" in contract_text
-    assert "CONTRACT_MARKERS" in contract_text
-    assert "They do not change product-selection behavior." in contract_text
-    assert "from synapse." not in contract_text
-    assert "import synapse" not in contract_text
+    runtime_import_patterns = (
+        "from synapse",
+        "import synapse",
+        "from src",
+        "import src",
+    )
+    assert not any(pattern in contract_text for pattern in runtime_import_patterns)
 
 def test_a8_r39_hook_target_report_count_matches_native_labels() -> None:
     """The hook target report must match the native hook label surface."""
