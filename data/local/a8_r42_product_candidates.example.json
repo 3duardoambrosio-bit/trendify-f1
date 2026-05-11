@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Portable Mini Thermal Label Printer",
+    "target_buyer": "small online sellers and students",
+    "pain_or_desire": "printing labels and notes fast without a bulky printer",
+    "estimated_margin_pct": 45,
+    "wow_factor": 7,
+    "problem_intensity": 7,
+    "content_potential": 8,
+    "supplier_risk": 4,
+    "competition_risk": 6,
+    "complexity_risk": 3
+  },
+  {
+    "name": "Magnetic Cable Organizer Kit",
+    "target_buyer": "desk setup and gadget buyers",
+    "pain_or_desire": "messy cables making the desk look cheap and chaotic",
+    "estimated_margin_pct": 55,
+    "wow_factor": 5,
+    "problem_intensity": 6,
+    "content_potential": 7,
+    "supplier_risk": 2,
+    "competition_risk": 5,
+    "complexity_risk": 1
+  },
+  {
+    "name": "Rechargeable Motion Sensor Closet Light",
+    "target_buyer": "home organization buyers",
+    "pain_or_desire": "dark closets, cabinets, and corners without wiring",
+    "estimated_margin_pct": 50,
+    "wow_factor": 6,
+    "problem_intensity": 8,
+    "content_potential": 8,
+    "supplier_risk": 3,
+    "competition_risk": 6,
+    "complexity_risk": 2
+  }
+]
