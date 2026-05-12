@@ -58,8 +58,8 @@ function Classify-DebtMarker($Path, $Marker, $Snippet) {
   return [pscustomobject]@{ Risk = "MEDIUM" }
 }
 
-function Get-CurrentMediumRiskFindings($RepoRoot) {
-  $tmp = Join-Path $env:TEMP ("a8_r43e_medium_scan_" + [guid]::NewGuid().ToString("N"))
+function Get-CurrentLowRiskFindings($RepoRoot) {
+  $tmp = Join-Path $env:TEMP ("a8_r43f_low_scan_" + [guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 
   $rawOut = Join-Path $tmp "grep.out.txt"
@@ -76,7 +76,9 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
   }
 
   $rawText = Read-Utf8Safe $rawOut
-  $rawLines = @($rawText -split "`r?`n" | Where-Object { $_ -and $_.Trim().Length -gt 0 })
+  $rawLines = @($rawText -split "
+?
+" | Where-Object { $_ -and $_.Trim().Length -gt 0 })
 
   $excludedPrefixes = @(
     ".git/",
@@ -92,6 +94,9 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
   )
 
   $excludedExactPaths = @(
+    "docs/ops/a8_r43d_high_risk_debt_marker_registry.json",
+    "docs/ops/A8_R43D_HIGH_RISK_DEBT_MARKER_REGISTRY.md",
+    "tools/check_a8_r43d_debt_marker_registry.ps1",
     "docs/ops/a8_r43e_medium_risk_debt_marker_registry.json",
     "docs/ops/A8_R43E_MEDIUM_RISK_DEBT_MARKER_REGISTRY.md",
     "tools/check_a8_r43e_medium_debt_marker_registry.ps1",
@@ -112,9 +117,7 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
     $lineNo = [int]$match.Groups["line"].Value
     $snippet = $match.Groups["snippet"].Value.Trim()
 
-    if ($excludedExactPaths -contains $path) {
-      continue
-    }
+    if ($excludedExactPaths -contains $path) { continue }
 
     $excluded = $false
     foreach ($prefix in $excludedPrefixes) {
@@ -132,9 +135,12 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
 
     foreach ($marker in $markers) {
       $classification = Classify-DebtMarker -Path $path -Marker $marker -Snippet $snippet
-      if ($classification.Risk -ne "MEDIUM") { continue }
+      if ($classification.Risk -ne "LOW") { continue }
 
-      $keySource = "$path`n$lineNo`n$marker`n$snippet"
+      $keySource = "$path
+$lineNo
+$marker
+$snippet"
       $snippetSha = Get-Sha256Text $keySource
       $key = "$path::$lineNo::$marker::$snippetSha"
 
@@ -157,16 +163,16 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
 
 Set-Location $Repo
 
-$registryPath = Join-Path $Repo "docs/ops/a8_r43e_medium_risk_debt_marker_registry.json"
+$registryPath = Join-Path $Repo "docs/ops/a8_r43f_low_risk_debt_marker_registry.json"
 if (-not (Test-Path $registryPath)) {
   throw "REGISTRY_NOT_FOUND=$registryPath"
 }
 
 $registry = Get-Content -Raw -Path $registryPath | ConvertFrom-Json
-$currentMedium = @(Get-CurrentMediumRiskFindings -RepoRoot $Repo)
+$currentLow = @(Get-CurrentLowRiskFindings -RepoRoot $Repo)
 
 $currentKeys = New-Object "System.Collections.Generic.HashSet[string]"
-foreach ($item in $currentMedium) {
+foreach ($item in $currentLow) {
   [void]$currentKeys.Add([string]$item.key)
 }
 
@@ -175,31 +181,31 @@ foreach ($entry in $registry.entries) {
   [void]$registeredKeys.Add([string]$entry.key)
 }
 
-$unmanaged = @($currentMedium | Where-Object { -not $registeredKeys.Contains([string]$_.key) })
+$unmanaged = @($currentLow | Where-Object { -not $registeredKeys.Contains([string]$_.key) })
 $stale = @($registry.entries | Where-Object { -not $currentKeys.Contains([string]$_.key) })
 
-Write-Host "CURRENT_MEDIUM_RISK_COUNT=$($currentMedium.Count)"
-Write-Host "REGISTERED_MEDIUM_RISK_COUNT=$($registry.entries.Count)"
-Write-Host "UNMANAGED_MEDIUM_RISK_COUNT=$($unmanaged.Count)"
-Write-Host "STALE_REGISTERED_MEDIUM_RISK_COUNT=$($stale.Count)"
-Write-Host "SELF_SURFACE_EXCLUSION_ACTIVE=1"
+Write-Host "CURRENT_LOW_RISK_COUNT=$($currentLow.Count)"
+Write-Host "REGISTERED_LOW_RISK_COUNT=$($registry.entries.Count)"
+Write-Host "UNMANAGED_LOW_RISK_COUNT=$($unmanaged.Count)"
+Write-Host "STALE_REGISTERED_LOW_RISK_COUNT=$($stale.Count)"
+Write-Host "CONTROLLED_SURFACE_EXCLUSION_ACTIVE=1"
 
-if ($currentMedium.Count -ne $registry.entries.Count) {
-  throw "CURRENT_MEDIUM_RISK_COUNT_MISMATCH current=$($currentMedium.Count) registered=$($registry.entries.Count)"
+if ($currentLow.Count -ne $registry.entries.Count) {
+  throw "CURRENT_LOW_RISK_COUNT_MISMATCH current=$($currentLow.Count) registered=$($registry.entries.Count)"
 }
 
 if ($unmanaged.Count -ne 0) {
   Write-Host "UNMANAGED_BEGIN"
   $unmanaged | ForEach-Object { Write-Host "$($_.path):$($_.line):$($_.marker):$($_.snippet)" }
   Write-Host "UNMANAGED_END"
-  throw "UNMANAGED_MEDIUM_RISK_DEBT_MARKERS"
+  throw "UNMANAGED_LOW_RISK_DEBT_MARKERS"
 }
 
 if ($stale.Count -ne 0) {
   Write-Host "STALE_BEGIN"
   $stale | ForEach-Object { Write-Host "$($_.path):$($_.line):$($_.marker):$($_.snippet)" }
   Write-Host "STALE_END"
-  throw "STALE_MEDIUM_RISK_DEBT_REGISTRY"
+  throw "STALE_LOW_RISK_DEBT_REGISTRY"
 }
 
-Write-Host "A8_R43E_MEDIUM_RISK_DEBT_REGISTRY_PASS=1"
+Write-Host "A8_R43F_LOW_RISK_DEBT_REGISTRY_PASS=1"
