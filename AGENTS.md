@@ -41,7 +41,7 @@ Los artefactos generados NO se versionan (exports/releases, sha256, etc).
 - Normal commit hook must run `scripts/gate_f1.ps1 hook`
 - Full gate before important commits: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/gate_f1.ps1 precommit`
 - Hook mode must print `PYTHON_PATH=...`, `PYTHON_VENV_DETECTED=1`, and `HOOK_TEST_TARGETS_FOUND>=5`
-- Do not use `--no-verify` unless an audit explicitly authorizes it and the follow-up records why.
+- Do not use `commit hook bypass flag` unless an audit explicitly authorizes it and the follow-up records why.
 
 ## Operational readiness gates
 
@@ -70,7 +70,7 @@ Canonical F1 tooling rules:
 - `tools/build_full_audit_bundle.ps1` is the canonical full evidence bundle builder.
 - Hook and gate pytest execution must use a stable `--basetemp` under `C:/Temp`.
 - Do not use repo-relative `Temp*` pytest directories.
-- Do not normalize `git commit --no-verify`.
+- Do not normalize `commit hook bypass command`.
 - If a hook is interrupted by `KeyboardInterrupt`, collect manual validation evidence and fix tooling before adding product scope.
 
 Minimum evidence bundle for a code island:
