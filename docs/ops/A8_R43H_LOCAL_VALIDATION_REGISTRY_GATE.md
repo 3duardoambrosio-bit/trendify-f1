@@ -6,12 +6,13 @@
 - GATE_MODE=LOCAL_VALIDATION_WIRED
 - LOCAL_GATE=scripts/gate_f1.ps1
 - CENTRAL_GATE=tools/check_a8_r43g_registry_gates.ps1
+- PLACEMENT_RULE=BEFORE_ALL_LOCAL_PASS_EXITS
 - RUNTIME_BEHAVIOR_CHANGED=0
 - SCAN_MARKER_HIT_COUNT=0
 
 ## Rule
 
-Local validation invokes the central registry gate.
+Local validation invokes the central registry gate before every local PASS exit.
 
 The central registry gate confirms:
 
@@ -22,9 +23,9 @@ The central registry gate confirms:
 
 ## Acceptance
 
-- A8_R43H_COMMENT_BEGIN_COUNT=1
-- A8_R43H_COMMENT_END_COUNT=1
-- A8_R43H_WRITE_BEGIN_COUNT=1
-- A8_R43H_WRITE_PASS_COUNT=1
-- A8_R43H_GATE_REFERENCE_COUNT=1
+- A8_R43H_FUNCTION_BEGIN_COUNT=1
+- A8_R43H_FUNCTION_END_COUNT=1
+- A8_R43H_LOCAL_PASS_MARKER_COUNT>=1
+- A8_R43H_GATE_CALL_COUNT_EQUALS_PASS_COUNT=1
+- A8_R43H_GATE_CALL_BEFORE_EACH_LOCAL_PASS=1
 - A8_R43H_LOCAL_VALIDATION_REGISTRY_GATE_PASS=1

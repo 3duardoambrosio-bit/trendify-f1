@@ -3,6 +3,40 @@ param(
 )
 
 Set-StrictMode -Version Latest
+
+# A8_R43H_REGISTRY_GATE_FUNCTION_BEGIN
+function Invoke-A8R43HRegistryGate {
+  if ($null -eq (Get-Variable -Name A8R43HRegistryGateAlreadyRun -Scope Script -ErrorAction SilentlyContinue)) {
+    $script:A8R43HRegistryGateAlreadyRun = 0
+  }
+
+  if ($script:A8R43HRegistryGateAlreadyRun -eq 1) {
+    return
+  }
+
+  $script:A8R43HRegistryGateAlreadyRun = 1
+
+  Write-Host "A8_R43H_REGISTRY_GATE_BEGIN"
+
+  $__a8r43hRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  $__a8r43hGate = Join-Path $__a8r43hRepo "tools/check_a8_r43g_registry_gates.ps1"
+
+  if (-not (Test-Path $__a8r43hGate)) {
+    throw "A8_R43H_REGISTRY_GATE_NOT_FOUND=$__a8r43hGate"
+  }
+
+  & $__a8r43hGate -Repo $__a8r43hRepo
+  $__a8r43hRc = $LASTEXITCODE
+  if ($null -eq $__a8r43hRc) { $__a8r43hRc = 0 }
+
+  if ($__a8r43hRc -ne 0) {
+    throw "A8_R43H_REGISTRY_GATE_FAILED=$__a8r43hRc"
+  }
+
+  Write-Host "A8_R43H_REGISTRY_GATE_PASS=1"
+}
+# A8_R43H_REGISTRY_GATE_FUNCTION_END
+
 # A8-R28_STABLE_PYTEST_BASETEMP_BEGIN
 # Keep pytest temporary cleanup outside the repository on Windows.
 # This prevents repo-relative Temp* folders and reduces pytest cleanup KeyboardInterrupt risk.
@@ -266,8 +300,10 @@ if ($Mode -eq "hook") {
     Write-Host ("A8R37_HOOK_PY_COMPILE_RC={0}" -f $compileExit)
     if ($compileExit -ne 0) { throw "PY_COMPILE_RC=$compileExit" }
   }
-
-  Write-Host "=== SYNAPSE F1 GATE: PASS ==="
+# A8_R43H_REGISTRY_GATE_CALL_BEGIN
+Invoke-A8R43HRegistryGate
+# A8_R43H_REGISTRY_GATE_CALL_END
+Write-Host "=== SYNAPSE F1 GATE: PASS ==="
   Write-Host ("ACCEPTANCE: hook_native_exit=0 hook_targets=6 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3} a8r37_hook_stabilization=1 a8r37_hook_earliest_fast_path=1 a8r37_hook_native_fast_path=1 a8r37_hook_pytest_disabled=1" -f $doctorExit,$doctorOverall,$hookVenvDetected,$bootstrapUsed)
   exit 0
 }
@@ -422,26 +458,12 @@ if ($Mode -in @("ops","release")) {
   }
 }
 
+# A8_R43H_REGISTRY_GATE_CALL_BEGIN
+
+Invoke-A8R43HRegistryGate
+
+# A8_R43H_REGISTRY_GATE_CALL_END
+
 Write-Host "=== SYNAPSE F1 GATE: PASS ==="
 Write-Host ("ACCEPTANCE: pytest_exit=0 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3}" -f $doctorExit,$doctorOverall,$script:SynapsePythonVenvDetected,$bootstrapUsed)
 exit 0
-# A8_R43H_REGISTRY_GATE_BEGIN
-Write-Host "A8_R43H_REGISTRY_GATE_BEGIN"
-
-$__a8r43hRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$__a8r43hGate = Join-Path $__a8r43hRepo "tools/check_a8_r43g_registry_gates.ps1"
-
-if (-not (Test-Path $__a8r43hGate)) {
-  throw "A8_R43H_REGISTRY_GATE_NOT_FOUND=$__a8r43hGate"
-}
-
-& $__a8r43hGate -Repo $__a8r43hRepo
-$__a8r43hRc = $LASTEXITCODE
-if ($null -eq $__a8r43hRc) { $__a8r43hRc = 0 }
-
-if ($__a8r43hRc -ne 0) {
-  throw "A8_R43H_REGISTRY_GATE_FAILED=$__a8r43hRc"
-}
-
-Write-Host "A8_R43H_REGISTRY_GATE_PASS=1"
-# A8_R43H_REGISTRY_GATE_END
