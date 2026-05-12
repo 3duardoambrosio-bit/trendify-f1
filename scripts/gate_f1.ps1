@@ -425,3 +425,23 @@ if ($Mode -in @("ops","release")) {
 Write-Host "=== SYNAPSE F1 GATE: PASS ==="
 Write-Host ("ACCEPTANCE: pytest_exit=0 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3}" -f $doctorExit,$doctorOverall,$script:SynapsePythonVenvDetected,$bootstrapUsed)
 exit 0
+# A8_R43H_REGISTRY_GATE_BEGIN
+Write-Host "A8_R43H_REGISTRY_GATE_BEGIN"
+
+$__a8r43hRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$__a8r43hGate = Join-Path $__a8r43hRepo "tools/check_a8_r43g_registry_gates.ps1"
+
+if (-not (Test-Path $__a8r43hGate)) {
+  throw "A8_R43H_REGISTRY_GATE_NOT_FOUND=$__a8r43hGate"
+}
+
+& $__a8r43hGate -Repo $__a8r43hRepo
+$__a8r43hRc = $LASTEXITCODE
+if ($null -eq $__a8r43hRc) { $__a8r43hRc = 0 }
+
+if ($__a8r43hRc -ne 0) {
+  throw "A8_R43H_REGISTRY_GATE_FAILED=$__a8r43hRc"
+}
+
+Write-Host "A8_R43H_REGISTRY_GATE_PASS=1"
+# A8_R43H_REGISTRY_GATE_END
