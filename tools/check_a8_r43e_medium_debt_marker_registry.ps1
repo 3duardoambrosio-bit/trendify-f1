@@ -78,7 +78,25 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
   $rawText = Read-Utf8Safe $rawOut
   $rawLines = @($rawText -split "`r?`n" | Where-Object { $_ -and $_.Trim().Length -gt 0 })
 
-  $excludedPrefixes = @(".git/", ".pytest_cache/", "__pycache__/", "venv/", ".venv/", "node_modules/", "dist/", "build/", ".mypy_cache/", ".ruff_cache/")
+  $excludedPrefixes = @(
+    ".git/",
+    ".pytest_cache/",
+    "__pycache__/",
+    "venv/",
+    ".venv/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    ".mypy_cache/",
+    ".ruff_cache/"
+  )
+
+  $excludedExactPaths = @(
+    "docs/ops/a8_r43e_medium_risk_debt_marker_registry.json",
+    "docs/ops/A8_R43E_MEDIUM_RISK_DEBT_MARKER_REGISTRY.md",
+    "tools/check_a8_r43e_medium_debt_marker_registry.ps1"
+  )
+
   $markerRegex = [regex]"(?i)\b(TODO|FIXME|HACK|XXX|TBD|WORKAROUND|TEMPORARY|LEGACY|DEPRECATED|TECH_DEBT|DEBT)\b"
   $seen = New-Object "System.Collections.Generic.HashSet[string]"
   $findings = New-Object System.Collections.Generic.List[object]
@@ -90,6 +108,10 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
     $path = ($match.Groups["path"].Value -replace "\\", "/")
     $lineNo = [int]$match.Groups["line"].Value
     $snippet = $match.Groups["snippet"].Value.Trim()
+
+    if ($excludedExactPaths -contains $path) {
+      continue
+    }
 
     $excluded = $false
     foreach ($prefix in $excludedPrefixes) {
@@ -157,6 +179,7 @@ Write-Host "CURRENT_MEDIUM_RISK_COUNT=$($currentMedium.Count)"
 Write-Host "REGISTERED_MEDIUM_RISK_COUNT=$($registry.entries.Count)"
 Write-Host "UNMANAGED_MEDIUM_RISK_COUNT=$($unmanaged.Count)"
 Write-Host "STALE_REGISTERED_MEDIUM_RISK_COUNT=$($stale.Count)"
+Write-Host "SELF_SURFACE_EXCLUSION_ACTIVE=1"
 
 if ($currentMedium.Count -ne $registry.entries.Count) {
   throw "CURRENT_MEDIUM_RISK_COUNT_MISMATCH current=$($currentMedium.Count) registered=$($registry.entries.Count)"
