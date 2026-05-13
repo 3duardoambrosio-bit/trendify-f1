@@ -99,22 +99,63 @@ function Invoke-A8R43HRegistryGate {
     throw "A8_R43H_REGISTRY_GATE_NOT_FOUND=$__a8r43hGate"
   }
 
-  & $__a8r43hGate -Repo $__a8r43hRepo
-  $a8r43lLastCommandSucceeded = $?
-  $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
-  if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
-      if ($a8r43lLastCommandSucceeded) {
-          $__a8r43hRc = 0
-      }
-      else {
-          $__a8r43hRc = 1
-      }
+  $__a8r43hQuotedGate = '"' + $__a8r43hGate.Replace('"', '\"') + '"'
+  $__a8r43hQuotedRepo = '"' + $__a8r43hRepo.Replace('"', '\"') + '"'
+
+  $__a8r43hPsi = [System.Diagnostics.ProcessStartInfo]::new()
+  $__a8r43hPsi.FileName = "powershell.exe"
+  $__a8r43hPsi.WorkingDirectory = $__a8r43hRepo
+  $__a8r43hPsi.UseShellExecute = $false
+  $__a8r43hPsi.RedirectStandardOutput = $true
+  $__a8r43hPsi.RedirectStandardError = $true
+  $__a8r43hPsi.CreateNoWindow = $true
+  $__a8r43hPsi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File $__a8r43hQuotedGate -Repo $__a8r43hQuotedRepo"
+
+  Write-Host "A8_R43Z_R43H_PROCESS_CAPTURE=1"
+
+  $__a8r43hProcess = [System.Diagnostics.Process]::new()
+  $__a8r43hProcess.StartInfo = $__a8r43hPsi
+
+  [void]$__a8r43hProcess.Start()
+
+  $__a8r43hStdoutTask = $__a8r43hProcess.StandardOutput.ReadToEndAsync()
+  $__a8r43hStderrTask = $__a8r43hProcess.StandardError.ReadToEndAsync()
+
+  if (-not $__a8r43hProcess.WaitForExit(300000)) {
+    try {
+      $__a8r43hProcess.Kill()
+    }
+    catch {
+      Write-Host "A8_R43Z_R43H_TIMEOUT_KILL_FAILED=1"
+    }
+
+    throw "A8_R43H_REGISTRY_GATE_TIMEOUT_MS=300000"
   }
-  else {
-      $__a8r43hRc = [int]$a8r43lLastExitCodeVar.Value
+
+  $__a8r43hStdout = $__a8r43hStdoutTask.GetAwaiter().GetResult()
+  $__a8r43hStderr = $__a8r43hStderrTask.GetAwaiter().GetResult()
+
+  if (-not [string]::IsNullOrWhiteSpace($__a8r43hStdout)) {
+    $__a8r43hStdout -split "`n" | ForEach-Object {
+      if (-not [string]::IsNullOrWhiteSpace($_)) {
+        Write-Host $_
+      }
+    }
   }
+
+  if (-not [string]::IsNullOrWhiteSpace($__a8r43hStderr)) {
+    $__a8r43hStderr -split "`n" | ForEach-Object {
+      if (-not [string]::IsNullOrWhiteSpace($_)) {
+        Write-Host "A8_R43Z_R43H_STDERR: $_"
+      }
+    }
+  }
+
+  $__a8r43hRc = [int]$__a8r43hProcess.ExitCode
+
   # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
-  if ($null -eq $__a8r43hRc) { $__a8r43hRc = 0 }
+
+  Write-Host "A8_R43Z_R43H_GATE_RC=$__a8r43hRc"
 
   if ($__a8r43hRc -ne 0) {
     throw "A8_R43H_REGISTRY_GATE_FAILED=$__a8r43hRc"
@@ -150,9 +191,42 @@ function Invoke-A8R28CheckedPytest {
     [object[]]$Targets
   )
 
+  function Convert-A8R28CommandLineArg {
+    param([string]$Value)
+
+    if ($null -eq $Value) {
+      return '""'
+    }
+
+    return '"' + ([string]$Value).Replace('\', '\\').Replace('"', '\"') + '"'
+  }
+
   $tmpRoot = "C:\Temp"
   if (-not (Test-Path -LiteralPath $tmpRoot)) {
     New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
+  }
+
+  if ([string]::IsNullOrWhiteSpace($Label)) {
+    throw "A8R28_PYTEST_LABEL_EMPTY"
+  }
+
+  if ([string]::IsNullOrWhiteSpace($PythonExe)) {
+    throw "A8R28_PYTHON_EXE_EMPTY"
+  }
+
+  if (-not (Test-Path -LiteralPath $PythonExe)) {
+    throw "A8R28_PYTHON_EXE_NOT_FOUND=$PythonExe"
+  }
+
+  $cleanTargets = @()
+  foreach ($target in @($Targets)) {
+    if ($null -ne $target -and -not [string]::IsNullOrWhiteSpace([string]$target)) {
+      $cleanTargets += [string]$target
+    }
+  }
+
+  if (@($cleanTargets).Count -lt 1) {
+    throw "A8R28_PYTEST_TARGETS_EMPTY"
   }
 
   $captureStamp = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -166,35 +240,64 @@ function Invoke-A8R28CheckedPytest {
   Write-Host "A8R28_PYTEST_STDOUT=$stdout"
   Write-Host "A8R28_PYTEST_STDERR=$stderr"
 
-  & $PythonExe -B -m pytest @($Targets) -q --tb=no > $stdout 2> $stderr
-  $a8r43lLastCommandSucceeded = $?
-  $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
-  if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
-      if ($a8r43lLastCommandSucceeded) {
-          $rc = 0
-      }
-      else {
-          $rc = 1
-      }
+  $pytestArgs = @("-B", "-m", "pytest")
+  foreach ($target in $cleanTargets) {
+    $pytestArgs += (Convert-A8R28CommandLineArg $target)
   }
-  else {
-      $rc = [int]$a8r43lLastExitCodeVar.Value
+  $pytestArgs += @("-q", "--tb=no")
+
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $PythonExe
+  $psi.WorkingDirectory = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.CreateNoWindow = $true
+  $psi.Arguments = ($pytestArgs -join " ")
+
+  Write-Host "A8_R43X_PYTEST_PROCESS_CAPTURE=1"
+  Write-Host "A8_R43X_PYTEST_TARGET_COUNT=$(@($cleanTargets).Count)"
+
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+
+  [void]$process.Start()
+
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
+
+  if (-not $process.WaitForExit(900000)) {
+    try {
+      $process.Kill()
+    }
+    catch {
+      Write-Host "A8_R43X_PYTEST_TIMEOUT_KILL_FAILED=1"
+    }
+
+    $timeoutOut = ""
+    $timeoutErr = ""
+    try { $timeoutOut = $stdoutTask.GetAwaiter().GetResult() } catch { $timeoutOut = "" }
+    try { $timeoutErr = $stderrTask.GetAwaiter().GetResult() } catch { $timeoutErr = "" }
+
+    [System.IO.File]::WriteAllText($stdout, $timeoutOut, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($stderr, $timeoutErr, [System.Text.UTF8Encoding]::new($false))
+
+    Write-Host "A8R28_GATE_FAIL_HARD_REASON=PytestTimeout"
+    return 124
   }
+
+  $outText = $stdoutTask.GetAwaiter().GetResult()
+  $errText = $stderrTask.GetAwaiter().GetResult()
+
+  if ($null -eq $outText) { $outText = "" }
+  if ($null -eq $errText) { $errText = "" }
+
+  [System.IO.File]::WriteAllText($stdout, [string]$outText, [System.Text.UTF8Encoding]::new($false))
+  [System.IO.File]::WriteAllText($stderr, [string]$errText, [System.Text.UTF8Encoding]::new($false))
+
+  $rc = [int]$process.ExitCode
+
   # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
-  if ($null -eq $rc) { $rc = 0 }
-
-  [string]$outText = ""
-  [string]$errText = ""
-
-  if (Test-Path $stdout) {
-    $rawOut = Get-Content $stdout -Raw
-    if ($null -ne $rawOut) { $outText = [string]$rawOut }
-  }
-
-  if (Test-Path $stderr) {
-    $rawErr = Get-Content $stderr -Raw
-    if ($null -ne $rawErr) { $errText = [string]$rawErr }
-  }
 
   $combined = "$outText`n$errText"
   $keyboardCount = ([regex]::Matches($combined, "KeyboardInterrupt")).Count
