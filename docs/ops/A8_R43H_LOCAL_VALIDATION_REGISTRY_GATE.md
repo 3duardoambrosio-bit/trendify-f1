@@ -29,3 +29,14 @@ The central registry gate confirms:
 - A8_R43H_GATE_CALL_COUNT_EQUALS_PASS_COUNT=1
 - A8_R43H_GATE_CALL_BEFORE_EACH_LOCAL_PASS=1
 - A8_R43H_LOCAL_VALIDATION_REGISTRY_GATE_PASS=1
+## StrictMode isolated invocation hardening
+
+A8_R43H_LASTEXITCODE_STRICTMODE_SAFE=1
+
+The checker must not assume `$LASTEXITCODE` is initialized when executed in a clean PowerShell process. If a child checker emits successful output without setting `$LASTEXITCODE`, R43H derives `0` from `$?`; otherwise it uses the explicit native exit code.
+
+Numeric acceptance:
+
+- POST_R43H_CHECKER_RC = 0
+- A8_R43H_LOCAL_VALIDATION_REGISTRY_GATE_PASS = 1
+- STATUS_COUNT = 0

@@ -69,7 +69,20 @@ Aeq "A8_R43H_GATE_CALL_BEFORE_EACH_LOCAL_PASS" 1 $beforeEach
 Aeq "A8_R43H_GATE_CALL_COUNT_EQUALS_PASS_COUNT" 1 ([int]($callBeginMatches.Count -eq $localPassMatches.Count))
 
 & $centralGate -Repo $Repo
-$rc = $LASTEXITCODE
+$lastCommandSucceeded = $?
+$lastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+if ($null -eq $lastExitCodeVar -or $null -eq $lastExitCodeVar.Value) {
+    if ($lastCommandSucceeded) {
+        $rc = 0
+    }
+    else {
+        $rc = 1
+    }
+}
+else {
+    $rc = [int]$lastExitCodeVar.Value
+}
+# A8_R43H_LASTEXITCODE_STRICTMODE_SAFE=1
 if ($null -eq $rc) { $rc = 0 }
 
 Aeq "A8_R43H_CENTRAL_GATE_RC" 0 $rc
