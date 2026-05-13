@@ -178,17 +178,17 @@ function Invoke-A8R28CheckedPytest {
 
   if ($keyboardCount -ne 0) {
     Write-Host "A8R28_GATE_FAIL_HARD_REASON=KeyboardInterrupt"
-    exit 130
+    return 130
   }
 
   if ($tracebackCount -ne 0) {
     Write-Host "A8R28_GATE_FAIL_HARD_REASON=Traceback"
-    exit 1
+    return 1
   }
 
   if ($failedCount -ne 0) {
     Write-Host "A8R28_GATE_FAIL_HARD_REASON=FailedText"
-    exit 1
+    return 1
   }
 
   if ($rc -ne 0) {
@@ -545,7 +545,15 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 "TEST_ROOTS_FOUND={0}" -f $existing.Count | Out-Host
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
-Invoke-A8R28CheckedPytest -Label "gate_pytest_existing_roots" -PythonExe $pythonExe -Targets @($existing)
+# A8_R43Q_PYTEST_CONTINUATION_CONTRACT=1
+$a8r43qPytestRc = Invoke-A8R28CheckedPytest -Label "gate_pytest_existing_roots" -PythonExe $pythonExe -Targets @($existing)
+Write-Host "A8_R43Q_PYTEST_GATE_RC=$a8r43qPytestRc"
+if ([int]$a8r43qPytestRc -ne 0) {
+    Write-Host "A8_R43Q_PYTEST_GATE_FAILED_BEFORE_EXIT=1"
+    Invoke-A8R43MR43LGate
+    exit ([int]$a8r43qPytestRc)
+}
+Write-Host "A8_R43Q_PYTEST_GATE_PASS=1"
 $a8r43lLastCommandSucceeded = $?
 $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
 if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
