@@ -193,7 +193,7 @@ function Invoke-A8R28CheckedPytest {
 
   if ($rc -ne 0) {
     Write-Host "A8R28_GATE_FAIL_HARD_REASON=PytestNonZero"
-    exit $rc
+    return $rc
   }
 
   return 0
