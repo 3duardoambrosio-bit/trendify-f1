@@ -546,7 +546,30 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
 # A8_R43Q_PYTEST_CONTINUATION_CONTRACT=1
-$a8r43qPytestRc = Invoke-A8R28CheckedPytest -Label "gate_pytest_existing_roots" -PythonExe $pythonExe -Targets @($existing)
+$a8r43qPytestOutput = @(Invoke-A8R28CheckedPytest)
+$a8r43qPytestOutputCount = @($a8r43qPytestOutput).Count
+Write-Host "A8_R43T_PYTEST_OUTPUT_CAPTURE_COUNT=$a8r43qPytestOutputCount"
+if ($a8r43qPytestOutputCount -lt 1) {
+  Write-Host "A8_R43T_PYTEST_RC_MISSING=1"
+  $a8r43qPytestRc = 1
+}
+else {
+  $a8r43qPytestRcRaw = $a8r43qPytestOutput[$a8r43qPytestOutputCount - 1]
+  if ($a8r43qPytestOutputCount -gt 1) {
+    for ($a8r43qPytestOutputIndex = 0; $a8r43qPytestOutputIndex -lt ($a8r43qPytestOutputCount - 1); $a8r43qPytestOutputIndex++) {
+      Write-Host ([string]$a8r43qPytestOutput[$a8r43qPytestOutputIndex])
+    }
+  }
+  try {
+    $a8r43qPytestRc = [int]$a8r43qPytestRcRaw
+    Write-Host "A8_R43T_PYTEST_RC_NORMALIZED=1"
+  }
+  catch {
+    Write-Host "A8_R43T_PYTEST_RC_PARSE_FAILED=1"
+    Write-Host "A8_R43T_PYTEST_RC_RAW=$a8r43qPytestRcRaw"
+    $a8r43qPytestRc = 1
+  }
+}
 Write-Host "A8_R43Q_PYTEST_GATE_RC=$a8r43qPytestRc"
 if ([int]$a8r43qPytestRc -ne 0) {
     Write-Host "A8_R43Q_PYTEST_GATE_FAILED_BEFORE_EXIT=1"
