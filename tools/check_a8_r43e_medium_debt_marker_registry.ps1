@@ -68,7 +68,20 @@ function Get-CurrentMediumRiskFindings($RepoRoot) {
   $cmd = 'git.exe grep -n -I -i -E "' + $pattern + '" -- . 1>"' + $rawOut + '" 2>"' + $rawErr + '"'
 
   & cmd.exe /d /c ('cd /d "' + $RepoRoot + '" && ' + $cmd)
-  $rc = $LASTEXITCODE
+  $a8r43lLastCommandSucceeded = $?
+  $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+  if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+      if ($a8r43lLastCommandSucceeded) {
+          $rc = 0
+      }
+      else {
+          $rc = 1
+      }
+  }
+  else {
+      $rc = [int]$a8r43lLastExitCodeVar.Value
+  }
+  # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
   if ($null -eq $rc) { $rc = 0 }
 
   if ($rc -ne 0 -and $rc -ne 1) {

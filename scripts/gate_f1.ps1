@@ -26,7 +26,20 @@ function Invoke-A8R43HRegistryGate {
   }
 
   & $__a8r43hGate -Repo $__a8r43hRepo
-  $__a8r43hRc = $LASTEXITCODE
+  $a8r43lLastCommandSucceeded = $?
+  $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+  if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+      if ($a8r43lLastCommandSucceeded) {
+          $__a8r43hRc = 0
+      }
+      else {
+          $__a8r43hRc = 1
+      }
+  }
+  else {
+      $__a8r43hRc = [int]$a8r43lLastExitCodeVar.Value
+  }
+  # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
   if ($null -eq $__a8r43hRc) { $__a8r43hRc = 0 }
 
   if ($__a8r43hRc -ne 0) {
@@ -80,7 +93,20 @@ function Invoke-A8R28CheckedPytest {
   Write-Host "A8R28_PYTEST_STDERR=$stderr"
 
   & $PythonExe -B -m pytest @($Targets) -q --tb=no > $stdout 2> $stderr
-  $rc = $LASTEXITCODE
+  $a8r43lLastCommandSucceeded = $?
+  $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+  if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+      if ($a8r43lLastCommandSucceeded) {
+          $rc = 0
+      }
+      else {
+          $rc = 1
+      }
+  }
+  else {
+      $rc = [int]$a8r43lLastExitCodeVar.Value
+  }
+  # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
   if ($null -eq $rc) { $rc = 0 }
 
   [string]$outText = ""
@@ -295,7 +321,20 @@ if ($Mode -eq "hook") {
 
   Invoke-A8R37HookCheck -Label "static_test_py_compile" -Body {
     & $pythonExe -S -B -m py_compile "tests/meta/test_gate_f1_hook_contracts.py"
-    $compileExit = $LASTEXITCODE
+    $a8r43lLastCommandSucceeded = $?
+    $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+    if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+        if ($a8r43lLastCommandSucceeded) {
+            $compileExit = 0
+        }
+        else {
+            $compileExit = 1
+        }
+    }
+    else {
+        $compileExit = [int]$a8r43lLastExitCodeVar.Value
+    }
+    # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
     if ($null -eq $compileExit) { $compileExit = 99 }
     Write-Host ("A8R37_HOOK_PY_COMPILE_RC={0}" -f $compileExit)
     if ($compileExit -ne 0) { throw "PY_COMPILE_RC=$compileExit" }
@@ -381,7 +420,20 @@ if ($Mode -eq "dev") {
     $preTracked = Status-Lines
 
     & powershell -NoProfile -ExecutionPolicy Bypass -File $bootstrap
-    $bexit = $LASTEXITCODE
+    $a8r43lLastCommandSucceeded = $?
+    $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+    if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+        if ($a8r43lLastCommandSucceeded) {
+            $bexit = 0
+        }
+        else {
+            $bexit = 1
+        }
+    }
+    else {
+        $bexit = [int]$a8r43lLastExitCodeVar.Value
+    }
+    # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
     "BOOTSTRAP_EXIT={0}" -f $bexit | Out-Host
     if ($bexit -ne 0) { Fail 13 ("BOOTSTRAP_EXIT={0}" -f $bexit) }
 
@@ -423,7 +475,20 @@ $doctorExit = 0
 $doctorOverall = "UNKNOWN"
 try {
   $out = & $pythonExe -X utf8 -m synapse.infra.doctor 2>&1
-  $doctorExit = $LASTEXITCODE
+  $a8r43lLastCommandSucceeded = $?
+  $a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+  if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+      if ($a8r43lLastCommandSucceeded) {
+          $doctorExit = 0
+      }
+      else {
+          $doctorExit = 1
+      }
+  }
+  else {
+      $doctorExit = [int]$a8r43lLastExitCodeVar.Value
+  }
+  # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
   $ov = ($out | Select-String -Pattern "OVERALL:" -ErrorAction SilentlyContinue | Select-Object -Last 1).Line
   if ($ov) { $doctorOverall = ($ov -replace "^.*OVERALL:\s*","").Trim() }
 } catch {
@@ -446,7 +511,20 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
 Invoke-A8R28CheckedPytest -Label "gate_pytest_existing_roots" -PythonExe $pythonExe -Targets @($existing)
-$pytestExit = $LASTEXITCODE
+$a8r43lLastCommandSucceeded = $?
+$a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+    if ($a8r43lLastCommandSucceeded) {
+        $pytestExit = 0
+    }
+    else {
+        $pytestExit = 1
+    }
+}
+else {
+    $pytestExit = [int]$a8r43lLastExitCodeVar.Value
+}
+# A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
 if ($pytestExit -ne 0) { Fail 3 ("PYTEST_EXIT={0}" -f $pytestExit) }
 
 # POST clean: solo en ops/release

@@ -82,7 +82,20 @@ Run-Step "wave --apply" { python -m synapse.cli wave --product-id $ProductId --a
 Write-Host ""
 Write-Host "==> harden_wavekit (STRICT)"
 $hardenOut = & python scripts\harden_wavekit.py (Join-Path $OutRoot $ProductId) 2>&1
-$hardenExit = $LASTEXITCODE
+$a8r43lLastCommandSucceeded = $?
+$a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+    if ($a8r43lLastCommandSucceeded) {
+        $hardenExit = 0
+    }
+    else {
+        $hardenExit = 1
+    }
+}
+else {
+    $hardenExit = [int]$a8r43lLastExitCodeVar.Value
+}
+# A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
 $hardenOut | ForEach-Object { Write-Host $_ }
 if($hardenExit -ne 0){
   Fail "harden_wavekit failed (exit=$hardenExit). Aborting release."
