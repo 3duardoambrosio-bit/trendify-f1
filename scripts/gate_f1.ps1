@@ -8,23 +8,65 @@ function Invoke-A8R43MR43LGate {
     Write-Host "A8_R43M_R43L_GATE_BEGIN=1"
 
     $a8r43mRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $a8r43mR43lGate = Join-Path $a8r43mRepoRoot "tools/check_a8_r43l_powershell_checker_isolation_contract.ps1"
 
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $a8r43mRepoRoot "tools/check_a8_r43l_powershell_checker_isolation_contract.ps1") -RepoRoot $a8r43mRepoRoot
+    if (-not (Test-Path $a8r43mR43lGate)) {
+        throw "A8_R43M_R43L_GATE_NOT_FOUND=$a8r43mR43lGate"
+    }
 
-    $a8r43mR43lCommandSucceeded = $?
-    $a8r43mR43lExitVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+    $a8r43mQuotedGate = '"' + $a8r43mR43lGate.Replace('"', '\"') + '"'
+    $a8r43mQuotedRepo = '"' + $a8r43mRepoRoot.Replace('"', '\"') + '"'
 
-    if ($null -eq $a8r43mR43lExitVar -or $null -eq $a8r43mR43lExitVar.Value) {
-        if ($a8r43mR43lCommandSucceeded) {
-            $a8r43mR43lRc = 0
+    $a8r43mPsi = [System.Diagnostics.ProcessStartInfo]::new()
+    $a8r43mPsi.FileName = "powershell.exe"
+    $a8r43mPsi.WorkingDirectory = $a8r43mRepoRoot
+    $a8r43mPsi.UseShellExecute = $false
+    $a8r43mPsi.RedirectStandardOutput = $true
+    $a8r43mPsi.RedirectStandardError = $true
+    $a8r43mPsi.CreateNoWindow = $true
+    $a8r43mPsi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File $a8r43mQuotedGate -RepoRoot $a8r43mQuotedRepo"
+
+    Write-Host "A8_R43W_R43L_PROCESS_CAPTURE=1"
+
+    $a8r43mProcess = [System.Diagnostics.Process]::new()
+    $a8r43mProcess.StartInfo = $a8r43mPsi
+
+    [void]$a8r43mProcess.Start()
+
+    $a8r43mStdoutTask = $a8r43mProcess.StandardOutput.ReadToEndAsync()
+    $a8r43mStderrTask = $a8r43mProcess.StandardError.ReadToEndAsync()
+
+    if (-not $a8r43mProcess.WaitForExit(300000)) {
+        try {
+            $a8r43mProcess.Kill()
         }
-        else {
-            $a8r43mR43lRc = 1
+        catch {
+            Write-Host "A8_R43W_R43L_TIMEOUT_KILL_FAILED=1"
+        }
+
+        throw "A8_R43M_R43L_GATE_TIMEOUT_MS=300000"
+    }
+
+    $a8r43mR43lStdout = $a8r43mStdoutTask.GetAwaiter().GetResult()
+    $a8r43mR43lStderr = $a8r43mStderrTask.GetAwaiter().GetResult()
+
+    if (-not [string]::IsNullOrWhiteSpace($a8r43mR43lStdout)) {
+        $a8r43mR43lStdout -split "`n" | ForEach-Object {
+            if (-not [string]::IsNullOrWhiteSpace($_)) {
+                Write-Host $_
+            }
         }
     }
-    else {
-        $a8r43mR43lRc = [int]$a8r43mR43lExitVar.Value
+
+    if (-not [string]::IsNullOrWhiteSpace($a8r43mR43lStderr)) {
+        $a8r43mR43lStderr -split "`n" | ForEach-Object {
+            if (-not [string]::IsNullOrWhiteSpace($_)) {
+                Write-Host "A8_R43W_R43L_STDERR: $_"
+            }
+        }
     }
+
+    $a8r43mR43lRc = [int]$a8r43mProcess.ExitCode
 
     # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
 
@@ -36,8 +78,6 @@ function Invoke-A8R43MR43LGate {
 
     Write-Host "A8_R43M_R43L_GATE_PASS=1"
 }
-
-
 # A8_R43H_REGISTRY_GATE_FUNCTION_BEGIN
 function Invoke-A8R43HRegistryGate {
   if ($null -eq (Get-Variable -Name A8R43HRegistryGateAlreadyRun -Scope Script -ErrorAction SilentlyContinue)) {
@@ -546,7 +586,7 @@ foreach ($r in $roots) { if (Test-Path $r) { $existing += $r } }
 if ($existing.Count -eq 0) { Fail 30 "NO test roots found" }
 
 # A8_R43Q_PYTEST_CONTINUATION_CONTRACT=1
-$a8r43qPytestOutput = @(Invoke-A8R28CheckedPytest)
+$a8r43qPytestOutput = @(Invoke-A8R28CheckedPytest -Label "gate_pytest_existing_roots" -PythonExe $pythonExe -Targets @($existing))
 $a8r43qPytestOutputCount = @($a8r43qPytestOutput).Count
 Write-Host "A8_R43T_PYTEST_OUTPUT_CAPTURE_COUNT=$a8r43qPytestOutputCount"
 if ($a8r43qPytestOutputCount -lt 1) {
