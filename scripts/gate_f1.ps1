@@ -4,6 +4,40 @@ param(
 
 Set-StrictMode -Version Latest
 
+function Invoke-A8R43MR43LGate {
+    Write-Host "A8_R43M_R43L_GATE_BEGIN=1"
+
+    $a8r43mRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $a8r43mRepoRoot "tools/check_a8_r43l_powershell_checker_isolation_contract.ps1") -RepoRoot $a8r43mRepoRoot
+
+    $a8r43mR43lCommandSucceeded = $?
+    $a8r43mR43lExitVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+
+    if ($null -eq $a8r43mR43lExitVar -or $null -eq $a8r43mR43lExitVar.Value) {
+        if ($a8r43mR43lCommandSucceeded) {
+            $a8r43mR43lRc = 0
+        }
+        else {
+            $a8r43mR43lRc = 1
+        }
+    }
+    else {
+        $a8r43mR43lRc = [int]$a8r43mR43lExitVar.Value
+    }
+
+    # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
+
+    Write-Host "A8_R43M_R43L_GATE_RC=$a8r43mR43lRc"
+
+    if ($a8r43mR43lRc -ne 0) {
+        throw "A8_R43M_R43L_GATE_FAILED_RC=$a8r43mR43lRc"
+    }
+
+    Write-Host "A8_R43M_R43L_GATE_PASS=1"
+}
+
+
 # A8_R43H_REGISTRY_GATE_FUNCTION_BEGIN
 function Invoke-A8R43HRegistryGate {
   if ($null -eq (Get-Variable -Name A8R43HRegistryGateAlreadyRun -Scope Script -ErrorAction SilentlyContinue)) {
@@ -344,6 +378,7 @@ Invoke-A8R43HRegistryGate
 # A8_R43H_REGISTRY_GATE_CALL_END
 Write-Host "=== SYNAPSE F1 GATE: PASS ==="
   Write-Host ("ACCEPTANCE: hook_native_exit=0 hook_targets=6 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3} a8r37_hook_stabilization=1 a8r37_hook_earliest_fast_path=1 a8r37_hook_native_fast_path=1 a8r37_hook_pytest_disabled=1" -f $doctorExit,$doctorOverall,$hookVenvDetected,$bootstrapUsed)
+  Invoke-A8R43MR43LGate
   exit 0
 }
 
@@ -544,4 +579,5 @@ Invoke-A8R43HRegistryGate
 
 Write-Host "=== SYNAPSE F1 GATE: PASS ==="
 Write-Host ("ACCEPTANCE: pytest_exit=0 doctor_exit={0} doctor_overall={1} python_venv_detected={2} bootstrap_used={3}" -f $doctorExit,$doctorOverall,$script:SynapsePythonVenvDetected,$bootstrapUsed)
+Invoke-A8R43MR43LGate
 exit 0
