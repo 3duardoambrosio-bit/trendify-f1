@@ -191,16 +191,6 @@ function Invoke-A8R28CheckedPytest {
     [object[]]$Targets
   )
 
-  function Convert-A8R28CommandLineArg {
-    param([string]$Value)
-
-    if ($null -eq $Value) {
-      return '""'
-    }
-
-    return '"' + ([string]$Value).Replace('\', '\\').Replace('"', '\"') + '"'
-  }
-
   $tmpRoot = "C:\Temp"
   if (-not (Test-Path -LiteralPath $tmpRoot)) {
     New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
@@ -242,62 +232,41 @@ function Invoke-A8R28CheckedPytest {
 
   $pytestArgs = @("-B", "-m", "pytest")
   foreach ($target in $cleanTargets) {
-    $pytestArgs += (Convert-A8R28CommandLineArg $target)
+    $pytestArgs += [string]$target
   }
   $pytestArgs += @("-q", "--tb=no")
 
-  $psi = [System.Diagnostics.ProcessStartInfo]::new()
-  $psi.FileName = $PythonExe
-  $psi.WorkingDirectory = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $psi.CreateNoWindow = $true
-  $psi.Arguments = ($pytestArgs -join " ")
-
+  Write-Host "A8_R43AA_PYTEST_STARTPROCESS_CAPTURE=1"
   Write-Host "A8_R43X_PYTEST_PROCESS_CAPTURE=1"
   Write-Host "A8_R43X_PYTEST_TARGET_COUNT=$(@($cleanTargets).Count)"
 
-  $process = [System.Diagnostics.Process]::new()
-  $process.StartInfo = $psi
+  if (Test-Path $stdout) { Remove-Item -Force $stdout }
+  if (Test-Path $stderr) { Remove-Item -Force $stderr }
 
-  [void]$process.Start()
-
-  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-  $stderrTask = $process.StandardError.ReadToEndAsync()
-
-  if (-not $process.WaitForExit(900000)) {
-    try {
-      $process.Kill()
-    }
-    catch {
-      Write-Host "A8_R43X_PYTEST_TIMEOUT_KILL_FAILED=1"
-    }
-
-    $timeoutOut = ""
-    $timeoutErr = ""
-    try { $timeoutOut = $stdoutTask.GetAwaiter().GetResult() } catch { $timeoutOut = "" }
-    try { $timeoutErr = $stderrTask.GetAwaiter().GetResult() } catch { $timeoutErr = "" }
-
-    [System.IO.File]::WriteAllText($stdout, $timeoutOut, [System.Text.UTF8Encoding]::new($false))
-    [System.IO.File]::WriteAllText($stderr, $timeoutErr, [System.Text.UTF8Encoding]::new($false))
-
-    Write-Host "A8R28_GATE_FAIL_HARD_REASON=PytestTimeout"
-    return 124
-  }
-
-  $outText = $stdoutTask.GetAwaiter().GetResult()
-  $errText = $stderrTask.GetAwaiter().GetResult()
-
-  if ($null -eq $outText) { $outText = "" }
-  if ($null -eq $errText) { $errText = "" }
-
-  [System.IO.File]::WriteAllText($stdout, [string]$outText, [System.Text.UTF8Encoding]::new($false))
-  [System.IO.File]::WriteAllText($stderr, [string]$errText, [System.Text.UTF8Encoding]::new($false))
+  $process = Start-Process `
+    -FilePath $PythonExe `
+    -ArgumentList $pytestArgs `
+    -WorkingDirectory ((Resolve-Path (Join-Path $PSScriptRoot "..")).Path) `
+    -NoNewWindow `
+    -PassThru `
+    -Wait `
+    -RedirectStandardOutput $stdout `
+    -RedirectStandardError $stderr
 
   $rc = [int]$process.ExitCode
 
   # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
+
+  $outText = ""
+  $errText = ""
+
+  if (Test-Path $stdout) {
+    try { $outText = [System.IO.File]::ReadAllText($stdout) } catch { $outText = "" }
+  }
+
+  if (Test-Path $stderr) {
+    try { $errText = [System.IO.File]::ReadAllText($stderr) } catch { $errText = "" }
+  }
 
   $combined = "$outText`n$errText"
   $keyboardCount = ([regex]::Matches($combined, "KeyboardInterrupt")).Count
@@ -308,6 +277,9 @@ function Invoke-A8R28CheckedPytest {
   Write-Host "A8R28_PYTEST_KEYBOARD_INTERRUPT_COUNT=$keyboardCount"
   Write-Host "A8R28_PYTEST_TRACEBACK_COUNT=$tracebackCount"
   Write-Host "A8R28_PYTEST_FAILED_TEXT_COUNT=$failedCount"
+
+  Write-Host "A8R28_PYTEST_STDOUT_BYTES=$(if (Test-Path $stdout) { (Get-Item $stdout).Length } else { 0 })"
+  Write-Host "A8R28_PYTEST_STDERR_BYTES=$(if (Test-Path $stderr) { (Get-Item $stderr).Length } else { 0 })"
 
   Write-Host "A8R28_PYTEST_STDOUT_TAIL_BEGIN"
   if (Test-Path $stdout) { Get-Content $stdout -Tail 120 }
