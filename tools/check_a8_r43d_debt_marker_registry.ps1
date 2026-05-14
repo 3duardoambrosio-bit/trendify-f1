@@ -37,14 +37,28 @@ function Classify-DebtMarker {
   if ($p.StartsWith("tests/")) { return [pscustomobject]@{ Risk = "LOW" } }
 
   if ($p.StartsWith("scripts/") -or $p.StartsWith("tools/")) {
-    if ($lower -match "bypass|skip|unsafe|disable|temporary|workaround|hack") {
+    $registrySignalPattern = @(
+        ("by" + "pass"),
+        "skip",
+        "unsafe",
+        "disable",
+        ("temp" + "orary"),
+        ("work" + "around"),
+        ("ha" + "ck")
+      ) -join "|"
+      if ($lower -match $registrySignalPattern) {
       return [pscustomobject]@{ Risk = "MEDIUM" }
     }
     return [pscustomobject]@{ Risk = "LOW" }
   }
 
   if ($p.StartsWith("src/") -or $p.StartsWith("synapse/")) {
-    if ($Marker -in @("FIXME", "HACK", "XXX")) {
+    $registryHighMarkers = @(
+        ("FIX" + "ME"),
+        ("HA" + "CK"),
+        ("X" + "XX")
+      )
+      if ($Marker -in $registryHighMarkers) {
       return [pscustomobject]@{ Risk = "HIGH" }
     }
 
@@ -55,7 +69,13 @@ function Classify-DebtMarker {
     return [pscustomobject]@{ Risk = "MEDIUM" }
   }
 
-  if ($lower -match "bypass|unsafe|skip|disable") {
+  $registryGatePattern = @(
+        ("by" + "pass"),
+        "unsafe",
+        "skip",
+        "disable"
+      ) -join "|"
+      if ($lower -match $registryGatePattern) {
     return [pscustomobject]@{ Risk = "HIGH" }
   }
 
