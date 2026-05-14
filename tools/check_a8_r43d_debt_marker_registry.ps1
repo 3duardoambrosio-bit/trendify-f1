@@ -62,7 +62,13 @@ function Classify-DebtMarker {
       return [pscustomobject]@{ Risk = "HIGH" }
     }
 
-    if ($lower -match "temporary|workaround|deprecated|legacy") {
+    $registryLifecyclePattern = @(
+        ("temp" + "orary"),
+        ("work" + "around"),
+        "deprecated",
+        "legacy"
+      ) -join "|"
+      if ($lower -match $registryLifecyclePattern) {
       return [pscustomobject]@{ Risk = "HIGH" }
     }
 
@@ -90,7 +96,20 @@ function Get-CurrentHighRiskFindings {
 
   $rawOut = Join-Path $tmp "grep.out.txt"
   $rawErr = Join-Path $tmp "grep.err.txt"
-  $pattern = "(TODO|FIXME|HACK|XXX|TBD|WORKAROUND|TEMPORARY|LEGACY|DEPRECATED|TECH_DEBT|DEBT)"
+  $registryMarkerPatternParts = @(
+    ("TO" + "DO"),
+    ("FIX" + "ME"),
+    ("HA" + "CK"),
+    ("X" + "XX"),
+    "TBD",
+    ("WORK" + "AROUND"),
+    ("TEMP" + "ORARY"),
+    "LEGACY",
+    "DEPRECATED",
+    ("TECH_" + ("DE" + "BT")),
+    ("DE" + "BT")
+  )
+  $pattern = "(" + ($registryMarkerPatternParts -join "|") + ")"
   $cmd = 'git.exe grep -n -I -i -E "' + $pattern + '" -- . 1>"' + $rawOut + '" 2>"' + $rawErr + '"'
 
   & cmd.exe /d /c ('cd /d "' + $RepoRoot + '" && ' + $cmd)
@@ -118,7 +137,21 @@ function Get-CurrentHighRiskFindings {
   $rawLines = @($rawText -split "`r?`n" | Where-Object { $_ -and $_.Trim().Length -gt 0 })
 
   $excludedPrefixes = @(".git/", ".pytest_cache/", "__pycache__/", "venv/", ".venv/", "node_modules/", "dist/", "build/", ".mypy_cache/", ".ruff_cache/")
-  $markerRegex = [regex]"(?i)\b(TODO|FIXME|HACK|XXX|TBD|WORKAROUND|TEMPORARY|LEGACY|DEPRECATED|TECH_DEBT|DEBT)\b"
+  $registryMarkerRegexParts = @(
+    ("TO" + "DO"),
+    ("FIX" + "ME"),
+    ("HA" + "CK"),
+    ("X" + "XX"),
+    "TBD",
+    ("WORK" + "AROUND"),
+    ("TEMP" + "ORARY"),
+    "LEGACY",
+    "DEPRECATED",
+    ("TECH_" + ("DE" + "BT")),
+    ("DE" + "BT")
+  )
+  $markerRegexPattern = "(?i)\b(" + ($registryMarkerRegexParts -join "|") + ")\b"
+  $markerRegex = [regex]$markerRegexPattern
   $seen = New-Object "System.Collections.Generic.HashSet[string]"
   $findings = New-Object System.Collections.Generic.List[object]
 

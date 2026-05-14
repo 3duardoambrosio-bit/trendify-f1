@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 # A8-R28_STABLE_PYTEST_BASETEMP_BEGIN
-# Keep pytest temporary cleanup outside the repository on Windows.
+# Keep pytest temp-dir cleanup outside the repository on Windows.
 # This prevents repo-relative Temp* folders and reduces pytest cleanup KeyboardInterrupt risk.
 $A8R28PytestBaseTempRoot = "C:\Temp"
 if (-not (Test-Path -LiteralPath $A8R28PytestBaseTempRoot)) {

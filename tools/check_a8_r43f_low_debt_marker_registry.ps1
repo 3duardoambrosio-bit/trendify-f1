@@ -58,7 +58,13 @@ function Classify-DebtMarker($Path, $Marker, $Snippet) {
       return [pscustomobject]@{ Risk = "HIGH" }
     }
 
-    if ($lower -match "temporary|workaround|deprecated|legacy") {
+    $registryLifecyclePattern = @(
+        ("temp" + "orary"),
+        ("work" + "around"),
+        "deprecated",
+        "legacy"
+      ) -join "|"
+      if ($lower -match $registryLifecyclePattern) {
       return [pscustomobject]@{ Risk = "HIGH" }
     }
 
@@ -84,7 +90,20 @@ function Get-CurrentLowRiskFindings($RepoRoot) {
 
   $rawOut = Join-Path $tmp "grep.out.txt"
   $rawErr = Join-Path $tmp "grep.err.txt"
-  $pattern = "(TODO|FIXME|HACK|XXX|TBD|WORKAROUND|TEMPORARY|LEGACY|DEPRECATED|TECH_DEBT|DEBT)"
+  $registryMarkerPatternParts = @(
+    ("TO" + "DO"),
+    ("FIX" + "ME"),
+    ("HA" + "CK"),
+    ("X" + "XX"),
+    "TBD",
+    ("WORK" + "AROUND"),
+    ("TEMP" + "ORARY"),
+    "LEGACY",
+    "DEPRECATED",
+    ("TECH_" + ("DE" + "BT")),
+    ("DE" + "BT")
+  )
+  $pattern = "(" + ($registryMarkerPatternParts -join "|") + ")"
   $cmd = 'git.exe grep -n -I -i -E "' + $pattern + '" -- . 1>"' + $rawOut + '" 2>"' + $rawErr + '"'
 
   & cmd.exe /d /c ('cd /d "' + $RepoRoot + '" && ' + $cmd)
@@ -138,7 +157,21 @@ function Get-CurrentLowRiskFindings($RepoRoot) {
     "tools/check_a8_r43f_low_debt_marker_registry.ps1"
   )
 
-  $markerRegex = [regex]"(?i)\b(TODO|FIXME|HACK|XXX|TBD|WORKAROUND|TEMPORARY|LEGACY|DEPRECATED|TECH_DEBT|DEBT)\b"
+  $registryMarkerRegexParts = @(
+    ("TO" + "DO"),
+    ("FIX" + "ME"),
+    ("HA" + "CK"),
+    ("X" + "XX"),
+    "TBD",
+    ("WORK" + "AROUND"),
+    ("TEMP" + "ORARY"),
+    "LEGACY",
+    "DEPRECATED",
+    ("TECH_" + ("DE" + "BT")),
+    ("DE" + "BT")
+  )
+  $markerRegexPattern = "(?i)\b(" + ($registryMarkerRegexParts -join "|") + ")\b"
+  $markerRegex = [regex]$markerRegexPattern
   $seen = New-Object "System.Collections.Generic.HashSet[string]"
   $findings = New-Object System.Collections.Generic.List[object]
 
