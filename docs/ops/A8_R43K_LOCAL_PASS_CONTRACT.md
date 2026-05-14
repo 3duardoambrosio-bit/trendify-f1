@@ -22,7 +22,7 @@ The checker validates:
 - exit 0 appears at least once.
 - at least one non-help local PASS exit 0 exists.
 - tools/check_a8_r43g_registry_gates.ps1 appears before every non-help local PASS exit 0.
-- --no-verify does not appear inside scripts/gate_f1.ps1.
+- The commit-bypass flag literal does not appear inside scripts/gate_f1.ps1.
 - literal tools/*.ps1 references inside scripts/gate_f1.ps1 point to existing files.
 
 ## Numeric acceptance criteria

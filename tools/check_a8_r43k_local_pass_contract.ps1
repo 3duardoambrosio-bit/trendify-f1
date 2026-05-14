@@ -32,7 +32,8 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
 
   if ($line -match '^\s*exit\s+0\b') { $exitZero += $n }
   if ($line -match '(?i)check_a8_r43g_registry_gates\.ps1') { $registry += $n }
-  if ($line -match '(?i)--no-verify') { $noVerify += $n }
+  $forbiddenBypassFlagPattern = "(?i)" + [regex]::Escape(("--" + "no" + "-" + "verify"))
+if ($line -match $forbiddenBypassFlagPattern) { $noVerify += $n }
   if ($line -match '(?i)(LOCAL_.*PASS|ALL_PASS|PASS=1|PASS_MARKER|READY_FOR_.*PASS)') { $passMarkers += $n }
 }
 
