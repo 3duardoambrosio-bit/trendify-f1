@@ -79,6 +79,69 @@ function Invoke-PythonCapture {
   if ($rc -ne 0) { throw "$($Label)_FAILED_RC=$rc" }
   return ($lines -join "`n")
 }
+function Invoke-PythonFileRedirect {
+  param(
+    [string]$Label,
+    [string]$PythonExe,
+    [string[]]$Arguments,
+    [string]$StdoutPath,
+    [string]$StderrPath
+  )
+
+  Write-Host ""
+  Write-Host "================ $Label"
+
+  $stdoutDir = Split-Path $StdoutPath -Parent
+  $stderrDir = Split-Path $StderrPath -Parent
+
+  if (-not (Test-Path $stdoutDir)) { New-Item -ItemType Directory -Path $stdoutDir -Force | Out-Null }
+  if (-not (Test-Path $stderrDir)) { New-Item -ItemType Directory -Path $stderrDir -Force | Out-Null }
+
+  if (Test-Path $StdoutPath) { Remove-Item $StdoutPath -Force }
+  if (Test-Path $StderrPath) { Remove-Item $StderrPath -Force }
+
+  Write-Host "$($Label)_STDOUT=$StdoutPath"
+  Write-Host "$($Label)_STDERR=$StderrPath"
+
+  $proc = Start-Process `
+    -FilePath $PythonExe `
+    -ArgumentList $Arguments `
+    -WorkingDirectory $RepoRoot `
+    -RedirectStandardOutput $StdoutPath `
+    -RedirectStandardError $StderrPath `
+    -NoNewWindow `
+    -Wait `
+    -PassThru
+
+  $rc = [int]$proc.ExitCode
+
+  $stdoutSize = 0
+  $stderrSize = 0
+
+  if (Test-Path $StdoutPath) { $stdoutSize = (Get-Item $StdoutPath).Length }
+  if (Test-Path $StderrPath) { $stderrSize = (Get-Item $StderrPath).Length }
+
+  Write-Host "$($Label)_STDOUT_SIZE_BYTES=$stdoutSize"
+  Write-Host "$($Label)_STDERR_SIZE_BYTES=$stderrSize"
+
+  if (Test-Path $StdoutPath) {
+    Write-Host "$($Label)_STDOUT_TAIL_BEGIN"
+    Get-Content $StdoutPath -Tail 80 | ForEach-Object { Write-Host $_ }
+    Write-Host "$($Label)_STDOUT_TAIL_END"
+  }
+
+  if (Test-Path $StderrPath) {
+    Write-Host "$($Label)_STDERR_TAIL_BEGIN"
+    Get-Content $StderrPath -Tail 80 | ForEach-Object { Write-Host $_ }
+    Write-Host "$($Label)_STDERR_TAIL_END"
+  }
+
+  Write-Host "$($Label)_RC=$rc"
+
+  if ($rc -ne 0) {
+    throw "$($Label)_FAILED_RC=$rc"
+  }
+}
 Write-Host "============================================================"
 Write-Host "A8-R52 OFFLINE E2E HARDENING GATE"
 Write-Host "============================================================"
@@ -138,7 +201,9 @@ Write-Host "EVIDENCE_ROOT=$EvidenceRoot"
 Write-Host "EVIDENCE_DIR=$evidenceDir"
 Write-Host "LOGS_DIR=$logsDir"
 
-Invoke-PythonDirect -Label "BURNIN_E2E" -PythonExe $pythonExe -Arguments @("scripts\run_burnin_mock.py", "--cycles", "$Cycles", "--out-dir", "$evidenceDir")
+$burninStdout = Join-Path $logsDir "burnin_stdout.txt"
+$burninStderr = Join-Path $logsDir "burnin_stderr.txt"
+Invoke-PythonFileRedirect -Label "BURNIN_E2E" -PythonExe $pythonExe -Arguments @("scripts\run_burnin_mock.py", "--cycles", "$Cycles", "--out-dir", "$evidenceDir") -StdoutPath $burninStdout -StderrPath $burninStderr
 
 Write-Host ""
 Write-Host "================ 03_VALIDATE_OUTPUTS"
@@ -235,3 +300,4 @@ if (-not $AllowDirtyRepo.IsPresent -and $statusAfter.Count -ne 0) {
   throw "REPO_NOT_CLEAN_AFTER=$($statusAfter.Count)"
 }
 Write-Host "A8_R52_OFFLINE_E2E_GATE_PASS=1"
+
