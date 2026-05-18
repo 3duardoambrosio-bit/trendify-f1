@@ -42,22 +42,43 @@ function Invoke-PythonCapture {
   param([string]$Label, [string]$PythonExe, [string[]]$Arguments, [string]$LogPath)
   Write-Host ""
   Write-Host "================ $Label"
+
+  $stdoutPath = "$LogPath.stdout.tmp"
+  $stderrPath = "$LogPath.stderr.tmp"
+
+  if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force }
+  if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force }
+
   $old = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    $output = & $PythonExe @Arguments 2>&1
+    & $PythonExe @Arguments > $stdoutPath 2> $stderrPath
     $rc = $LASTEXITCODE
   } finally {
     $ErrorActionPreference = $old
   }
-  $lines = @($output | ForEach-Object { [string]$_ })
-  Write-Utf8NoBom -Path $LogPath -Lines $lines
+
+  $lines = New-Object System.Collections.Generic.List[string]
+
+  if (Test-Path $stdoutPath) {
+    foreach ($line in (Get-Content $stdoutPath)) {
+      if (-not [string]::IsNullOrWhiteSpace($line)) { $lines.Add($line) }
+    }
+  }
+
+  if (Test-Path $stderrPath) {
+    foreach ($line in (Get-Content $stderrPath)) {
+      if (-not [string]::IsNullOrWhiteSpace($line)) { $lines.Add("STDERR: $line") }
+    }
+  }
+
+  Write-Utf8NoBom -Path $LogPath -Lines ([string[]]$lines)
   $lines | ForEach-Object { Write-Host $_ }
   Write-Host "$($Label)_RC=$rc"
+
   if ($rc -ne 0) { throw "$($Label)_FAILED_RC=$rc" }
   return ($lines -join "`n")
 }
-
 Write-Host "============================================================"
 Write-Host "A8-R52 OFFLINE E2E HARDENING GATE"
 Write-Host "============================================================"
