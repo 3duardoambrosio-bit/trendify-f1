@@ -198,3 +198,59 @@ def test_a8_r54_blocks_generic_factory_leak_phrases(tmp_path: Path) -> None:
 
     assert creative_pack["creative_integrity"]["generic_phrase_count"] == 0
     assert creative_pack["creative_integrity"]["passed"] is True
+
+
+def test_a8_r54f_lists_presets(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "synapse.cli", "simulate", "--list-presets"],
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stdout = result.stdout
+
+    assert "SYNAPSE SIMULATION PRESETS" in stdout
+    assert "PRESET_COUNT=3" in stdout
+    assert "PRESET::home_security_wifi" in stdout
+    assert "PRESET::car_cleaning_demo" in stdout
+    assert "PRESET::pet_hair_clothes" in stdout
+
+
+def test_a8_r54f_runs_preset_and_allows_override(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "synapse.cli",
+            "simulate",
+            "--preset",
+            "pet_hair_clothes",
+            "--evidence-root",
+            str(tmp_path),
+            "--price",
+            "279",
+            "--traffic",
+            "1500",
+        ],
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stdout = result.stdout
+
+    assert "PRODUCT=Removedor de pelusa reutilizable" in stdout
+    assert "PRICE_MXN=279" in stdout
+    assert "TRAFFIC=1500" in stdout
+    assert "FINAL_OUTCOME=TEST_SMALL_BUDGET_SANDBOX" in stdout
+    assert "GENERIC_PHRASE_COUNT=0" in stdout
+    assert "CREATIVE_INTEGRITY_PASS=1" in stdout
+    assert "EXTERNAL_MUTATION=0" in stdout
+    assert "SPEND_COUNT=0" in stdout

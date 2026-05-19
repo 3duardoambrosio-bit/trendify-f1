@@ -76,6 +76,49 @@ class CreativeIntegrityReport:
     failed_reasons: tuple[str, ...] = field(default_factory=tuple)
 
 
+
+PRESET_SCENARIOS: dict[str, dict[str, object]] = {
+    "home_security_wifi": {
+        "product_name": "Mini cámara WiFi",
+        "category": "home_security",
+        "market": "MX",
+        "price": 599,
+        "cost": 180,
+        "traffic": 900,
+        "days": 3,
+        "marketing_angle": "tranquilidad visual para casa sin instalación complicada",
+        "primary_hook": "¿Sales de casa y no sabes qué está pasando?",
+        "target_audience": "personas que quieren vigilar casa o negocio pequeño",
+        "use_case": "revisar visualmente un espacio desde el celular",
+    },
+    "car_cleaning_demo": {
+        "product_name": "Mini aspiradora portátil",
+        "category": "car_accessories",
+        "market": "MX",
+        "price": 499,
+        "cost": 170,
+        "traffic": 1000,
+        "days": 3,
+        "marketing_angle": "limpieza visible de migajas en carro sin exagerar resultados",
+        "primary_hook": "Graba el asiento antes y después de una pasada real.",
+        "target_audience": "personas que usan el carro diario y odian verlo sucio",
+        "use_case": "limpiar migajas visibles en asiento o tapete del carro",
+    },
+    "pet_hair_clothes": {
+        "product_name": "Removedor de pelusa reutilizable",
+        "category": "home_lifestyle",
+        "market": "MX",
+        "price": 249,
+        "cost": 55,
+        "traffic": 1200,
+        "days": 3,
+        "marketing_angle": "antes y después real en ropa negra con pelo de mascota",
+        "primary_hook": "Muestra una manga negra llena de pelusa y una pasada real.",
+        "target_audience": "personas con mascotas que salen con ropa llena de pelo",
+        "use_case": "quitar pelusa visible de ropa negra sin prometer magia",
+    },
+}
+
 GENERIC_BLACKLIST = (
     "el mejor producto",
     "calidad garantizada",
@@ -133,6 +176,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--evidence-root", default=None)
     parser.add_argument("--known-cases", action="store_true", help="Run A8-R54 known-case contract set.")
+    parser.add_argument("--list-presets", action="store_true", help="List built-in sandbox simulation presets.")
+    parser.add_argument("--preset", choices=sorted(PRESET_SCENARIOS.keys()), default=None, help="Use a built-in sandbox preset as editable input.")
     parser.add_argument("--product", "--product-name", dest="product_name", default=None)
     parser.add_argument("--category", default="home_security")
     parser.add_argument("--market", default="MX")
@@ -152,6 +197,7 @@ def _has_manipulable_input(args: argparse.Namespace | None) -> bool:
         return False
     return any(
         [
+            getattr(args, "preset", None) is not None,
             args.product_name is not None,
             args.price is not None,
             args.cost is not None,
@@ -168,7 +214,58 @@ def _contains_dangerous_claim(text: str) -> bool:
     return any(phrase in normalized for phrase in DANGEROUS_CLAIMS)
 
 
+
+def _apply_preset_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    preset_name = getattr(args, "preset", None)
+    if not preset_name:
+        return args
+
+    preset = PRESET_SCENARIOS[preset_name]
+
+    if args.product_name is None:
+        args.product_name = str(preset["product_name"])
+    if args.category == "home_security":
+        args.category = str(preset["category"])
+    if args.market == "MX":
+        args.market = str(preset["market"])
+    if args.price is None:
+        args.price = int(preset["price"])
+    if args.cost is None:
+        args.cost = int(preset["cost"])
+    if args.traffic == 800:
+        args.traffic = int(preset["traffic"])
+    if args.days == 3:
+        args.days = int(preset["days"])
+    if not str(args.marketing_angle).strip():
+        args.marketing_angle = str(preset["marketing_angle"])
+    if not str(args.primary_hook).strip():
+        args.primary_hook = str(preset["primary_hook"])
+    if args.target_audience == "comprador mexicano de e-commerce":
+        args.target_audience = str(preset["target_audience"])
+    if args.use_case == "uso diario visible":
+        args.use_case = str(preset["use_case"])
+
+    return args
+
+
+def render_preset_list() -> str:
+    lines = ["SYNAPSE SIMULATION PRESETS", f"PRESET_COUNT={len(PRESET_SCENARIOS)}"]
+    for name, preset in sorted(PRESET_SCENARIOS.items()):
+        lines.append(f"PRESET::{name}")
+        lines.append(f"  PRODUCT={preset['product_name']}")
+        lines.append(f"  CATEGORY={preset['category']}")
+        lines.append(f"  PRICE_MXN={preset['price']}")
+        lines.append(f"  COST_MXN={preset['cost']}")
+        lines.append(f"  TRAFFIC={preset['traffic']}")
+        lines.append(f"  DAYS={preset['days']}")
+        lines.append(f"  ANGLE={preset['marketing_angle']}")
+    return "\n".join(lines) + "\n"
+
+
 def build_scenario(args: argparse.Namespace | None = None) -> SyntheticScenario:
+    if args is not None:
+        args = _apply_preset_defaults(args)
+
     if args is None or not _has_manipulable_input(args):
         return SyntheticScenario(
             scenario_id=SCENARIO_ID,
@@ -828,6 +925,10 @@ def run_known_cases(evidence_root: str | None = None) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.list_presets:
+        sys.stdout.write(render_preset_list())
+        return 0
 
     if args.known_cases:
         sys.stdout.write(run_known_cases(args.evidence_root))
