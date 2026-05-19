@@ -88,6 +88,12 @@ GENERIC_BLACKLIST = (
     "producto increíble",
     "producto increible",
     "revolucionario",
+    "dile adiós",
+    "dile adios",
+    "lo que usan los que saben",
+    "los que saben",
+    "realmente funciona",
+    "desorden y la incomodidad",
 )
 
 DANGEROUS_CLAIMS = (
@@ -418,13 +424,26 @@ def generate_creative_pack(scenario: SyntheticScenario, safety: SafetyPosture) -
         f"No digas que {product} garantiza nada: enseña el mecanismo y deja que la demostración cargue el anuncio.",
     ]
 
+    product_tokens = [token for token in _normalize(product).split() if len(token) >= 4]
+    use_case_tokens = [token for token in _normalize(use_case).split() if len(token) >= 5]
+    audience_tokens = [token for token in _normalize(audience).split() if len(token) >= 5]
+
     for item in factory_strings:
         if len(hooks) >= 8:
             break
-        if len(item.split()) >= 5:
+
+        item_norm = _normalize(item)
+        has_specific_anchor = any(token in item_norm for token in product_tokens + use_case_tokens + audience_tokens)
+        has_generic_phrase = any(phrase in item_norm for phrase in GENERIC_BLACKLIST)
+
+        if len(item.split()) >= 5 and has_specific_anchor and not has_generic_phrase:
             hooks.append(item)
 
-    hooks = _dedupe_keep_order(hooks)[:8]
+    hooks = [
+        hook
+        for hook in _dedupe_keep_order(hooks)
+        if not any(phrase in _normalize(hook) for phrase in GENERIC_BLACKLIST)
+    ][:8]
 
     angles = [
         {

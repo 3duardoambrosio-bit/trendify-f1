@@ -17,7 +17,7 @@ def test_a8_r54_manipulable_simulation_user_inputs(tmp_path: Path) -> None:
             "--evidence-root",
             str(tmp_path),
             "--product",
-            "Mini cámara WiFi",
+            "Mini cÃ¡mara WiFi",
             "--category",
             "home_security",
             "--price",
@@ -29,11 +29,11 @@ def test_a8_r54_manipulable_simulation_user_inputs(tmp_path: Path) -> None:
             "--days",
             "3",
             "--marketing-angle",
-            "tranquilidad visual para casa sin instalación complicada",
+            "tranquilidad visual para casa sin instalaciÃ³n complicada",
             "--primary-hook",
-            "¿Sales de casa y no sabes qué está pasando?",
+            "Â¿Sales de casa y no sabes quÃ© estÃ¡ pasando?",
             "--target-audience",
-            "personas que quieren vigilar casa o negocio pequeño",
+            "personas que quieren vigilar casa o negocio pequeÃ±o",
             "--use-case",
             "revisar visualmente un espacio desde el celular",
         ],
@@ -132,3 +132,69 @@ def test_a8_r54_known_cases_contract(tmp_path: Path) -> None:
     assert known_cases["total"] == 8
     assert known_cases["passed"] >= 6
     assert all(case["passed"] == 1 for case in known_cases["cases"])
+
+
+def test_a8_r54_blocks_generic_factory_leak_phrases(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "synapse.cli",
+            "simulate",
+            "--evidence-root",
+            str(tmp_path),
+            "--product",
+            "Mini cÃ¡mara WiFi",
+            "--category",
+            "home_security",
+            "--price",
+            "599",
+            "--cost",
+            "180",
+            "--traffic",
+            "900",
+            "--days",
+            "3",
+            "--marketing-angle",
+            "tranquilidad visual para casa sin instalaciÃ³n complicada",
+            "--primary-hook",
+            "Â¿Sales de casa y no sabes quÃ© estÃ¡ pasando?",
+            "--target-audience",
+            "personas que quieren vigilar casa o negocio pequeÃ±o",
+            "--use-case",
+            "revisar visualmente un espacio desde el celular",
+        ],
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stdout_lower = result.stdout.lower()
+
+    banned_fragments = [
+        "dile adiÃ³s",
+        "dile adios",
+        "lo que usan los que saben",
+        "los que saben",
+        "realmente funciona",
+        "desorden y la incomodidad",
+    ]
+
+    for fragment in banned_fragments:
+        assert fragment not in stdout_lower
+
+    evidence_match = re.search(r"^EVIDENCE_DIR=(.+)$", result.stdout, flags=re.MULTILINE)
+    assert evidence_match is not None
+    evidence_dir = Path(evidence_match.group(1).strip())
+
+    creative_pack = json.loads((evidence_dir / "creative_pack.json").read_text(encoding="utf-8"))
+    hooks = "\\n".join(creative_pack["hook_variants"]).lower()
+
+    for fragment in banned_fragments:
+        assert fragment not in hooks
+
+    assert creative_pack["creative_integrity"]["generic_phrase_count"] == 0
+    assert creative_pack["creative_integrity"]["passed"] is True
