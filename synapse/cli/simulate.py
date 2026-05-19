@@ -1,16 +1,3 @@
-"""Visible single-scenario simulation runner for SYNAPSE.
-
-A8-R53 contract:
-- local-only
-- deterministic
-- human-readable
-- sandbox evidence only
-- no Shopify/Meta/Dropi mutation
-- no spend
-- no launch
-- no live API mutation
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -18,14 +5,14 @@ import hashlib
 import json
 import sys
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 
 SCENARIO_ID = "A8-R53-VISIBLE-SINGLE-SCENARIO-001"
-SIMULATION_VERSION = "a8_r53_visible_single_scenario_v1"
+SIMULATION_VERSION = "a8-r54-manipulable-v1"
 
 
 @dataclass(frozen=True)
@@ -47,6 +34,13 @@ class SyntheticScenario:
     estimated_landed_cost_mxn: int
     creative_claim: str
     signals: tuple[SyntheticSignal, ...]
+    traffic: int = 800
+    days: int = 3
+    marketing_angle: str = ""
+    primary_hook: str = ""
+    target_audience: str = "comprador mexicano de e-commerce"
+    use_case: str = "uso diario visible"
+    source: str = "synthetic"
 
 
 @dataclass(frozen=True)
@@ -71,81 +65,177 @@ class Decision:
     reason: str
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+@dataclass(frozen=True)
+class CreativeIntegrityReport:
+    generic_phrase_count: int
+    specific_anchor_count: int
+    hook_uniqueness_score: float
+    claim_safety: str
+    creative_risk: str
+    passed: bool
+    failed_reasons: tuple[str, ...] = field(default_factory=tuple)
 
 
-def _stable_json(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+GENERIC_BLACKLIST = (
+    "el mejor producto",
+    "calidad garantizada",
+    "ideal para todos",
+    "compra ahora",
+    "no te lo pierdas",
+    "solución perfecta",
+    "solucion perfecta",
+    "producto innovador",
+    "producto increíble",
+    "producto increible",
+    "revolucionario",
+)
+
+DANGEROUS_CLAIMS = (
+    "garantizado",
+    "cura",
+    "evita robos",
+    "duerme seguro",
+    "resultado asegurado",
+    "resultados asegurados",
+    "100% seguro",
+    "aval médico",
+    "aval medico",
+)
 
 
-def _sha256_short(payload: str) -> str:
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def build_scenario() -> SyntheticScenario:
+def _normalize(text: str) -> str:
+    return " ".join(str(text or "").strip().lower().split())
+
+
+def _stable_id(prefix: str, payload: dict[str, Any], length: int = 16) -> str:
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return f"{prefix}_{hashlib.sha256(raw).hexdigest()[:length]}"
+
+
+def _round(value: float, digits: int = 4) -> float:
+    return round(float(value), digits)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m synapse.cli simulate",
+        description="Run a local SYNAPSE visible simulation with zero external mutation.",
+    )
+    parser.add_argument("--evidence-root", default=None)
+    parser.add_argument("--known-cases", action="store_true", help="Run A8-R54 known-case contract set.")
+    parser.add_argument("--product", "--product-name", dest="product_name", default=None)
+    parser.add_argument("--category", default="home_security")
+    parser.add_argument("--market", default="MX")
+    parser.add_argument("--price", type=int, default=None)
+    parser.add_argument("--cost", type=int, default=None)
+    parser.add_argument("--traffic", type=int, default=800)
+    parser.add_argument("--days", type=int, default=3)
+    parser.add_argument("--marketing-angle", default="")
+    parser.add_argument("--primary-hook", default="")
+    parser.add_argument("--target-audience", default="comprador mexicano de e-commerce")
+    parser.add_argument("--use-case", default="uso diario visible")
+    return parser
+
+
+def _has_manipulable_input(args: argparse.Namespace | None) -> bool:
+    if args is None:
+        return False
+    return any(
+        [
+            args.product_name is not None,
+            args.price is not None,
+            args.cost is not None,
+            bool(str(args.marketing_angle).strip()),
+            bool(str(args.primary_hook).strip()),
+            args.traffic != 800,
+            args.days != 3,
+        ]
+    )
+
+
+def _contains_dangerous_claim(text: str) -> bool:
+    normalized = _normalize(text)
+    return any(phrase in normalized for phrase in DANGEROUS_CLAIMS)
+
+
+def build_scenario(args: argparse.Namespace | None = None) -> SyntheticScenario:
+    if args is None or not _has_manipulable_input(args):
+        return SyntheticScenario(
+            scenario_id=SCENARIO_ID,
+            product_name="Mini cámara WiFi",
+            category="home_security",
+            market="MX",
+            supplier_mode="sandbox_supplier",
+            proposed_price_mxn=599,
+            estimated_landed_cost_mxn=180,
+            creative_claim="Monitorea espacios de casa sin prometer seguridad absoluta.",
+            marketing_angle="tranquilidad visual sin instalación complicada",
+            primary_hook="¿Sales de casa y no sabes qué está pasando?",
+            target_audience="personas que quieren vigilar casa o negocio pequeño",
+            use_case="revisar visualmente un espacio desde el celular",
+            signals=(
+                SyntheticSignal("gross_margin", 0.70, 0.35, "Price leaves room for testing without touching live spend."),
+                SyntheticSignal("claim_safety", 0.86, 0.25, "Claim avoids guaranteed safety or theft-prevention promises."),
+                SyntheticSignal("visual_demo", 0.78, 0.20, "Product can be demonstrated visually in a short ad."),
+                SyntheticSignal("traffic_depth", 0.80, 0.20, "Synthetic traffic depth is enough for sandbox evaluation."),
+            ),
+        )
+
+    product_name = str(args.product_name or "Producto sandbox manipulable").strip()
+    price = int(args.price if args.price is not None else 599)
+    cost = int(args.cost if args.cost is not None else 180)
+    gross_margin = 0.0 if price <= 0 else max(0.0, min(1.0, (price - cost) / price))
+    claim_text = str(args.primary_hook or args.marketing_angle or "Claim sandbox sin promesas absolutas.").strip()
+    claim_safe = 0.25 if _contains_dangerous_claim(claim_text) else 0.86
+    visual_demo = 0.80 if product_name and args.use_case else 0.50
+    traffic_signal = min(1.0, max(0.20, float(args.traffic) / 1000.0))
+
     return SyntheticScenario(
-        scenario_id=SCENARIO_ID,
-        product_name="Synthetic Posture Desk Lamp",
-        category="home-office-gadget",
-        market="MX",
-        supplier_mode="sandbox_manual_research_only",
-        proposed_price_mxn=699,
-        estimated_landed_cost_mxn=331,
-        creative_claim="Ayuda a iluminar tu escritorio sin prometer resultados médicos ni financieros.",
+        scenario_id=_stable_id(
+            "A8-R54-MANIPULABLE",
+            {
+                "product": product_name,
+                "price": price,
+                "cost": cost,
+                "traffic": int(args.traffic),
+                "days": int(args.days),
+                "marketing_angle": args.marketing_angle,
+                "primary_hook": args.primary_hook,
+            },
+            length=12,
+        ),
+        product_name=product_name,
+        category=str(args.category or "sandbox"),
+        market=str(args.market or "MX"),
+        supplier_mode="sandbox_user_input",
+        proposed_price_mxn=price,
+        estimated_landed_cost_mxn=cost,
+        creative_claim=claim_text,
+        marketing_angle=str(args.marketing_angle or "ángulo manipulable definido por usuario").strip(),
+        primary_hook=str(args.primary_hook or "").strip(),
+        target_audience=str(args.target_audience or "comprador mexicano de e-commerce").strip(),
+        use_case=str(args.use_case or "uso diario visible").strip(),
+        traffic=max(0, int(args.traffic)),
+        days=max(1, int(args.days)),
+        source="user_manipulable_cli",
         signals=(
-            SyntheticSignal(
-                name="margin_room",
-                value=0.5265,
-                weight=0.30,
-                explanation="Synthetic gross room after estimated landed cost; not real supplier truth.",
-            ),
-            SyntheticSignal(
-                name="claim_safety",
-                value=0.9200,
-                weight=0.25,
-                explanation="Creative claim avoids health, finance, body-result, and guaranteed outcome claims.",
-            ),
-            SyntheticSignal(
-                name="operational_complexity",
-                value=0.7400,
-                weight=0.20,
-                explanation="Simple SKU shape for local simulation; no fulfillment automation is invoked.",
-            ),
-            SyntheticSignal(
-                name="evidence_quality",
-                value=0.6100,
-                weight=0.15,
-                explanation="Scenario is synthetic and useful for system validation, not market proof.",
-            ),
-            SyntheticSignal(
-                name="mutation_risk_inverse",
-                value=1.0000,
-                weight=0.10,
-                explanation="All live mutation paths remain blocked in this simulation.",
-            ),
+            SyntheticSignal("gross_margin", _round(gross_margin), 0.35, "Computed from user price and landed cost."),
+            SyntheticSignal("claim_safety", _round(claim_safe), 0.25, "Dangerous claim scan over hook and angle."),
+            SyntheticSignal("visual_demo", _round(visual_demo), 0.20, "Product/use-case can be translated into a visual brief."),
+            SyntheticSignal("traffic_depth", _round(traffic_signal), 0.20, "User-provided traffic volume for sandbox simulation."),
         ),
     )
 
 
-def evaluate_score(signals: Iterable[SyntheticSignal]) -> float:
-    weighted_sum = 0.0
-    total_weight = 0.0
-
-    for signal in signals:
-        weighted_sum += signal.value * signal.weight
-        total_weight += signal.weight
-
-    if total_weight <= 0:
-        raise ValueError("Signal total weight must be positive.")
-
-    return round(weighted_sum / total_weight, 4)
-
-
-def build_safety_posture() -> SafetyPosture:
+def build_safety_posture(claim_text: str = "") -> SafetyPosture:
+    claim_safety = "HOLD" if _contains_dangerous_claim(claim_text) else "PASS"
     return SafetyPosture(
-        claim_safety="PASS_SYNTHETIC_LOW_RISK",
-        money_path="BLOCKED_LOCAL_ONLY",
+        claim_safety=claim_safety,
+        money_path="SANDBOX_ONLY",
         external_mutation=0,
         shopify_write_count=0,
         meta_write_count=0,
@@ -155,26 +245,47 @@ def build_safety_posture() -> SafetyPosture:
     )
 
 
-def make_decision(scenario: SyntheticScenario, score: float, safety: SafetyPosture) -> Decision:
-    payload = _stable_json(
-        {
-            "scenario_id": scenario.scenario_id,
-            "score": score,
-            "safety": asdict(safety),
-            "simulation_version": SIMULATION_VERSION,
-        }
-    )
-    decision_id = f"dec_{_sha256_short(payload)}"
-    threshold = 0.72
+def evaluate_score(signals: Iterable[SyntheticSignal]) -> float:
+    total_weight = 0.0
+    weighted = 0.0
+    for signal in signals:
+        total_weight += float(signal.weight)
+        weighted += float(signal.value) * float(signal.weight)
+    if total_weight <= 0:
+        return 0.0
+    return _round(weighted / total_weight)
 
-    if safety.external_mutation != 0 or safety.spend_count != 0 or safety.live_mode != 0:
+
+def make_decision(scenario: SyntheticScenario, score: float, safety: SafetyPosture) -> Decision:
+    payload = {
+        "scenario_id": scenario.scenario_id,
+        "score": score,
+        "price": scenario.proposed_price_mxn,
+        "cost": scenario.estimated_landed_cost_mxn,
+        "claim_safety": safety.claim_safety,
+    }
+    decision_id = _stable_id("dec", payload, length=14)
+    threshold = 0.68
+    margin_mxn = scenario.proposed_price_mxn - scenario.estimated_landed_cost_mxn
+
+    if safety.claim_safety != "PASS":
         return Decision(
             decision_id=decision_id,
             score=score,
             threshold=threshold,
-            permission_gate="PRE_SPEND_GATE_BLOCKED",
-            final_outcome="BLOCKED_UNSAFE_LIVE_PATH",
-            reason="Simulation detected live, spend, or mutation risk.",
+            permission_gate="HOLD",
+            final_outcome="HOLD_CLAIM_RISK",
+            reason="Claim safety gate held the scenario before any spend or external mutation.",
+        )
+
+    if margin_mxn <= 0:
+        return Decision(
+            decision_id=decision_id,
+            score=score,
+            threshold=threshold,
+            permission_gate="BLOCK",
+            final_outcome="REJECT_NEGATIVE_MARGIN",
+            reason="Price does not clear landed cost; sandbox decision rejects before testing.",
         )
 
     if score >= threshold:
@@ -182,27 +293,272 @@ def make_decision(scenario: SyntheticScenario, score: float, safety: SafetyPostu
             decision_id=decision_id,
             score=score,
             threshold=threshold,
-            permission_gate="LOCAL_ONLY_READINESS_GATE_PASS",
-            final_outcome="APPROVE_FOR_LOCAL_REVIEW_ONLY",
-            reason="Synthetic scenario clears local-only review threshold; still not approved for launch.",
+            permission_gate="ALLOW_SANDBOX_ONLY",
+            final_outcome="TEST_SMALL_BUDGET_SANDBOX",
+            reason="Score clears threshold, but action remains sandbox-only with spend_count=0.",
         )
 
     return Decision(
         decision_id=decision_id,
         score=score,
         threshold=threshold,
-        permission_gate="LOCAL_ONLY_READINESS_GATE_HOLD",
-        final_outcome="HOLD_FOR_MORE_EVIDENCE",
-        reason="Synthetic scenario does not clear local-only review threshold.",
+        permission_gate="HOLD",
+        final_outcome="HOLD_MORE_EVIDENCE",
+        reason="Score is below threshold; system requests more evidence before testing.",
     )
 
 
+def _extract_strings(value: Any) -> list[str]:
+    found: list[str] = []
+    if isinstance(value, str):
+        if value.strip():
+            found.append(value.strip())
+    elif isinstance(value, dict):
+        for item in value.values():
+            found.extend(_extract_strings(item))
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            found.extend(_extract_strings(item))
+    return found
+
+
+def _creative_factory_payload(scenario: SyntheticScenario) -> dict[str, Any]:
+    try:
+        from synapse.marketing_os.creative_factory import quick_generate
+
+        payload = quick_generate(
+            product_id=scenario.scenario_id,
+            name=scenario.product_name,
+            category=scenario.category,
+            price=float(scenario.proposed_price_mxn),
+            cost=float(scenario.estimated_landed_cost_mxn),
+        )
+        if isinstance(payload, dict):
+            return payload
+        return {"raw": str(payload)}
+    except Exception as exc:
+        return {"creative_factory_error": f"{type(exc).__name__}:{exc}"}
+
+
+def _dedupe_keep_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        key = _normalize(item)
+        if key and key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def evaluate_creative_integrity(
+    *,
+    product_name: str,
+    audience: str,
+    use_case: str,
+    hooks: list[str],
+    claim_safety: str,
+) -> CreativeIntegrityReport:
+    joined = _normalize(" ".join(hooks))
+    generic_count = sum(1 for phrase in GENERIC_BLACKLIST if phrase in joined)
+
+    anchor_terms = set()
+    for source in [product_name, audience, use_case]:
+        for token in _normalize(source).split():
+            if len(token) >= 4:
+                anchor_terms.add(token)
+
+    specific_anchor_count = 0
+    for hook in hooks:
+        hook_norm = _normalize(hook)
+        if any(term in hook_norm for term in anchor_terms):
+            specific_anchor_count += 1
+
+    normalized_hooks = [_normalize(hook) for hook in hooks if _normalize(hook)]
+    unique_hooks = set(normalized_hooks)
+    hook_uniqueness_score = 0.0 if not normalized_hooks else len(unique_hooks) / len(normalized_hooks)
+
+    failed: list[str] = []
+    if generic_count != 0:
+        failed.append("generic_phrase_count_nonzero")
+    if specific_anchor_count < min(3, len(hooks)):
+        failed.append("specific_anchor_count_too_low")
+    if hook_uniqueness_score < 0.70:
+        failed.append("hook_uniqueness_below_threshold")
+    if claim_safety not in {"PASS", "HOLD"}:
+        failed.append("claim_safety_missing_or_invalid")
+
+    creative_risk = "LOW" if not failed and claim_safety == "PASS" else "MED" if claim_safety == "PASS" else "HIGH"
+
+    return CreativeIntegrityReport(
+        generic_phrase_count=generic_count,
+        specific_anchor_count=specific_anchor_count,
+        hook_uniqueness_score=_round(hook_uniqueness_score, 2),
+        claim_safety=claim_safety,
+        creative_risk=creative_risk,
+        passed=not failed,
+        failed_reasons=tuple(failed),
+    )
+
+
+def generate_creative_pack(scenario: SyntheticScenario, safety: SafetyPosture) -> dict[str, Any]:
+    factory_payload = _creative_factory_payload(scenario)
+    factory_strings = _extract_strings(factory_payload)
+
+    base_angle = scenario.marketing_angle or f"{scenario.product_name} aplicado a {scenario.use_case}"
+    audience = scenario.target_audience or "comprador mexicano de e-commerce"
+    product = scenario.product_name
+    use_case = scenario.use_case
+
+    hooks = [
+        scenario.primary_hook or f"Si {audience} necesita {use_case}, {product} merece una prueba visual.",
+        f"Antes de prometer resultados, muestra esto: {product} resolviendo {use_case} en una escena real.",
+        f"El ángulo no es vender '{product}'; es mostrar el momento exacto donde {audience} siente la fricción.",
+        f"Graba la diferencia entre hacerlo manualmente y usar {product} para {use_case}.",
+        f"No digas que {product} garantiza nada: enseña el mecanismo y deja que la demostración cargue el anuncio.",
+    ]
+
+    for item in factory_strings:
+        if len(hooks) >= 8:
+            break
+        if len(item.split()) >= 5:
+            hooks.append(item)
+
+    hooks = _dedupe_keep_order(hooks)[:8]
+
+    angles = [
+        {
+            "name": "problem_moment",
+            "angle": base_angle,
+            "why": "Anchors the ad in a concrete moment instead of a generic benefit.",
+        },
+        {
+            "name": "visual_mechanism",
+            "angle": f"Demostrar {use_case} con {product}, sin prometer resultados absolutos.",
+            "why": "Shows proof visually and keeps claim safety controlled.",
+        },
+        {
+            "name": "objection_reduction",
+            "angle": f"Reducir duda de compra mostrando costo, uso y límite real de {product}.",
+            "why": "Pre-empts skepticism and avoids overclaiming.",
+        },
+    ]
+
+    do_not_claim = [
+        "No prometer resultados garantizados.",
+        "No afirmar que evita robos, cura problemas o elimina riesgos.",
+        "No usar antes/después engañoso ni urgencia falsa.",
+    ]
+
+    script_7s = (
+        f"0-2s: muestra el problema de {use_case}. "
+        f"2-5s: enseña {product} funcionando en una toma clara. "
+        "5-7s: cierra con una invitación a revisar la demostración, sin prometer resultados."
+    )
+    script_15s = (
+        f"0-3s hook: {hooks[0]} "
+        f"3-9s demostración: {product} en uso real para {use_case}. "
+        "9-12s objeción: enseña límite/costo sin exagerar. "
+        "12-15s cierre: prueba controlada, claim seguro."
+    )
+
+    creative_brief = {
+        "what_to_record": [
+            f"Plano del problema antes de usar {product}.",
+            f"Plano claro de {product} resolviendo o facilitando {use_case}.",
+            "Plano final mostrando resultado visible sin prometer garantía.",
+        ],
+        "text_on_screen": [
+            hooks[0],
+            "Muestra el mecanismo, no prometas magia.",
+            "Prueba controlada · sin claims exagerados",
+        ],
+        "visual_proof": f"Demostración directa de {product} en {use_case}.",
+        "do_not_claim": do_not_claim,
+    }
+
+    integrity = evaluate_creative_integrity(
+        product_name=product,
+        audience=audience,
+        use_case=use_case,
+        hooks=hooks,
+        claim_safety=safety.claim_safety,
+    )
+
+    return {
+        "creative_factory_used": int("creative_factory_error" not in factory_payload),
+        "creative_factory_payload_keys": sorted(list(factory_payload.keys()))[:30],
+        "creative_direction": angles,
+        "hook_variants": hooks,
+        "script_7s": script_7s,
+        "script_15s": script_15s,
+        "creative_brief": creative_brief,
+        "creative_integrity": asdict(integrity),
+        "recommended_creative_type": "UGC_DEMO_SANDBOX",
+    }
+
+
 def create_evidence_dir(base_dir: str | None = None) -> Path:
-    root = Path(base_dir) if base_dir else Path(tempfile.gettempdir())
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    evidence_dir = root / f"synapse_a8_r53_visible_simulation_{stamp}"
+    root = Path(base_dir) if base_dir else Path(tempfile.gettempdir()) / "synapse_visible_simulation"
+    root.mkdir(parents=True, exist_ok=True)
+    evidence_dir = root / f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}_{SIMULATION_VERSION}"
     evidence_dir.mkdir(parents=True, exist_ok=False)
     return evidence_dir
+
+
+def _safe_json_write(path: Path, payload: Any) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _sandbox_ledger_event(
+    *,
+    scenario: SyntheticScenario,
+    safety: SafetyPosture,
+    decision: Decision,
+    creative_pack: dict[str, Any],
+) -> dict[str, Any]:
+    payload = {
+        "scenario_id": scenario.scenario_id,
+        "decision_id": decision.decision_id,
+        "product_name": scenario.product_name,
+        "final_outcome": decision.final_outcome,
+        "score": decision.score,
+        "claim_safety": safety.claim_safety,
+        "creative_risk": creative_pack["creative_integrity"]["creative_risk"],
+        "generic_phrase_count": creative_pack["creative_integrity"]["generic_phrase_count"],
+        "hook_uniqueness_score": creative_pack["creative_integrity"]["hook_uniqueness_score"],
+    }
+
+    governed_anchor: dict[str, Any] = {}
+    try:
+        from synapse.ledger_ndjson import build_event
+
+        governed_anchor = build_event(
+            kind="a8_r54_manipulable_simulation",
+            payload=payload,
+            event_id=_stable_id("evt", payload, length=16),
+            policy_version="a8-r54",
+            payload_schema_version="v1",
+        )
+    except Exception as exc:
+        governed_anchor = {"ledger_ndjson_build_event_error": f"{type(exc).__name__}:{exc}"}
+
+    event = {
+        **payload,
+        "timestamp_utc": _utc_now(),
+        "simulation_version": SIMULATION_VERSION,
+        "external_mutation": safety.external_mutation,
+        "spend_count": safety.spend_count,
+        "shopify_write_count": safety.shopify_write_count,
+        "meta_write_count": safety.meta_write_count,
+        "dropi_write_count": safety.dropi_write_count,
+        "live_mode": safety.live_mode,
+        "sandbox_only": True,
+        "governed_anchor": governed_anchor,
+    }
+    checksum_payload = json.dumps(event, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    event["checksum_sha256"] = hashlib.sha256(checksum_payload).hexdigest()
+    return event
 
 
 def write_evidence(
@@ -210,65 +566,43 @@ def write_evidence(
     scenario: SyntheticScenario,
     safety: SafetyPosture,
     decision: Decision,
+    creative_pack: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    scenario_path = evidence_dir / "scenario.json"
-    safety_path = evidence_dir / "safety_posture.json"
-    decision_path = evidence_dir / "decision.json"
-    ledger_path = evidence_dir / "ledger_sandbox.ndjson"
-    idempotency_path = evidence_dir / "idempotency_sandbox.json"
+    creative_pack = creative_pack or generate_creative_pack(scenario, safety)
 
-    scenario_payload = asdict(scenario)
-    safety_payload = asdict(safety)
-    decision_payload = asdict(decision)
-
-    scenario_path.write_text(
-        json.dumps(scenario_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    safety_path.write_text(
-        json.dumps(safety_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    decision_path.write_text(
-        json.dumps(decision_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-    ledger_event = {
-        "event_type": "VISIBLE_SINGLE_SCENARIO_SIMULATION",
-        "simulation_version": SIMULATION_VERSION,
-        "created_at": _utc_now_iso(),
-        "scenario_id": scenario.scenario_id,
-        "decision_id": decision.decision_id,
-        "permission_gate": decision.permission_gate,
-        "final_outcome": decision.final_outcome,
-        "external_mutation": safety.external_mutation,
-        "spend_count": safety.spend_count,
-        "shopify_write_count": safety.shopify_write_count,
-        "meta_write_count": safety.meta_write_count,
-        "dropi_write_count": safety.dropi_write_count,
-        "live_mode": safety.live_mode,
+    paths = {
+        "scenario": str(evidence_dir / "scenario.json"),
+        "safety_posture": str(evidence_dir / "safety_posture.json"),
+        "decision": str(evidence_dir / "decision.json"),
+        "creative_pack": str(evidence_dir / "creative_pack.json"),
+        "ledger": str(evidence_dir / "ledger_sandbox.ndjson"),
+        "idempotency": str(evidence_dir / "idempotency_sandbox.json"),
     }
-    ledger_path.write_text(json.dumps(ledger_event, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    _safe_json_write(Path(paths["scenario"]), asdict(scenario))
+    _safe_json_write(Path(paths["safety_posture"]), asdict(safety))
+    _safe_json_write(Path(paths["decision"]), asdict(decision))
+    _safe_json_write(Path(paths["creative_pack"]), creative_pack)
+
+    ledger_event = _sandbox_ledger_event(
+        scenario=scenario,
+        safety=safety,
+        decision=decision,
+        creative_pack=creative_pack,
+    )
+    Path(paths["ledger"]).write_text(json.dumps(ledger_event, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
     idempotency_payload = {
+        "sandbox_only": True,
         "scenario_id": scenario.scenario_id,
         "decision_id": decision.decision_id,
-        "fingerprint": _sha256_short(_stable_json(ledger_event)),
-        "sandbox_only": True,
+        "idempotency_key": _stable_id("idem", {"scenario": scenario.scenario_id, "decision": decision.decision_id}),
+        "external_mutation": 0,
+        "spend_count": 0,
     }
-    idempotency_path.write_text(
-        json.dumps(idempotency_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _safe_json_write(Path(paths["idempotency"]), idempotency_payload)
 
-    return {
-        "scenario_path": str(scenario_path),
-        "safety_path": str(safety_path),
-        "decision_path": str(decision_path),
-        "ledger_path": str(ledger_path),
-        "idempotency_path": str(idempotency_path),
-    }
+    return paths
 
 
 def render_human_output(
@@ -277,115 +611,210 @@ def render_human_output(
     safety: SafetyPosture,
     decision: Decision,
     evidence_paths: dict[str, str],
+    creative_pack: dict[str, Any] | None = None,
+    known_case_summary: dict[str, Any] | None = None,
 ) -> str:
-    signal_lines = []
-    for idx, signal in enumerate(scenario.signals, start=1):
-        signal_lines.append(
-            f"  SIGNAL_{idx:02d}={signal.name} value={signal.value:.4f} "
-            f"weight={signal.weight:.2f} note={signal.explanation}"
-        )
+    creative_pack = creative_pack or generate_creative_pack(scenario, safety)
+    integrity = creative_pack["creative_integrity"]
 
-    lines = [
-        "SYNAPSE SIMULATION",
-        f"SIMULATION_VERSION={SIMULATION_VERSION}",
-        f"SCENARIO_ID={scenario.scenario_id}",
-        f"DECISION_ID={decision.decision_id}",
-        "LIVE_MODE=0",
-        "",
-        "STEP_01_INPUT",
-        f"  product_name={scenario.product_name}",
-        f"  category={scenario.category}",
-        f"  market={scenario.market}",
-        f"  supplier_mode={scenario.supplier_mode}",
-        f"  proposed_price_mxn={scenario.proposed_price_mxn}",
-        f"  estimated_landed_cost_mxn={scenario.estimated_landed_cost_mxn}",
-        f"  creative_claim={scenario.creative_claim}",
-        "",
-        "STEP_02_SIGNALS",
-        *signal_lines,
-        "",
-        "STEP_03_SCORE_OR_POLICY",
-        f"  score={decision.score:.4f}",
-        f"  threshold={decision.threshold:.4f}",
-        "  policy=evidence_first_local_only_no_live_mutation",
-        "",
-        "STEP_04_PERMISSION_GATE",
-        f"  permission_gate={decision.permission_gate}",
-        "  pre_spend_gate=BLOCKED_FOR_LIVE_SPEND",
-        "  launch_gate=BLOCKED_FOR_LIVE_LAUNCH",
-        "",
-        "STEP_05_DECISION",
-        f"  final_outcome={decision.final_outcome}",
-        f"  reason={decision.reason}",
-        "",
-        "STEP_06_LEDGER_EVENT",
-        f"  ledger_sandbox={evidence_paths['ledger_path']}",
-        "  ledger_sandbox_line_count=1",
-        "",
-        "STEP_07_EVIDENCE",
-        f"  evidence_dir={evidence_dir}",
-        f"  scenario_json={evidence_paths['scenario_path']}",
-        f"  safety_posture_json={evidence_paths['safety_path']}",
-        f"  decision_json={evidence_paths['decision_path']}",
-        f"  idempotency_sandbox={evidence_paths['idempotency_path']}",
-        "",
-        "STEP_08_LIVE_FLAGS",
-        f"  flag_shopify_live={safety.live_mode}",
-        f"  flag_meta_live_api={safety.live_mode}",
-        f"  flag_dropi_live_orders={safety.live_mode}",
-        "",
-        "STEP_09_MUTATION_COUNTS",
-        f"  EXTERNAL_MUTATION={safety.external_mutation}",
-        f"  SPEND_COUNT={safety.spend_count}",
-        f"  SHOPIFY_WRITE_COUNT={safety.shopify_write_count}",
-        f"  META_WRITE_COUNT={safety.meta_write_count}",
-        f"  DROPI_WRITE_COUNT={safety.dropi_write_count}",
-        "",
-        f"FINAL_OUTCOME={decision.final_outcome}",
-        f"EVIDENCE_DIR={evidence_dir}",
-    ]
+    lines: list[str] = []
+    lines.append("SYNAPSE SIMULATION")
+    lines.append(f"SIMULATION_VERSION={SIMULATION_VERSION}")
+    lines.append(f"SCENARIO_ID={scenario.scenario_id}")
+    lines.append(f"DECISION_ID={decision.decision_id}")
+    lines.append(f"LIVE_MODE={safety.live_mode}")
+
+    lines.append("STEP_01_INPUT")
+    lines.append(f"PRODUCT={scenario.product_name}")
+    lines.append(f"CATEGORY={scenario.category}")
+    lines.append(f"MARKET={scenario.market}")
+    lines.append(f"PRICE_MXN={scenario.proposed_price_mxn}")
+    lines.append(f"COST_MXN={scenario.estimated_landed_cost_mxn}")
+    lines.append(f"TRAFFIC={scenario.traffic}")
+    lines.append(f"DAYS={scenario.days}")
+    lines.append(f"MARKETING_ANGLE={scenario.marketing_angle}")
+    lines.append(f"PRIMARY_HOOK={scenario.primary_hook}")
+
+    lines.append("STEP_02_SIGNALS")
+    for signal in scenario.signals:
+        lines.append(f"SIGNAL::{signal.name}={signal.value} weight={signal.weight} reason={signal.explanation}")
+
+    lines.append("STEP_03_SCORE_OR_POLICY")
+    lines.append(f"SCORE={decision.score}")
+    lines.append(f"THRESHOLD={decision.threshold}")
+    lines.append(f"CLAIM_SAFETY={safety.claim_safety}")
+
+    lines.append("STEP_04_PERMISSION_GATE")
+    lines.append(f"PERMISSION_GATE={decision.permission_gate}")
+    lines.append("MONEY_PATH=SANDBOX_ONLY")
+
+    lines.append("STEP_05_DECISION")
+    lines.append(f"FINAL_OUTCOME={decision.final_outcome}")
+    lines.append(f"REASON={decision.reason}")
+
+    lines.append("STEP_06_LEDGER_EVENT")
+    lines.append(f"LEDGER_SANDBOX={evidence_paths['ledger']}")
+    lines.append("LEDGER_SANDBOX_WRITES=1")
+
+    lines.append("STEP_07_EVIDENCE")
+    lines.append(f"EVIDENCE_DIR={evidence_dir}")
+    for key, value in sorted(evidence_paths.items()):
+        lines.append(f"EVIDENCE::{key}={value}")
+
+    lines.append("STEP_08_LIVE_FLAGS")
+    lines.append("flag_shopify_live=0")
+    lines.append("flag_meta_live_api=0")
+    lines.append("flag_dropi_live_orders=0")
+
+    lines.append("STEP_09_MUTATION_COUNTS")
+    lines.append(f"EXTERNAL_MUTATION={safety.external_mutation}")
+    lines.append(f"SPEND_COUNT={safety.spend_count}")
+    lines.append(f"SHOPIFY_WRITE_COUNT={safety.shopify_write_count}")
+    lines.append(f"META_WRITE_COUNT={safety.meta_write_count}")
+    lines.append(f"DROPI_WRITE_COUNT={safety.dropi_write_count}")
+
+    lines.append("STEP_10_CREATIVE_DIRECTION")
+    lines.append(f"CREATIVE_FACTORY_USED={creative_pack['creative_factory_used']}")
+    lines.append(f"RECOMMENDED_CREATIVE_TYPE={creative_pack['recommended_creative_type']}")
+    for idx, angle in enumerate(creative_pack["creative_direction"], start=1):
+        lines.append(f"ANGLE_{idx}={angle['angle']}")
+        lines.append(f"ANGLE_{idx}_WHY={angle['why']}")
+
+    lines.append("STEP_11_HOOK_VARIANTS")
+    hooks = creative_pack["hook_variants"]
+    lines.append(f"HOOK_VARIANTS_COUNT={len(hooks)}")
+    for idx, hook in enumerate(hooks[:8], start=1):
+        lines.append(f"HOOK_{idx}={hook}")
+
+    lines.append("STEP_12_CREATIVE_BRIEF")
+    lines.append(f"SCRIPT_7S={creative_pack['script_7s']}")
+    lines.append(f"SCRIPT_15S={creative_pack['script_15s']}")
+    lines.append(f"CREATIVE_BRIEF_VISUAL_PROOF={creative_pack['creative_brief']['visual_proof']}")
+    for idx, claim in enumerate(creative_pack["creative_brief"]["do_not_claim"], start=1):
+        lines.append(f"DO_NOT_CLAIM_{idx}={claim}")
+
+    lines.append("STEP_13_CREATIVE_INTEGRITY")
+    lines.append(f"GENERIC_PHRASE_COUNT={integrity['generic_phrase_count']}")
+    lines.append(f"SPECIFIC_ANCHOR_COUNT={integrity['specific_anchor_count']}")
+    lines.append(f"HOOK_UNIQUENESS_SCORE={integrity['hook_uniqueness_score']}")
+    lines.append(f"CREATIVE_RISK={integrity['creative_risk']}")
+    lines.append(f"CREATIVE_INTEGRITY_PASS={int(bool(integrity['passed']))}")
+
+    if known_case_summary:
+        lines.append("STEP_14_KNOWN_CASES")
+        lines.append(f"KNOWN_CASES_TOTAL={known_case_summary['total']}")
+        lines.append(f"KNOWN_CASES_PASS={known_case_summary['passed']}")
+        lines.append(f"KNOWN_CASES_FAIL={known_case_summary['failed']}")
+        for case in known_case_summary["cases"]:
+            lines.append(
+                "KNOWN_CASE::{case_id}=expected:{expected} actual:{actual} pass:{passed}".format(**case)
+            )
+
     return "\n".join(lines) + "\n"
 
 
-def run_simulation(evidence_root: str | None = None) -> str:
-    scenario = build_scenario()
-    safety = build_safety_posture()
+def run_simulation(
+    evidence_root: str | None = None,
+    args: argparse.Namespace | None = None,
+) -> str:
+    scenario = build_scenario(args)
+    safety = build_safety_posture(f"{scenario.creative_claim} {scenario.primary_hook} {scenario.marketing_angle}")
     score = evaluate_score(scenario.signals)
-    decision = make_decision(scenario=scenario, score=score, safety=safety)
+    decision = make_decision(scenario, score, safety)
+    creative_pack = generate_creative_pack(scenario, safety)
     evidence_dir = create_evidence_dir(evidence_root)
-    evidence_paths = write_evidence(
-        evidence_dir=evidence_dir,
-        scenario=scenario,
-        safety=safety,
-        decision=decision,
+    evidence_paths = write_evidence(evidence_dir, scenario, safety, decision, creative_pack)
+    return render_human_output(evidence_dir, scenario, safety, decision, evidence_paths, creative_pack)
+
+
+def _known_case_inputs() -> list[dict[str, Any]]:
+    return [
+        {"case_id": "KC01_GOOD_MARGIN_SAFE_CLAIM", "product": "Mini cámara WiFi", "price": 599, "cost": 180, "traffic": 900, "days": 3, "angle": "tranquilidad visual para casa sin instalación complicada", "hook": "¿Sales de casa y no sabes qué está pasando?", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
+        {"case_id": "KC02_NEGATIVE_MARGIN", "product": "Lámpara infantil recargable", "price": 100, "cost": 180, "traffic": 700, "days": 3, "angle": "rutina nocturna visual", "hook": "Si tu hijo te llama de noche, muestra una rutina de luz cálida.", "expected": "REJECT_NEGATIVE_MARGIN"},
+        {"case_id": "KC03_DANGEROUS_SECURITY_CLAIM", "product": "Sensor puerta WiFi", "price": 399, "cost": 120, "traffic": 850, "days": 3, "angle": "alerta visual doméstica", "hook": "Evita robos al 100% con este sensor.", "expected": "HOLD_CLAIM_RISK"},
+        {"case_id": "KC04_LOW_TRAFFIC_HOLD", "product": "Organizador magnético", "price": 299, "cost": 155, "traffic": 80, "days": 1, "angle": "orden visible en cocina pequeña", "hook": "Muestra una cocina saturada y luego una pared ordenada.", "expected": "HOLD_MORE_EVIDENCE"},
+        {"case_id": "KC05_SAFE_DEMO_PRODUCT", "product": "Mini aspiradora portátil", "price": 499, "cost": 170, "traffic": 1000, "days": 3, "angle": "limpieza rápida de migajas en carro", "hook": "Graba el asiento del carro antes y después de aspirar migajas visibles.", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
+        {"case_id": "KC06_MEDICAL_CLAIM_TRAP", "product": "Corrector de postura", "price": 399, "cost": 130, "traffic": 900, "days": 3, "angle": "postura visual para escritorio", "hook": "Cura el dolor de espalda usando esto diario.", "expected": "HOLD_CLAIM_RISK"},
+        {"case_id": "KC07_MARGIN_OK_CPA_RISK", "product": "Dispensador automático", "price": 349, "cost": 260, "traffic": 260, "days": 2, "angle": "dosificación visual sin ensuciar", "hook": "Muestra una mano sucia y luego una dosificación limpia.", "expected": "HOLD_MORE_EVIDENCE"},
+        {"case_id": "KC08_CLEAR_VISUAL_WIN", "product": "Removedor de pelusa reutilizable", "price": 249, "cost": 55, "traffic": 1200, "days": 3, "angle": "antes/después real en ropa negra sin exagerar", "hook": "Graba una manga negra llena de pelusa y una pasada real del removedor.", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
+    ]
+
+
+def _namespace_for_case(case: dict[str, Any]) -> argparse.Namespace:
+    return argparse.Namespace(
+        evidence_root=None,
+        known_cases=False,
+        product_name=case["product"],
+        category="known_case",
+        market="MX",
+        price=case["price"],
+        cost=case["cost"],
+        traffic=case["traffic"],
+        days=case["days"],
+        marketing_angle=case["angle"],
+        primary_hook=case["hook"],
+        target_audience="comprador mexicano de e-commerce",
+        use_case=case["angle"],
     )
+
+
+def run_known_cases(evidence_root: str | None = None) -> str:
+    cases_out: list[dict[str, Any]] = []
+    passed = 0
+
+    for case in _known_case_inputs():
+        args = _namespace_for_case(case)
+        scenario = build_scenario(args)
+        safety = build_safety_posture(f"{scenario.creative_claim} {scenario.primary_hook} {scenario.marketing_angle}")
+        score = evaluate_score(scenario.signals)
+        decision = make_decision(scenario, score, safety)
+        ok = decision.final_outcome == case["expected"]
+        passed += int(ok)
+        cases_out.append(
+            {
+                "case_id": case["case_id"],
+                "expected": case["expected"],
+                "actual": decision.final_outcome,
+                "passed": int(ok),
+            }
+        )
+
+    args = _namespace_for_case(_known_case_inputs()[0])
+    scenario = replace(build_scenario(args), scenario_id="A8-R54-KNOWN-CASES", source="known_cases_contract")
+    safety = build_safety_posture("known cases safe anchor")
+    decision = Decision(
+        decision_id=_stable_id("dec", {"known_cases": cases_out}, length=14),
+        score=_round(passed / len(cases_out)),
+        threshold=0.75,
+        permission_gate="ALLOW_SANDBOX_ONLY" if passed >= 6 else "HOLD",
+        final_outcome="KNOWN_CASES_PASS" if passed >= 6 else "KNOWN_CASES_FAIL",
+        reason=f"{passed}/{len(cases_out)} known cases matched expected outcomes.",
+    )
+    creative_pack = generate_creative_pack(scenario, safety)
+    evidence_dir = create_evidence_dir(evidence_root)
+    evidence_paths = write_evidence(evidence_dir, scenario, safety, decision, creative_pack)
+    _safe_json_write(evidence_dir / "known_cases.json", {"cases": cases_out, "passed": passed, "total": len(cases_out)})
+
     return render_human_output(
-        evidence_dir=evidence_dir,
-        scenario=scenario,
-        safety=safety,
-        decision=decision,
-        evidence_paths=evidence_paths,
+        evidence_dir,
+        scenario,
+        safety,
+        decision,
+        evidence_paths,
+        creative_pack,
+        known_case_summary={"cases": cases_out, "passed": passed, "failed": len(cases_out) - passed, "total": len(cases_out)},
     )
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="python -m synapse.cli simulate",
-        description="Run the A8-R53 visible single-scenario local-only SYNAPSE simulation.",
-    )
-    parser.add_argument(
-        "--evidence-root",
-        default=None,
-        help="Optional directory where sandbox evidence will be created. Defaults to system temp.",
-    )
-    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    output = run_simulation(evidence_root=args.evidence_root)
-    sys.stdout.write(output)
+
+    if args.known_cases:
+        sys.stdout.write(run_known_cases(args.evidence_root))
+        return 0
+
+    sys.stdout.write(run_simulation(args.evidence_root, args))
     return 0
 
 
