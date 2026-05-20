@@ -17,7 +17,7 @@ def test_a8_r54_manipulable_simulation_user_inputs(tmp_path: Path) -> None:
             "--evidence-root",
             str(tmp_path),
             "--product",
-            "Mini cÃ¡mara WiFi",
+            "Mini cÃƒÆ’Ã‚Â¡mara WiFi",
             "--category",
             "home_security",
             "--price",
@@ -29,11 +29,11 @@ def test_a8_r54_manipulable_simulation_user_inputs(tmp_path: Path) -> None:
             "--days",
             "3",
             "--marketing-angle",
-            "tranquilidad visual para casa sin instalaciÃ³n complicada",
+            "tranquilidad visual para casa sin instalaciÃƒÆ’Ã‚Â³n complicada",
             "--primary-hook",
-            "Â¿Sales de casa y no sabes quÃ© estÃ¡ pasando?",
+            "Ãƒâ€šÃ‚Â¿Sales de casa y no sabes quÃƒÆ’Ã‚Â© estÃƒÆ’Ã‚Â¡ pasando?",
             "--target-audience",
-            "personas que quieren vigilar casa o negocio pequeÃ±o",
+            "personas que quieren vigilar casa o negocio pequeÃƒÆ’Ã‚Â±o",
             "--use-case",
             "revisar visualmente un espacio desde el celular",
         ],
@@ -144,7 +144,7 @@ def test_a8_r54_blocks_generic_factory_leak_phrases(tmp_path: Path) -> None:
             "--evidence-root",
             str(tmp_path),
             "--product",
-            "Mini cÃ¡mara WiFi",
+            "Mini cÃƒÆ’Ã‚Â¡mara WiFi",
             "--category",
             "home_security",
             "--price",
@@ -156,11 +156,11 @@ def test_a8_r54_blocks_generic_factory_leak_phrases(tmp_path: Path) -> None:
             "--days",
             "3",
             "--marketing-angle",
-            "tranquilidad visual para casa sin instalaciÃ³n complicada",
+            "tranquilidad visual para casa sin instalaciÃƒÆ’Ã‚Â³n complicada",
             "--primary-hook",
-            "Â¿Sales de casa y no sabes quÃ© estÃ¡ pasando?",
+            "Ãƒâ€šÃ‚Â¿Sales de casa y no sabes quÃƒÆ’Ã‚Â© estÃƒÆ’Ã‚Â¡ pasando?",
             "--target-audience",
-            "personas que quieren vigilar casa o negocio pequeÃ±o",
+            "personas que quieren vigilar casa o negocio pequeÃƒÆ’Ã‚Â±o",
             "--use-case",
             "revisar visualmente un espacio desde el celular",
         ],
@@ -175,7 +175,7 @@ def test_a8_r54_blocks_generic_factory_leak_phrases(tmp_path: Path) -> None:
     stdout_lower = result.stdout.lower()
 
     banned_fragments = [
-        "dile adiÃ³s",
+        "dile adiÃƒÆ’Ã‚Â³s",
         "dile adios",
         "lo que usan los que saben",
         "los que saben",
@@ -254,3 +254,76 @@ def test_a8_r54f_runs_preset_and_allows_override(tmp_path: Path) -> None:
     assert "CREATIVE_INTEGRITY_PASS=1" in stdout
     assert "EXTERNAL_MUTATION=0" in stdout
     assert "SPEND_COUNT=0" in stdout
+
+def test_a8_r54h_primary_hook_generic_phrase_is_gated(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "synapse.cli",
+            "simulate",
+            "--preset",
+            "pet_hair_clothes",
+            "--evidence-root",
+            str(tmp_path),
+            "--primary-hook",
+            "el mejor producto, compra ahora, no te lo pierdas",
+        ],
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PRIMARY_HOOK=el mejor producto, compra ahora, no te lo pierdas" in result.stdout
+    assert "CREATIVE_INTEGRITY_PASS=0" in result.stdout
+
+    evidence_match = re.search(r"^EVIDENCE_DIR=(.+)$", result.stdout, flags=re.MULTILINE)
+    assert evidence_match is not None
+    evidence_dir = Path(evidence_match.group(1).strip())
+
+    creative_pack = json.loads((evidence_dir / "creative_pack.json").read_text(encoding="utf-8"))
+    integrity = creative_pack["creative_integrity"]
+
+    assert integrity["passed"] is False
+    assert integrity["generic_phrase_count"] >= 1
+    assert any("generic" in reason for reason in integrity.get("failed_reasons", []))
+
+
+def test_a8_r54h_primary_hook_specific_phrase_still_passes(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "synapse.cli",
+            "simulate",
+            "--preset",
+            "pet_hair_clothes",
+            "--evidence-root",
+            str(tmp_path),
+            "--primary-hook",
+            "Muestra una playera negra con pelo de mascota y una pasada real.",
+        ],
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PRIMARY_HOOK=Muestra una playera negra con pelo de mascota y una pasada real." in result.stdout
+    assert "GENERIC_PHRASE_COUNT=0" in result.stdout
+    assert "CREATIVE_INTEGRITY_PASS=1" in result.stdout
+
+    evidence_match = re.search(r"^EVIDENCE_DIR=(.+)$", result.stdout, flags=re.MULTILINE)
+    assert evidence_match is not None
+    evidence_dir = Path(evidence_match.group(1).strip())
+
+    creative_pack = json.loads((evidence_dir / "creative_pack.json").read_text(encoding="utf-8"))
+    integrity = creative_pack["creative_integrity"]
+
+    assert integrity["passed"] is True
+    assert integrity["generic_phrase_count"] == 0

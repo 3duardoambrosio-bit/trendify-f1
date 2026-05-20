@@ -79,20 +79,20 @@ class CreativeIntegrityReport:
 
 PRESET_SCENARIOS: dict[str, dict[str, object]] = {
     "home_security_wifi": {
-        "product_name": "Mini cámara WiFi",
+        "product_name": "Mini cÃƒÂ¡mara WiFi",
         "category": "home_security",
         "market": "MX",
         "price": 599,
         "cost": 180,
         "traffic": 900,
         "days": 3,
-        "marketing_angle": "tranquilidad visual para casa sin instalación complicada",
-        "primary_hook": "¿Sales de casa y no sabes qué está pasando?",
-        "target_audience": "personas que quieren vigilar casa o negocio pequeño",
+        "marketing_angle": "tranquilidad visual para casa sin instalaciÃƒÂ³n complicada",
+        "primary_hook": "Ã‚Â¿Sales de casa y no sabes quÃƒÂ© estÃƒÂ¡ pasando?",
+        "target_audience": "personas que quieren vigilar casa o negocio pequeÃƒÂ±o",
         "use_case": "revisar visualmente un espacio desde el celular",
     },
     "car_cleaning_demo": {
-        "product_name": "Mini aspiradora portátil",
+        "product_name": "Mini aspiradora portÃƒÂ¡til",
         "category": "car_accessories",
         "market": "MX",
         "price": 499,
@@ -100,7 +100,7 @@ PRESET_SCENARIOS: dict[str, dict[str, object]] = {
         "traffic": 1000,
         "days": 3,
         "marketing_angle": "limpieza visible de migajas en carro sin exagerar resultados",
-        "primary_hook": "Graba el asiento antes y después de una pasada real.",
+        "primary_hook": "Graba el asiento antes y despuÃƒÂ©s de una pasada real.",
         "target_audience": "personas que usan el carro diario y odian verlo sucio",
         "use_case": "limpiar migajas visibles en asiento o tapete del carro",
     },
@@ -112,7 +112,7 @@ PRESET_SCENARIOS: dict[str, dict[str, object]] = {
         "cost": 55,
         "traffic": 1200,
         "days": 3,
-        "marketing_angle": "antes y después real en ropa negra con pelo de mascota",
+        "marketing_angle": "antes y despuÃƒÂ©s real en ropa negra con pelo de mascota",
         "primary_hook": "Muestra una manga negra llena de pelusa y una pasada real.",
         "target_audience": "personas con mascotas que salen con ropa llena de pelo",
         "use_case": "quitar pelusa visible de ropa negra sin prometer magia",
@@ -125,13 +125,13 @@ GENERIC_BLACKLIST = (
     "ideal para todos",
     "compra ahora",
     "no te lo pierdas",
-    "solución perfecta",
+    "soluciÃƒÂ³n perfecta",
     "solucion perfecta",
     "producto innovador",
-    "producto increíble",
+    "producto increÃƒÂ­ble",
     "producto increible",
     "revolucionario",
-    "dile adiós",
+    "dile adiÃƒÂ³s",
     "dile adios",
     "lo que usan los que saben",
     "los que saben",
@@ -147,7 +147,7 @@ DANGEROUS_CLAIMS = (
     "resultado asegurado",
     "resultados asegurados",
     "100% seguro",
-    "aval médico",
+    "aval mÃƒÂ©dico",
     "aval medico",
 )
 
@@ -269,16 +269,16 @@ def build_scenario(args: argparse.Namespace | None = None) -> SyntheticScenario:
     if args is None or not _has_manipulable_input(args):
         return SyntheticScenario(
             scenario_id=SCENARIO_ID,
-            product_name="Mini cámara WiFi",
+            product_name="Mini cÃƒÂ¡mara WiFi",
             category="home_security",
             market="MX",
             supplier_mode="sandbox_supplier",
             proposed_price_mxn=599,
             estimated_landed_cost_mxn=180,
             creative_claim="Monitorea espacios de casa sin prometer seguridad absoluta.",
-            marketing_angle="tranquilidad visual sin instalación complicada",
-            primary_hook="¿Sales de casa y no sabes qué está pasando?",
-            target_audience="personas que quieren vigilar casa o negocio pequeño",
+            marketing_angle="tranquilidad visual sin instalaciÃƒÂ³n complicada",
+            primary_hook="Ã‚Â¿Sales de casa y no sabes quÃƒÂ© estÃƒÂ¡ pasando?",
+            target_audience="personas que quieren vigilar casa o negocio pequeÃƒÂ±o",
             use_case="revisar visualmente un espacio desde el celular",
             signals=(
                 SyntheticSignal("gross_margin", 0.70, 0.35, "Price leaves room for testing without touching live spend."),
@@ -318,7 +318,7 @@ def build_scenario(args: argparse.Namespace | None = None) -> SyntheticScenario:
         proposed_price_mxn=price,
         estimated_landed_cost_mxn=cost,
         creative_claim=claim_text,
-        marketing_angle=str(args.marketing_angle or "ángulo manipulable definido por usuario").strip(),
+        marketing_angle=str(args.marketing_angle or "ÃƒÂ¡ngulo manipulable definido por usuario").strip(),
         primary_hook=str(args.primary_hook or "").strip(),
         target_audience=str(args.target_audience or "comprador mexicano de e-commerce").strip(),
         use_case=str(args.use_case or "uso diario visible").strip(),
@@ -516,9 +516,9 @@ def generate_creative_pack(scenario: SyntheticScenario, safety: SafetyPosture) -
     hooks = [
         scenario.primary_hook or f"Si {audience} necesita {use_case}, {product} merece una prueba visual.",
         f"Antes de prometer resultados, muestra esto: {product} resolviendo {use_case} en una escena real.",
-        f"El ángulo no es vender '{product}'; es mostrar el momento exacto donde {audience} siente la fricción.",
+        f"El ÃƒÂ¡ngulo no es vender '{product}'; es mostrar el momento exacto donde {audience} siente la fricciÃƒÂ³n.",
         f"Graba la diferencia entre hacerlo manualmente y usar {product} para {use_case}.",
-        f"No digas que {product} garantiza nada: enseña el mecanismo y deja que la demostración cargue el anuncio.",
+        f"No digas que {product} garantiza nada: enseÃƒÂ±a el mecanismo y deja que la demostraciÃƒÂ³n cargue el anuncio.",
     ]
 
     product_tokens = [token for token in _normalize(product).split() if len(token) >= 4]
@@ -555,7 +555,7 @@ def generate_creative_pack(scenario: SyntheticScenario, safety: SafetyPosture) -
         },
         {
             "name": "objection_reduction",
-            "angle": f"Reducir duda de compra mostrando costo, uso y límite real de {product}.",
+            "angle": f"Reducir duda de compra mostrando costo, uso y lÃƒÂ­mite real de {product}.",
             "why": "Pre-empts skepticism and avoids overclaiming.",
         },
     ]
@@ -563,18 +563,18 @@ def generate_creative_pack(scenario: SyntheticScenario, safety: SafetyPosture) -
     do_not_claim = [
         "No prometer resultados garantizados.",
         "No afirmar que evita robos, cura problemas o elimina riesgos.",
-        "No usar antes/después engañoso ni urgencia falsa.",
+        "No usar antes/despuÃƒÂ©s engaÃƒÂ±oso ni urgencia falsa.",
     ]
 
     script_7s = (
         f"0-2s: muestra el problema de {use_case}. "
-        f"2-5s: enseña {product} funcionando en una toma clara. "
-        "5-7s: cierra con una invitación a revisar la demostración, sin prometer resultados."
+        f"2-5s: enseÃƒÂ±a {product} funcionando en una toma clara. "
+        "5-7s: cierra con una invitaciÃƒÂ³n a revisar la demostraciÃƒÂ³n, sin prometer resultados."
     )
     script_15s = (
         f"0-3s hook: {hooks[0]} "
-        f"3-9s demostración: {product} en uso real para {use_case}. "
-        "9-12s objeción: enseña límite/costo sin exagerar. "
+        f"3-9s demostraciÃƒÂ³n: {product} en uso real para {use_case}. "
+        "9-12s objeciÃƒÂ³n: enseÃƒÂ±a lÃƒÂ­mite/costo sin exagerar. "
         "12-15s cierre: prueba controlada, claim seguro."
     )
 
@@ -582,22 +582,27 @@ def generate_creative_pack(scenario: SyntheticScenario, safety: SafetyPosture) -
         "what_to_record": [
             f"Plano del problema antes de usar {product}.",
             f"Plano claro de {product} resolviendo o facilitando {use_case}.",
-            "Plano final mostrando resultado visible sin prometer garantía.",
+            "Plano final mostrando resultado visible sin prometer garantÃƒÂ­a.",
         ],
         "text_on_screen": [
             hooks[0],
             "Muestra el mecanismo, no prometas magia.",
-            "Prueba controlada · sin claims exagerados",
+            "Prueba controlada Ã‚Â· sin claims exagerados",
         ],
-        "visual_proof": f"Demostración directa de {product} en {use_case}.",
+        "visual_proof": f"DemostraciÃƒÂ³n directa de {product} en {use_case}.",
         "do_not_claim": do_not_claim,
     }
+
+    primary_hook_for_integrity = str(getattr(scenario, "primary_hook", "") or "").strip()
+    integrity_hooks = hooks
+    if primary_hook_for_integrity:
+        integrity_hooks = _dedupe_keep_order([primary_hook_for_integrity, *hooks])
 
     integrity = evaluate_creative_integrity(
         product_name=product,
         audience=audience,
         use_case=use_case,
-        hooks=hooks,
+        hooks=integrity_hooks,
         claim_safety=safety.claim_safety,
     )
 
@@ -845,14 +850,14 @@ def run_simulation(
 
 def _known_case_inputs() -> list[dict[str, Any]]:
     return [
-        {"case_id": "KC01_GOOD_MARGIN_SAFE_CLAIM", "product": "Mini cámara WiFi", "price": 599, "cost": 180, "traffic": 900, "days": 3, "angle": "tranquilidad visual para casa sin instalación complicada", "hook": "¿Sales de casa y no sabes qué está pasando?", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
-        {"case_id": "KC02_NEGATIVE_MARGIN", "product": "Lámpara infantil recargable", "price": 100, "cost": 180, "traffic": 700, "days": 3, "angle": "rutina nocturna visual", "hook": "Si tu hijo te llama de noche, muestra una rutina de luz cálida.", "expected": "REJECT_NEGATIVE_MARGIN"},
-        {"case_id": "KC03_DANGEROUS_SECURITY_CLAIM", "product": "Sensor puerta WiFi", "price": 399, "cost": 120, "traffic": 850, "days": 3, "angle": "alerta visual doméstica", "hook": "Evita robos al 100% con este sensor.", "expected": "HOLD_CLAIM_RISK"},
-        {"case_id": "KC04_LOW_TRAFFIC_HOLD", "product": "Organizador magnético", "price": 299, "cost": 155, "traffic": 80, "days": 1, "angle": "orden visible en cocina pequeña", "hook": "Muestra una cocina saturada y luego una pared ordenada.", "expected": "HOLD_MORE_EVIDENCE"},
-        {"case_id": "KC05_SAFE_DEMO_PRODUCT", "product": "Mini aspiradora portátil", "price": 499, "cost": 170, "traffic": 1000, "days": 3, "angle": "limpieza rápida de migajas en carro", "hook": "Graba el asiento del carro antes y después de aspirar migajas visibles.", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
+        {"case_id": "KC01_GOOD_MARGIN_SAFE_CLAIM", "product": "Mini cÃƒÂ¡mara WiFi", "price": 599, "cost": 180, "traffic": 900, "days": 3, "angle": "tranquilidad visual para casa sin instalaciÃƒÂ³n complicada", "hook": "Ã‚Â¿Sales de casa y no sabes quÃƒÂ© estÃƒÂ¡ pasando?", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
+        {"case_id": "KC02_NEGATIVE_MARGIN", "product": "LÃƒÂ¡mpara infantil recargable", "price": 100, "cost": 180, "traffic": 700, "days": 3, "angle": "rutina nocturna visual", "hook": "Si tu hijo te llama de noche, muestra una rutina de luz cÃƒÂ¡lida.", "expected": "REJECT_NEGATIVE_MARGIN"},
+        {"case_id": "KC03_DANGEROUS_SECURITY_CLAIM", "product": "Sensor puerta WiFi", "price": 399, "cost": 120, "traffic": 850, "days": 3, "angle": "alerta visual domÃƒÂ©stica", "hook": "Evita robos al 100% con este sensor.", "expected": "HOLD_CLAIM_RISK"},
+        {"case_id": "KC04_LOW_TRAFFIC_HOLD", "product": "Organizador magnÃƒÂ©tico", "price": 299, "cost": 155, "traffic": 80, "days": 1, "angle": "orden visible en cocina pequeÃƒÂ±a", "hook": "Muestra una cocina saturada y luego una pared ordenada.", "expected": "HOLD_MORE_EVIDENCE"},
+        {"case_id": "KC05_SAFE_DEMO_PRODUCT", "product": "Mini aspiradora portÃƒÂ¡til", "price": 499, "cost": 170, "traffic": 1000, "days": 3, "angle": "limpieza rÃƒÂ¡pida de migajas en carro", "hook": "Graba el asiento del carro antes y despuÃƒÂ©s de aspirar migajas visibles.", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
         {"case_id": "KC06_MEDICAL_CLAIM_TRAP", "product": "Corrector de postura", "price": 399, "cost": 130, "traffic": 900, "days": 3, "angle": "postura visual para escritorio", "hook": "Cura el dolor de espalda usando esto diario.", "expected": "HOLD_CLAIM_RISK"},
-        {"case_id": "KC07_MARGIN_OK_CPA_RISK", "product": "Dispensador automático", "price": 349, "cost": 260, "traffic": 260, "days": 2, "angle": "dosificación visual sin ensuciar", "hook": "Muestra una mano sucia y luego una dosificación limpia.", "expected": "HOLD_MORE_EVIDENCE"},
-        {"case_id": "KC08_CLEAR_VISUAL_WIN", "product": "Removedor de pelusa reutilizable", "price": 249, "cost": 55, "traffic": 1200, "days": 3, "angle": "antes/después real en ropa negra sin exagerar", "hook": "Graba una manga negra llena de pelusa y una pasada real del removedor.", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
+        {"case_id": "KC07_MARGIN_OK_CPA_RISK", "product": "Dispensador automÃƒÂ¡tico", "price": 349, "cost": 260, "traffic": 260, "days": 2, "angle": "dosificaciÃƒÂ³n visual sin ensuciar", "hook": "Muestra una mano sucia y luego una dosificaciÃƒÂ³n limpia.", "expected": "HOLD_MORE_EVIDENCE"},
+        {"case_id": "KC08_CLEAR_VISUAL_WIN", "product": "Removedor de pelusa reutilizable", "price": 249, "cost": 55, "traffic": 1200, "days": 3, "angle": "antes/despuÃƒÂ©s real en ropa negra sin exagerar", "hook": "Graba una manga negra llena de pelusa y una pasada real del removedor.", "expected": "TEST_SMALL_BUDGET_SANDBOX"},
     ]
 
 
