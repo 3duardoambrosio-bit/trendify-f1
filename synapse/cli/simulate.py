@@ -204,6 +204,10 @@ _CLAIM_SAFETY_CATEGORY_PATTERNS = {
         r"\briesgo silencioso\b",
         r"\bagotan\b",
         r"\bpuede ser un riesgo\b",
+        r"\bevita\b.{0,80}\bmultas?\b",
+        r"\bevitar\b.{0,80}\bmultas?\b",
+        r"\bevita\b.{0,100}\bproblemas legales\b",
+        r"\bevitar\b.{0,100}\bproblemas legales\b",
     ),
     "SPECIFIC_TIME_PROMISE": (
         r"\b\d+\s*(minuto|minutos|hora|horas|dia|dias|segundo|segundos|semana|semanas)\b",
