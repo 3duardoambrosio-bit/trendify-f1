@@ -1,4 +1,5 @@
 from __future__ import annotations
+from synapse.cli._blacklist import GENERIC_BLACKLIST
 
 import argparse
 import hashlib
@@ -79,7 +80,6 @@ class CreativeIntegrityReport:
     failed_reasons: tuple[str, ...] = field(default_factory=tuple)
 
 
-
 PRESET_SCENARIOS: dict[str, dict[str, object]] = {
     "home_security_wifi": {
         "product_name": "Mini cÃƒÂ¡mara WiFi",
@@ -121,38 +121,6 @@ PRESET_SCENARIOS: dict[str, dict[str, object]] = {
         "use_case": "quitar pelusa visible de ropa negra sin prometer magia",
     },
 }
-
-GENERIC_BLACKLIST = (
-    "el mejor producto",
-    "calidad garantizada",
-    "ideal para todos",
-    "compra ahora",
-    "no te lo pierdas",
-    "solución perfecta",
-    "solucion perfecta",
-    "producto innovador",
-    "producto increíble",
-    "producto increible",
-    "revolucionario",
-    "dile adiós",
-    "dile adios",
-    "lo que usan los que saben",
-    "los que saben",
-    "realmente funciona",
-    "desorden y la incomodidad",
-    "la alternativa inteligente que tu cartera",
-    "por qué pagar más si",
-    "por que pagar mas si",
-    "mientras otros usan genéricos",
-    "mientras otros usan genericos",
-    "el detalle perfecto para quien tiene todo",
-    "para los que no se conforman",
-    "si la frustración de no tener",
-    "si la frustracion de no tener",
-    "no tener la solución correcta",
-    "no tener la solucion correcta",
-)
-
 
 _CLAIM_SAFETY_CATEGORY_PATTERNS = {
     "HEALTH": (
@@ -375,7 +343,6 @@ def _has_manipulable_input(args: argparse.Namespace | None) -> bool:
 def _contains_dangerous_claim(text: str) -> bool:
     normalized = _normalize(text)
     return any(phrase in normalized for phrase in DANGEROUS_CLAIMS)
-
 
 
 def _apply_preset_defaults(args: argparse.Namespace) -> argparse.Namespace:

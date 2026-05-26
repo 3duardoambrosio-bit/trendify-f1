@@ -9,6 +9,7 @@ Scope:
 """
 
 from __future__ import annotations
+from synapse.cli._blacklist import GENERIC_BLACKLIST as NPC_BLACKLIST_PATTERNS
 
 import json
 from dataclasses import dataclass
@@ -35,26 +36,6 @@ LEDGER_INVARIANT_KEYS = (
     "meta_write_count",
     "dropi_write_count",
 )
-
-NPC_BLACKLIST_PATTERNS = (
-    "dile adios",
-    "dile adiós",
-    "no vas a creer",
-    "el secreto",
-    "nadie te dice",
-    "esto cambió mi vida",
-    "esto cambio mi vida",
-    "la solución correcta",
-    "la solucion correcta",
-    "por qué pagar más",
-    "por que pagar mas",
-    "compra ahora",
-    "última oportunidad",
-    "ultima oportunidad",
-    "resultados garantizados",
-    "garantizado",
-)
-
 
 @dataclass(frozen=True)
 class ProductRun:
