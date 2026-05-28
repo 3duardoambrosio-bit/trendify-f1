@@ -165,6 +165,35 @@ class CircuitOpenError(InfraCircuitOpenError, HttpClientError):
 _FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent / "fixtures" / "shopify_admin"
 
 
+
+class ShopifyReadOnlyViolation(ValueError):
+    """Raised when the read-only Shopify Admin client receives a non-read operation."""
+
+
+_READ_ONLY_FORBIDDEN_GRAPHQL_OPERATIONS = frozenset({"mutation", "subscription"})
+
+
+def _graphql_operation_token(query: str) -> str:
+    """Return the first GraphQL operation token, ignoring blank lines and comments."""
+    for raw_line in query.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("{"):
+            return "query"
+        return line.split(None, 1)[0].lower()
+    return ""
+
+
+def _assert_read_only_graphql_query(query: str) -> None:
+    """Fail closed if this read-only client is asked to execute a write operation."""
+    operation = _graphql_operation_token(query)
+    if operation in _READ_ONLY_FORBIDDEN_GRAPHQL_OPERATIONS:
+        raise ShopifyReadOnlyViolation(
+            "ShopifyAdminClient is read-only; GraphQL mutations/subscriptions must use "
+            "an explicit writer/streaming adapter, not the read-only admin client."
+        )
+
 def _load_fixture(name: str) -> Dict[str, Any]:
     path = _FIXTURES_DIR / f"{name}.json"
     if not path.exists():
@@ -254,6 +283,7 @@ class ShopifyAdminClient:
         return f"{shop}/admin/api/{_API_VERSION}/graphql.json"
 
     def _graphql(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        _assert_read_only_graphql_query(query)
         if not self.shop or not self.access_token:
             return {"data": None, "errors": [{"message": "Missing shop or access_token"}]}
 

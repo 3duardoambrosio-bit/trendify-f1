@@ -17,6 +17,7 @@ from synapse.integrations.shopify_admin_client import (
     CircuitOpenError,
     ShopifyAdminClient,
     _load_fixture,
+    _graphql_operation_token,
 )
 
 
@@ -420,3 +421,36 @@ class TestLiveModeCircuitBreaker:
             with pytest.raises(CircuitOpenError, match="Circuit breaker OPEN"):
                 client.get_products()
             mock_post_blocked.assert_not_called()
+
+
+def test_read_only_client_rejects_graphql_mutation_before_http(monkeypatch):
+    client = ShopifyAdminClient()
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("read-only mutation guard must fire before HTTP")
+
+    monkeypatch.setattr(client._http, "post_json", fail_if_called)
+
+    with pytest.raises(ValueError, match="read-only|mutations"):
+        client._graphql(
+            """
+            mutation ProductCreate($input: ProductInput!) {
+              productCreate(product: $input) {
+                product {
+                  id
+                }
+              }
+            }
+            """,
+            {"input": {"title": "Blocked"}},
+        )
+
+
+def test_read_only_client_treats_anonymous_graphql_selection_as_query():
+    assert _graphql_operation_token("""
+    {
+      shop {
+        name
+      }
+    }
+    """) == "query"
