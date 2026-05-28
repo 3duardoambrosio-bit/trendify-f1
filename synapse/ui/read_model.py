@@ -37,6 +37,15 @@ LEDGER_INVARIANT_KEYS = (
     "dropi_write_count",
 )
 
+
+SHOPIFY_PRODUCTS_FIXTURE_PATH = Path("tests/fixtures/capa_b/products_nominal.json")
+SHOPIFY_OPS_TICK_FIXTURE_PATH = Path("tests/fixtures/capa_b/ops_tick_nominal.json")
+
+SHOPIFY_READ_ONLY_FLAG_KEYS = (
+    "shopify_live",
+    "spend_real_money",
+)
+
 @dataclass(frozen=True)
 class ProductRun:
     """A complete read-only product run."""
@@ -67,6 +76,38 @@ class ProductRun:
     @property
     def final_outcome(self) -> str:
         return as_text(self.decision.get("final_outcome"), fallback="UNKNOWN")
+
+
+@dataclass(frozen=True)
+class ShopifyReadOnlySnapshot:
+    """Local, read-only Shopify snapshot loaded from fixtures."""
+
+    products: Sequence[Mapping[str, Any]]
+    ops_tick: Mapping[str, Any]
+    product_source: Path
+    ops_source: Path
+
+    @property
+    def flags(self) -> Mapping[str, Any]:
+        flags = self.ops_tick.get("flags")
+        return flags if isinstance(flags, dict) else {}
+
+    @property
+    def shopify_health(self) -> Mapping[str, Any]:
+        shopify = self.ops_tick.get("shopify")
+        return shopify if isinstance(shopify, dict) else {}
+
+    @property
+    def product_count(self) -> int:
+        return len(self.products)
+
+    @property
+    def shopify_live_enabled(self) -> bool:
+        return bool(self.flags.get("shopify_live", False))
+
+    @property
+    def spend_real_money_enabled(self) -> bool:
+        return bool(self.flags.get("spend_real_money", False))
 
 
 def as_text(value: Any, fallback: str = "") -> str:
@@ -152,6 +193,95 @@ def load_product_run(path: Path) -> ProductRun:
 
 def load_product_runs() -> list[ProductRun]:
     return [load_product_run(path) for path in discover_run_dirs()]
+
+
+def read_json_list(path: Path) -> list[Mapping[str, Any]]:
+    if not path.is_file():
+        return []
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError(f"Expected JSON array: {path}")
+
+    return [item for item in data if isinstance(item, dict)]
+
+
+def read_json_object_if_exists(path: Path) -> Mapping[str, Any]:
+    if not path.is_file():
+        return {}
+    return read_json(path)
+
+
+def load_shopify_read_only_snapshot(
+    products_path: Path = SHOPIFY_PRODUCTS_FIXTURE_PATH,
+    ops_path: Path = SHOPIFY_OPS_TICK_FIXTURE_PATH,
+) -> ShopifyReadOnlySnapshot:
+    """Load a Shopify-like local snapshot without live API access."""
+    return ShopifyReadOnlySnapshot(
+        products=read_json_list(products_path),
+        ops_tick=read_json_object_if_exists(ops_path),
+        product_source=products_path,
+        ops_source=ops_path,
+    )
+
+
+def shopify_guardrail_rows(snapshot: ShopifyReadOnlySnapshot) -> list[dict[str, Any]]:
+    flags = snapshot.flags
+    health = snapshot.shopify_health
+
+    return [
+        {
+            "guardrail": "source_mode",
+            "value": "local_fixture_only",
+            "expected": "local_fixture_only",
+            "ok": True,
+        },
+        {
+            "guardrail": "shopify_live",
+            "value": bool(flags.get("shopify_live", False)),
+            "expected": False,
+            "ok": bool(flags.get("shopify_live", False)) is False,
+        },
+        {
+            "guardrail": "spend_real_money",
+            "value": bool(flags.get("spend_real_money", False)),
+            "expected": False,
+            "ok": bool(flags.get("spend_real_money", False)) is False,
+        },
+        {
+            "guardrail": "shopify_api_ok",
+            "value": health.get("api_ok", "N/A"),
+            "expected": "observational_only",
+            "ok": True,
+        },
+        {
+            "guardrail": "orders_last_hour",
+            "value": health.get("orders_last_hour", "N/A"),
+            "expected": "read_only_metric",
+            "ok": True,
+        },
+    ]
+
+
+def shopify_product_rows(snapshot: ShopifyReadOnlySnapshot) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for product in snapshot.products:
+        rows.append(
+            {
+                "product_id": product.get("product_id", "N/A"),
+                "title": product.get("title", "N/A"),
+                "category": product.get("category", "N/A"),
+                "price": product.get("price", "N/A"),
+                "cost": product.get("cost", "N/A"),
+                "margin_percent": product.get("margin_percent", "N/A"),
+                "sales": product.get("sales", "N/A"),
+                "supplier": product.get("supplier_name", "N/A"),
+                "source": "local_fixture",
+            }
+        )
+
+    return rows
 
 
 def matches_npc_template(text: str) -> bool:
@@ -256,6 +386,32 @@ def render_hooks(st: Any, run: ProductRun) -> None:
         st.write(f"{index}. {hook}{flag}")
 
 
+def render_shopify_read_only_snapshot(st: Any, snapshot: ShopifyReadOnlySnapshot) -> None:
+    st.subheader("Shopify read-only snapshot")
+    st.caption(
+        "Fuente local de fixtures. No llama Shopify live, no escribe archivos, no ejecuta mutations."
+    )
+
+    if not snapshot.products and not snapshot.ops_tick:
+        st.info("Sin snapshot local de Shopify disponible.")
+        return
+
+    st.write(f"**Products fixture:** `{snapshot.product_source}`")
+    st.write(f"**Ops fixture:** `{snapshot.ops_source}`")
+    st.write(f"**Productos en snapshot:** {snapshot.product_count}")
+
+    if snapshot.shopify_live_enabled or snapshot.spend_real_money_enabled:
+        st.warning("Flags live/spend detectados en fixture local. Revisar antes de avanzar.")
+    else:
+        st.success("Guardrails Shopify locales en modo read-only.")
+
+    st.write("**Guardrails**")
+    render_table(st, shopify_guardrail_rows(snapshot))
+
+    st.write("**Productos Shopify-like detectados**")
+    render_table(st, shopify_product_rows(snapshot))
+
+
 def render_ledger(st: Any, run: ProductRun) -> None:
     st.subheader("Ledger sandbox invariants")
 
@@ -287,6 +443,8 @@ def run_app() -> None:
         return
 
     render_main_summary(st, runs)
+    st.divider()
+    render_shopify_read_only_snapshot(st, load_shopify_read_only_snapshot())
 
     selected_label = st.selectbox(
         "Selecciona producto",
@@ -313,4 +471,3 @@ def run_app() -> None:
 
 if __name__ == "__main__":
     run_app()
-
