@@ -454,3 +454,42 @@ def test_read_only_client_treats_anonymous_graphql_selection_as_query():
       }
     }
     """) == "query"
+
+
+def test_read_only_token_handles_bom_and_comment_without_space():
+    assert _graphql_operation_token("\ufeffmutation { x }") == "mutation"
+    assert _graphql_operation_token("mutation# comment\n{ x }") == "mutation"
+    assert _graphql_operation_token("subscription{x}") == "subscription"
+
+
+def test_read_only_client_rejects_bom_and_comment_mutation_before_http(monkeypatch):
+    client = ShopifyAdminClient()
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("read-only bypass guard must fire before HTTP")
+
+    monkeypatch.setattr(client._http, "post_json", fail_if_called)
+
+    with pytest.raises(ValueError, match="read-only|mutations"):
+        client._graphql("\ufeffmutation { productCreate(product:{title:\"x\"}) { product { id } } }")
+
+    with pytest.raises(ValueError, match="read-only|mutations"):
+        client._graphql("mutation# comment\n{ productCreate(product:{title:\"x\"}) { product { id } } }")
+
+def test_read_only_token_handles_operation_name_without_space_before_selection():
+    assert _graphql_operation_token("mutation{x}") == "mutation"
+    assert _graphql_operation_token("mutation ProductCreate{x}") == "mutation"
+    assert _graphql_operation_token("subscription{x}") == "subscription"
+    assert _graphql_operation_token("query{x}") == "query"
+
+
+def test_read_only_client_rejects_subscription_without_space_before_http(monkeypatch):
+    client = ShopifyAdminClient()
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("read-only subscription guard must fire before HTTP")
+
+    monkeypatch.setattr(client._http, "post_json", fail_if_called)
+
+    with pytest.raises(ValueError, match="read-only|mutations"):
+        client._graphql("subscription{x}")

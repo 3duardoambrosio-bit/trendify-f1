@@ -176,12 +176,25 @@ _READ_ONLY_FORBIDDEN_GRAPHQL_OPERATIONS = frozenset({"mutation", "subscription"}
 def _graphql_operation_token(query: str) -> str:
     """Return the first GraphQL operation token, ignoring blank lines and comments."""
     for raw_line in query.splitlines():
-        line = raw_line.strip()
+        line = raw_line.strip().lstrip("\ufeff").strip()
         if not line or line.startswith("#"):
             continue
+
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+
         if line.startswith("{"):
             return "query"
-        return line.split(None, 1)[0].lower()
+
+        token_chars = []
+        for char in line:
+            if char == "_" or char.isalnum():
+                token_chars.append(char)
+                continue
+            break
+
+        return "".join(token_chars).lower()
     return ""
 
 
