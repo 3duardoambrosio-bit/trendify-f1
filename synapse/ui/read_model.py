@@ -38,12 +38,25 @@ LEDGER_INVARIANT_KEYS = (
 )
 
 
-SHOPIFY_PRODUCTS_FIXTURE_PATH = Path("tests/fixtures/capa_b/products_nominal.json")
-SHOPIFY_OPS_TICK_FIXTURE_PATH = Path("tests/fixtures/capa_b/ops_tick_nominal.json")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SHOPIFY_PRODUCTS_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "capa_b" / "products_nominal.json"
+SHOPIFY_OPS_TICK_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "capa_b" / "ops_tick_nominal.json"
 
 SHOPIFY_READ_ONLY_FLAG_KEYS = (
     "shopify_live",
     "spend_real_money",
+)
+
+SHOPIFY_PRODUCT_ROW_KEYS = (
+    "product_id",
+    "title",
+    "category",
+    "price",
+    "cost",
+    "margin_percent",
+    "sales",
+    "supplier",
+    "source",
 )
 
 @dataclass(frozen=True)
@@ -199,7 +212,11 @@ def read_json_list(path: Path) -> list[Mapping[str, Any]]:
     if not path.is_file():
         return []
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON fixture: {path}") from exc
+
     if not isinstance(data, list):
         raise ValueError(f"Expected JSON array: {path}")
 
@@ -209,7 +226,11 @@ def read_json_list(path: Path) -> list[Mapping[str, Any]]:
 def read_json_object_if_exists(path: Path) -> Mapping[str, Any]:
     if not path.is_file():
         return {}
-    return read_json(path)
+
+    try:
+        return read_json(path)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON fixture: {path}") from exc
 
 
 def load_shopify_read_only_snapshot(
@@ -267,19 +288,18 @@ def shopify_product_rows(snapshot: ShopifyReadOnlySnapshot) -> list[dict[str, An
     rows: list[dict[str, Any]] = []
 
     for product in snapshot.products:
-        rows.append(
-            {
-                "product_id": product.get("product_id", "N/A"),
-                "title": product.get("title", "N/A"),
-                "category": product.get("category", "N/A"),
-                "price": product.get("price", "N/A"),
-                "cost": product.get("cost", "N/A"),
-                "margin_percent": product.get("margin_percent", "N/A"),
-                "sales": product.get("sales", "N/A"),
-                "supplier": product.get("supplier_name", "N/A"),
-                "source": "local_fixture",
-            }
-        )
+        row = {
+            "product_id": product.get("product_id", "N/A"),
+            "title": product.get("title", "N/A"),
+            "category": product.get("category", "N/A"),
+            "price": product.get("price", "N/A"),
+            "cost": product.get("cost", "N/A"),
+            "margin_percent": product.get("margin_percent", "N/A"),
+            "sales": product.get("sales", "N/A"),
+            "supplier": product.get("supplier_name", "N/A"),
+            "source": "local_fixture",
+        }
+        rows.append({key: row[key] for key in SHOPIFY_PRODUCT_ROW_KEYS})
 
     return rows
 
@@ -412,6 +432,20 @@ def render_shopify_read_only_snapshot(st: Any, snapshot: ShopifyReadOnlySnapshot
     render_table(st, shopify_product_rows(snapshot))
 
 
+def render_shopify_read_only_snapshot_panel(
+    st: Any,
+    products_path: Path = SHOPIFY_PRODUCTS_FIXTURE_PATH,
+    ops_path: Path = SHOPIFY_OPS_TICK_FIXTURE_PATH,
+) -> None:
+    try:
+        snapshot = load_shopify_read_only_snapshot(products_path, ops_path)
+    except (OSError, ValueError) as exc:
+        st.warning(f"Shopify read-only snapshot no disponible: {exc}")
+        return
+
+    render_shopify_read_only_snapshot(st, snapshot)
+
+
 def render_ledger(st: Any, run: ProductRun) -> None:
     st.subheader("Ledger sandbox invariants")
 
@@ -444,7 +478,7 @@ def run_app() -> None:
 
     render_main_summary(st, runs)
     st.divider()
-    render_shopify_read_only_snapshot(st, load_shopify_read_only_snapshot())
+    render_shopify_read_only_snapshot_panel(st)
 
     selected_label = st.selectbox(
         "Selecciona producto",

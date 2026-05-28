@@ -1,5 +1,7 @@
 import ast
 import json
+
+import pytest
 from pathlib import Path
 
 from synapse.ui import read_model
@@ -191,3 +193,70 @@ def test_render_shopify_read_only_snapshot_uses_streamlit_only_for_display() -> 
     assert len(fake.tables) == 2
     assert fake.tables[0][0]["guardrail"] == "source_mode"
     assert fake.tables[1][0]["title"] == "Neck Fan Pro"
+
+
+def test_shopify_product_rows_allowlist_is_exact() -> None:
+    snapshot = read_model.ShopifyReadOnlySnapshot(
+        products=[
+            {
+                "product_id": "prod-alpha",
+                "title": "Neck Fan Pro",
+                "category": "gadgets",
+                "price": 499.0,
+                "cost": 219.0,
+                "margin_percent": 56.11,
+                "sales": 920,
+                "supplier_name": "Dropi Alpha",
+                "admin_secret": "must_not_surface",
+                "graphql_token": "must_not_surface",
+            }
+        ],
+        ops_tick={},
+        product_source=Path("products.json"),
+        ops_source=Path("ops.json"),
+    )
+
+    row = read_model.shopify_product_rows(snapshot)[0]
+
+    assert tuple(row.keys()) == read_model.SHOPIFY_PRODUCT_ROW_KEYS
+    assert "admin_secret" not in row
+    assert "graphql_token" not in row
+
+
+def test_shopify_fixture_paths_are_repo_root_absolute() -> None:
+    assert read_model.SHOPIFY_PRODUCTS_FIXTURE_PATH.is_absolute()
+    assert read_model.SHOPIFY_OPS_TICK_FIXTURE_PATH.is_absolute()
+    assert read_model.SHOPIFY_PRODUCTS_FIXTURE_PATH.name == "products_nominal.json"
+    assert read_model.SHOPIFY_OPS_TICK_FIXTURE_PATH.name == "ops_tick_nominal.json"
+
+
+def test_shopify_fixture_invalid_json_is_wrapped(tmp_path: Path) -> None:
+    products_path = tmp_path / "products.json"
+    ops_path = tmp_path / "ops.json"
+
+    products_path.write_text("{bad-json", encoding="utf-8")
+    ops_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid JSON fixture"):
+        read_model.load_shopify_read_only_snapshot(products_path, ops_path)
+
+
+def test_render_shopify_read_only_snapshot_panel_handles_fixture_error(tmp_path: Path) -> None:
+    class FakeSt:
+        def __init__(self) -> None:
+            self.warnings: list[str] = []
+
+        def warning(self, value: str) -> None:
+            self.warnings.append(value)
+
+    products_path = tmp_path / "products.json"
+    ops_path = tmp_path / "ops.json"
+
+    products_path.write_text("{bad-json", encoding="utf-8")
+    ops_path.write_text("{}", encoding="utf-8")
+
+    fake = FakeSt()
+    read_model.render_shopify_read_only_snapshot_panel(fake, products_path, ops_path)
+
+    assert len(fake.warnings) == 1
+    assert "Shopify read-only snapshot no disponible" in fake.warnings[0]
