@@ -1,49 +1,69 @@
 import ast
 import json
-
-import pytest
 from pathlib import Path
 
+import pytest
+
 from synapse.ui import read_model
+
+
+def valid_product(**overrides):
+    product = {
+        "category": "gadgets",
+        "cost": 219.0,
+        "image_url": "https://example.test/neck-fan.jpg",
+        "images_count": 4,
+        "keyword_matches": ["neck fan", "portable fan"],
+        "margin_absolute": 280.0,
+        "margin_percent": 56.11,
+        "match_score": 0.91,
+        "price": 499.0,
+        "product_id": "prod-alpha",
+        "rating": 4.7,
+        "reviews": 184,
+        "sales": 920,
+        "shipping_days": 7,
+        "supplier_id": "supplier-alpha",
+        "supplier_name": "Dropi Alpha",
+        "title": "Neck Fan Pro",
+    }
+    product.update(overrides)
+    return product
+
+
+def valid_ops(**overrides):
+    ops = {
+        "circuit_breaker": {},
+        "dropi": {},
+        "finance": {},
+        "flags": {
+            "dropi_live": False,
+            "meta_live": False,
+            "shopify_live": False,
+            "spend_real_money": False,
+        },
+        "healthy": True,
+        "meta": {},
+        "shopify": {
+            "api_ok": True,
+            "checkout_ok": True,
+            "orders_last_hour": 0,
+        },
+        "signals": {},
+        "status": "nominal",
+        "timestamp": "2026-05-28T00:00:00Z",
+        "ts": "2026-05-28T00:00:00Z",
+    }
+    ops.update(overrides)
+    return ops
 
 
 def test_shopify_read_only_snapshot_loads_local_fixtures(tmp_path: Path) -> None:
     products_path = tmp_path / "products.json"
     ops_path = tmp_path / "ops.json"
 
-    products_path.write_text(
-        json.dumps(
-            [
-                {
-                    "product_id": "prod-alpha",
-                    "title": "Neck Fan Pro",
-                    "category": "gadgets",
-                    "price": 499.0,
-                    "cost": 219.0,
-                    "margin_percent": 56.11,
-                    "sales": 920,
-                    "supplier_name": "Dropi Alpha",
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
-    ops_path.write_text(
-        json.dumps(
-            {
-                "flags": {
-                    "shopify_live": False,
-                    "spend_real_money": False,
-                },
-                "shopify": {
-                    "api_ok": True,
-                    "checkout_ok": True,
-                    "orders_last_hour": 0,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    products_path.write_text(json.dumps([valid_product()]), encoding="utf-8")
+    ops_path.write_text(json.dumps(valid_ops()), encoding="utf-8")
 
     snapshot = read_model.load_shopify_read_only_snapshot(products_path, ops_path)
 
@@ -83,19 +103,7 @@ def test_shopify_guardrail_rows_stay_read_only() -> None:
 
 def test_shopify_product_rows_expose_safe_display_fields() -> None:
     snapshot = read_model.ShopifyReadOnlySnapshot(
-        products=[
-            {
-                "product_id": "prod-alpha",
-                "title": "Neck Fan Pro",
-                "category": "gadgets",
-                "price": 499.0,
-                "cost": 219.0,
-                "margin_percent": 56.11,
-                "sales": 920,
-                "supplier_name": "Dropi Alpha",
-                "access_token": "must_not_surface",
-            }
-        ],
+        products=[valid_product()],
         ops_tick={},
         product_source=Path("products.json"),
         ops_source=Path("ops.json"),
@@ -159,18 +167,7 @@ def test_render_shopify_read_only_snapshot_uses_streamlit_only_for_display() -> 
             self.tables.append(list(rows))
 
     snapshot = read_model.ShopifyReadOnlySnapshot(
-        products=[
-            {
-                "product_id": "prod-alpha",
-                "title": "Neck Fan Pro",
-                "category": "gadgets",
-                "price": 499.0,
-                "cost": 219.0,
-                "margin_percent": 56.11,
-                "sales": 920,
-                "supplier_name": "Dropi Alpha",
-            }
-        ],
+        products=[valid_product()],
         ops_tick={
             "flags": {
                 "shopify_live": False,
@@ -198,29 +195,21 @@ def test_render_shopify_read_only_snapshot_uses_streamlit_only_for_display() -> 
 def test_shopify_product_rows_allowlist_is_exact() -> None:
     snapshot = read_model.ShopifyReadOnlySnapshot(
         products=[
-            {
-                "product_id": "prod-alpha",
-                "title": "Neck Fan Pro",
-                "category": "gadgets",
-                "price": 499.0,
-                "cost": 219.0,
-                "margin_percent": 56.11,
-                "sales": 920,
-                "supplier_name": "Dropi Alpha",
-                "admin_secret": "must_not_surface",
-                "graphql_token": "must_not_surface",
-            }
+            valid_product(
+                admin_secret="must_not_surface",
+                graphql_token="must_not_surface",
+            )
         ],
         ops_tick={},
         product_source=Path("products.json"),
         ops_source=Path("ops.json"),
     )
 
-    row = read_model.shopify_product_rows(snapshot)[0]
+    row = read_model.shopify_product_rows(snapshot)
 
-    assert tuple(row.keys()) == read_model.SHOPIFY_PRODUCT_ROW_KEYS
-    assert "admin_secret" not in row
-    assert "graphql_token" not in row
+    assert tuple(row[0].keys()) == read_model.SHOPIFY_PRODUCT_ROW_KEYS
+    assert "admin_secret" not in row[0]
+    assert "graphql_token" not in row[0]
 
 
 def test_shopify_fixture_paths_are_repo_root_absolute() -> None:

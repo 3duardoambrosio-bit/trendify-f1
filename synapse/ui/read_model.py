@@ -15,6 +15,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+from synapse.ui._shopify_fixture_schema import (
+    validate_shopify_ops_fixture,
+    validate_shopify_products_fixture,
+)
 
 
 RUNS_DIR = Path("runs/operacion_cli_dia1")
@@ -237,10 +241,13 @@ def load_shopify_read_only_snapshot(
     products_path: Path = SHOPIFY_PRODUCTS_FIXTURE_PATH,
     ops_path: Path = SHOPIFY_OPS_TICK_FIXTURE_PATH,
 ) -> ShopifyReadOnlySnapshot:
-    """Load a Shopify-like local snapshot without live API access."""
+    """Load and validate a Shopify-like local snapshot without live API access."""
+    products = validate_shopify_products_fixture(read_json_list(products_path), products_path)
+    ops_tick = validate_shopify_ops_fixture(read_json_object_if_exists(ops_path), ops_path)
+
     return ShopifyReadOnlySnapshot(
-        products=read_json_list(products_path),
-        ops_tick=read_json_object_if_exists(ops_path),
+        products=products,
+        ops_tick=ops_tick,
         product_source=products_path,
         ops_source=ops_path,
     )
