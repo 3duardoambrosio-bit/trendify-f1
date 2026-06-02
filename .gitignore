@@ -183,3 +183,10 @@ out/forecast/
 out/forecast/*.json
 out/forecast/*.csv
 out/forecast/*.md
+
+
+# BEGIN A8-R63 runtime evidence ignore
+# Runtime evidence (regenerable, no se trackea)
+/runs/*
+!/runs/.gitkeep
+# END A8-R63 runtime evidence ignore
