@@ -20,6 +20,7 @@ from synapse.ui._shopify_fixture_schema import (
     validate_shopify_products_fixture,
 )
 
+MAX_RUN_DIRS_DISPLAYED = 8
 
 RUNS_DIR = Path("runs/operacion_cli_dia1")
 PREFERRED_RUN_ROOT = Path("runs/operacion_cli_dia1") / "operacion_cli_dia1"
@@ -185,16 +186,17 @@ def discover_roots() -> list[Path]:
     return roots
 
 
-def discover_run_dirs() -> list[Path]:
+def discover_run_dirs(root: Path | None = None) -> list[Path]:
+    search_roots = [root] if root is not None else discover_roots()
     run_dirs: list[Path] = []
-    for root in discover_roots():
-        for scenario_path in sorted(root.rglob("scenario.json")):
+    for search_root in search_roots:
+        for scenario_path in sorted(search_root.rglob("scenario.json")):
             candidate = scenario_path.parent
             if is_complete_run_dir(candidate):
                 run_dirs.append(candidate)
 
     deduped = sorted(set(run_dirs), key=lambda item: str(item))
-    return deduped[:5]
+    return deduped[:MAX_RUN_DIRS_DISPLAYED]
 
 
 def load_product_run(path: Path) -> ProductRun:
