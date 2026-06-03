@@ -22,6 +22,57 @@ from synapse.ui._shopify_fixture_schema import (
 
 MAX_RUN_DIRS_DISPLAYED = 8
 
+
+EXPECTED_RUNTIME_PRODUCT_COUNT = MAX_RUN_DIRS_DISPLAYED
+
+
+def build_run_inventory_status(
+    run_count: int,
+    expected_count: int = EXPECTED_RUNTIME_PRODUCT_COUNT,
+) -> dict[str, object]:
+    """Build a side-effect-free runtime inventory status for the read-only UI."""
+
+    observed_count = int(run_count)
+    expected = int(expected_count)
+
+    if observed_count < 0:
+        raise ValueError("run_count must be >= 0")
+    if expected < 0:
+        raise ValueError("expected_count must be >= 0")
+
+    displayed_count = min(observed_count, expected)
+    hidden_count = max(observed_count - expected, 0)
+    missing_count = max(expected - observed_count, 0)
+
+    if observed_count == 0:
+        state = "empty"
+        message = f"No runtime products detected. Expected {expected}."
+        should_warn = True
+    elif observed_count < expected:
+        state = "partial"
+        message = f"Runtime inventory partial: {observed_count}/{expected} products detected."
+        should_warn = True
+    elif observed_count == expected:
+        state = "complete"
+        message = f"Runtime inventory complete: {observed_count}/{expected}."
+        should_warn = False
+    else:
+        state = "overflow"
+        message = f"Runtime inventory overflow: showing {displayed_count}/{expected}, hidden={hidden_count}."
+        should_warn = True
+
+    return {
+        "observed_count": observed_count,
+        "expected_count": expected,
+        "displayed_count": displayed_count,
+        "hidden_count": hidden_count,
+        "missing_count": missing_count,
+        "inventory_label": f"{displayed_count}/{expected}",
+        "state": state,
+        "message": message,
+        "should_warn": should_warn,
+    }
+
 RUNS_DIR = Path("runs/operacion_cli_dia1")
 PREFERRED_RUN_ROOT = Path("runs/operacion_cli_dia1") / "operacion_cli_dia1"
 FALLBACK_RUN_ROOT = Path("runs/operacion_cli_dia1") / "a8_r54k_gate_false_green_fix" / "known_cases_runtime"
@@ -481,6 +532,16 @@ def run_app() -> None:
     st.caption("Lee evidencia existente en runs/operacion_cli_dia1/. No ejecuta simulaciones. No escribe archivos.")
 
     runs = load_product_runs()
+    inventory_status = build_run_inventory_status(len(runs))
+    st.caption(
+        f"Run inventory: {inventory_status['inventory_label']} "
+        f"| state={inventory_status['state']} "
+        f"| observed={inventory_status['observed_count']} "
+        f"| hidden={inventory_status['hidden_count']}"
+    )
+    if inventory_status["should_warn"]:
+        st.warning(str(inventory_status["message"]))
+
     if not runs:
         st.error("No se encontraron runs completos en runs/operacion_cli_dia1/.")
         return

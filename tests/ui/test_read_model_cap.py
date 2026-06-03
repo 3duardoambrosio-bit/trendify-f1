@@ -65,3 +65,73 @@ def test_discover_run_dirs_returns_all_when_below_max(tmp_path: Path) -> None:
 
     assert len(discovered) == 3
     assert all(path.is_dir() for path in discovered)
+
+
+def test_build_run_inventory_status_complete_8_of_8() -> None:
+    status = read_model.build_run_inventory_status(8)
+
+    assert status["observed_count"] == 8
+    assert status["expected_count"] == 8
+    assert status["displayed_count"] == 8
+    assert status["hidden_count"] == 0
+    assert status["missing_count"] == 0
+    assert status["inventory_label"] == "8/8"
+    assert status["state"] == "complete"
+    assert status["should_warn"] is False
+
+
+def test_build_run_inventory_status_empty_warns() -> None:
+    status = read_model.build_run_inventory_status(0)
+
+    assert status["observed_count"] == 0
+    assert status["expected_count"] == 8
+    assert status["displayed_count"] == 0
+    assert status["hidden_count"] == 0
+    assert status["missing_count"] == 8
+    assert status["inventory_label"] == "0/8"
+    assert status["state"] == "empty"
+    assert status["should_warn"] is True
+
+
+def test_build_run_inventory_status_partial_warns() -> None:
+    status = read_model.build_run_inventory_status(5)
+
+    assert status["observed_count"] == 5
+    assert status["expected_count"] == 8
+    assert status["displayed_count"] == 5
+    assert status["hidden_count"] == 0
+    assert status["missing_count"] == 3
+    assert status["inventory_label"] == "5/8"
+    assert status["state"] == "partial"
+    assert status["should_warn"] is True
+
+
+def test_build_run_inventory_status_overflow_warns_and_caps_display() -> None:
+    status = read_model.build_run_inventory_status(9)
+
+    assert status["observed_count"] == 9
+    assert status["expected_count"] == 8
+    assert status["displayed_count"] == 8
+    assert status["hidden_count"] == 1
+    assert status["missing_count"] == 0
+    assert status["inventory_label"] == "8/8"
+    assert status["state"] == "overflow"
+    assert status["should_warn"] is True
+
+
+def test_build_run_inventory_status_rejects_negative_run_count() -> None:
+    try:
+        read_model.build_run_inventory_status(-1)
+    except ValueError as exc:
+        assert "run_count" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for negative run_count")
+
+
+def test_build_run_inventory_status_rejects_negative_expected_count() -> None:
+    try:
+        read_model.build_run_inventory_status(1, expected_count=-1)
+    except ValueError as exc:
+        assert "expected_count" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for negative expected_count")
