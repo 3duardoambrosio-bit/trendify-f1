@@ -20,3 +20,14 @@ __all__ = [
     "ProductRanker", "ProductScore", "RankingResult", "rank_products",
     "PipelineOrchestrator", "PipelineConfig", "PipelineResult", "run_pipeline", "discover_products",
 ]
+# A8-R67 synthetic discovery exports
+from synapse.discovery.synthetic_discovery import (
+    generate_synthetic_candidates,
+    normalize_synthetic_candidate,
+)
+from synapse.discovery.synthetic_schema import (
+    DiscoveryCandidate,
+    DiscoverySignal,
+    candidate_to_marketing_product,
+    validate_candidate_contract,
+)
