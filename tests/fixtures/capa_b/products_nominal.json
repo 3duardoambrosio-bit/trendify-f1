@@ -1,0 +1,40 @@
+[
+  {
+    "product_id": "prod-alpha",
+    "title": "Neck Fan Pro",
+    "category": "gadgets",
+    "price": 499.0,
+    "cost": 219.0,
+    "rating": 4.4,
+    "reviews": 1842,
+    "sales": 920,
+    "supplier_id": "sup-001",
+    "supplier_name": "Dropi Alpha",
+    "shipping_days": 5,
+    "image_url": "https://example.com/alpha.jpg",
+    "images_count": 4,
+    "margin_percent": 56.11,
+    "margin_absolute": 280.0,
+    "keyword_matches": ["summer", "portable", "handsfree"],
+    "match_score": 0.88
+  },
+  {
+    "product_id": "prod-beta",
+    "title": "Desk Cooler Mini",
+    "category": "gadgets",
+    "price": 699.0,
+    "cost": 331.0,
+    "rating": 4.2,
+    "reviews": 967,
+    "sales": 410,
+    "supplier_id": "sup-002",
+    "supplier_name": "Dropi Beta",
+    "shipping_days": 7,
+    "image_url": "https://example.com/beta.jpg",
+    "images_count": 5,
+    "margin_percent": 52.65,
+    "margin_absolute": 368.0,
+    "keyword_matches": ["office", "portable", "summer"],
+    "match_score": 0.81
+  }
+]

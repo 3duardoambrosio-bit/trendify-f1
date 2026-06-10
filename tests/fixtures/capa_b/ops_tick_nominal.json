@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-03-24T11:00:00-06:00",
+  "ts": "2026-03-24T11:00:00-06:00",
+  "status": "healthy",
+  "healthy": true,
+  "meta": {
+    "api_ok": true,
+    "ad_account_ok": true,
+    "latency_ms": 220
+  },
+  "shopify": {
+    "api_ok": true,
+    "checkout_ok": true,
+    "orders_last_hour": 0
+  },
+  "dropi": {
+    "api_ok": true,
+    "inventory_ok": true,
+    "price_drift_detected": false
+  },
+  "finance": {
+    "cash_ok": true,
+    "reserve_ok": true,
+    "negative_margin_detected": false,
+    "refund_pressure": 0.0,
+    "chargeback_pressure": 0.0
+  },
+  "circuit_breaker": {
+    "open": false,
+    "reason": null,
+    "trip_count": 0
+  },
+  "flags": {
+    "meta_live": false,
+    "shopify_live": false,
+    "dropi_live": false,
+    "spend_real_money": false
+  },
+  "signals": {
+    "orders_last_hour": 0,
+    "refund_rate": 0.0,
+    "inventory_mismatch": false,
+    "price_change_detected": false
+  }
+}

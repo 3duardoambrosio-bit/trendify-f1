@@ -30,7 +30,7 @@ dist/
 *.egg-info/
 *.egg
 wheels/
-# === Runtime / data NO determinÃƒÂ­stica ===
+# === Runtime / data NO determinÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­stica ===
 data/ledger/
 data/backups/
 data/evidence/
@@ -101,6 +101,9 @@ venv.bak/
 # Data files
 *.csv
 *.json
+
+# A8-R72: deterministic JSON test fixtures must be tracked for clean-clone reproducibility.
+!tests/fixtures/**/*.json
 *.db
 *.sqlite
 # Config files (except example)
@@ -111,12 +114,12 @@ data/bitacora/bitacora.jsonl
 # Local runtime outputs (NO versionar)
 # CSVs reales (los tuyos), dejamos demos como plantillas
 data/catalog/candidates_real*.csv
-# CSVs reales (ruido); demos sÃ¢â€Å“Ã‚Â»Ã¢â€Â¬Ã¢â€ÂÃ¢â€Â¬Ã‚Â¢ pueden vivir
+# CSVs reales (ruido); demos sÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ pueden vivir
 # --- SYNAPSE runtime artifacts ---
 data/ledger/events.ndjson
 **/__pycache__/
 # Env & secrets
-# Data sensible / no determinÃ¢â€Å“ÃƒÂ¢Ã¢â€Â¬Ã‚Â¡stica
+# Data sensible / no determinÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡stica
 # Runtime data is ignored by default; keep only the genesis ledger seed tracked
 # so clean-clone cockpit audits can resolve the canonical default ledger path.
 data/*
@@ -190,3 +193,12 @@ out/forecast/*.md
 /runs/*
 !/runs/.gitkeep
 # END A8-R63 runtime evidence ignore
+
+# BEGIN A8-R72 CLEAN CLONE FIXTURE EXCEPTIONS
+# A8-R72: deterministic test fixture JSON must be visible to Git in clean clones.
+# Important: Git cannot unignore files if parent directories remain ignored.
+!tests/
+!tests/fixtures/
+!tests/fixtures/**/
+!tests/fixtures/**/*.json
+# END A8-R72 CLEAN CLONE FIXTURE EXCEPTIONS
