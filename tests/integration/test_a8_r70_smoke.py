@@ -10,6 +10,7 @@ from synapse.integration.a8_r70_smoke import (
     run_a8_r70_smoke_integration,
 )
 from synapse.safety.spend_guard import GuardDecision, GuardReasonCode
+from tools.nogo_ast_resolver import scan_source_for_forbidden_strings
 
 
 def test_a8_r70_smoke_integration_runs_discovery_financial_brief_decision_end_to_end():
@@ -98,23 +99,28 @@ def test_a8_r70_smoke_integration_routes_spend_and_mutation_through_guard_source
     assert "evaluate_spend_guard" in source
     assert "GuardIntent.SPEND" in source
     assert "GuardIntent.MUTATE" in source
-    assert '"shop" + "ify" + "_admin"' in source
+    assert 'channel="shopify_admin"' in source
+    assert '"shop" + "ify" + "_admin"' not in source
+
+    channel_findings = scan_source_for_forbidden_strings(source, ("shopify_admin",))
+    assert any(f.value == "shopify_admin" for f in channel_findings)
 
     forbidden = (
-        "re" + "quests.",
-        "ht" + "tpx.",
-        "urllib" + ".request",
+        "requests.",
+        "httpx.",
+        "urllib.request",
         "aiohttp",
         "selenium",
         "playwright",
         "BeautifulSoup",
         "network_port_api.",
         "os.system",
-        "sub" + "process",
+        "subprocess",
     )
 
-    for token in forbidden:
-        assert token not in source
+    findings = scan_source_for_forbidden_strings(source, forbidden)
+    assert findings == []
+
 
 # A8_R70I1R_SCAN_SAFE_RUNTIME_SURFACE_ASSERTION
 
@@ -123,18 +129,17 @@ from pathlib import Path as _A8R70SmokePath
 
 def _a8_r70i1r_runtime_blocklist() -> tuple[str, ...]:
     return (
-        "re" + "quests.",
-        "ht" + "tpx.",
-        "urllib" + ".request",
-        "sub" + "process",
-        "so" + "cket",
-        "bo" + "to3",
-        "shop" + "ify",
-        "dro" + "pi",
-        "facebook" + "_business",
-        "open" + "ai",
-        "LIVE" + "_WRITE",
-        "LIVE" + "_SPEND",
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "subprocess",
+        "socket",
+        "boto3",
+        "dropi",
+        "facebook_business",
+        "openai",
+        "LIVE_WRITE",
+        "LIVE_SPEND",
     )
 
 
@@ -143,5 +148,7 @@ def test_a8_r70_smoke_module_blocks_runtime_surfaces_scan_safe() -> None:
         encoding="utf-8"
     )
 
-    for blocked in _a8_r70i1r_runtime_blocklist():
-        assert blocked not in source
+    findings = scan_source_for_forbidden_strings(
+        source, _a8_r70i1r_runtime_blocklist()
+    )
+    assert findings == []

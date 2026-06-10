@@ -169,7 +169,7 @@ def run_a8_r70_smoke_integration(
         mutation_probe=evaluate_spend_guard(
             SpendGuardRequest(
                 intent=GuardIntent.MUTATE,
-                channel="shop" + "ify" + "_admin",
+                channel="shopify_admin",
                 external_mutation=True,
             )
         ),
