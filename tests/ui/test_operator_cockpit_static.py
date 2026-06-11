@@ -78,6 +78,10 @@ def _attr_chain(node: ast.AST) -> str:
     return ""
 
 
+def _is_forbidden_write_chain(chain: str) -> bool:
+    return chain in {"write_text", "write_bytes"} or chain.endswith((".write_text", ".write_bytes"))
+
+
 def test_cockpit_no_network_imports() -> None:
     imported_roots: set[str] = set()
     imported_modules: set[str] = set()
@@ -118,7 +122,7 @@ def test_cockpit_no_write_calls() -> None:
             continue
         chain = _attr_chain(node.func)
 
-        if chain.endswith(".write_text") or chain.endswith(".write_bytes"):
+        if _is_forbidden_write_chain(chain):
             violations.append(chain)
         if chain.endswith(".mkdir") or chain.endswith(".unlink") or chain.endswith(".rmdir"):
             violations.append(chain)
@@ -151,3 +155,10 @@ def test_cockpit_flags_are_read_only_no_mutation_surfaces() -> None:
                 if isinstance(target, ast.Subscript):
                     chain = _attr_chain(target.value)
                     assert "environ" not in chain, "env mutation detected"
+
+def test_write_gate_catches_chained_call_receiver() -> None:
+    tree = ast.parse('Path("x").write_text("bad")')
+    call = next(node for node in ast.walk(tree) if isinstance(node, ast.Call))
+    chain = _attr_chain(call.func)
+    assert chain == "write_text"
+    assert _is_forbidden_write_chain(chain)

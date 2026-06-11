@@ -34,6 +34,10 @@ def _attr_chain(node: ast.AST) -> str:
     return ""
 
 
+def _is_forbidden_write_chain(chain: str) -> bool:
+    return chain in {"write_text", "write_bytes"} or chain.endswith((".write_text", ".write_bytes"))
+
+
 def test_read_model_has_no_forbidden_imports() -> None:
     tree = ast.parse(READ_MODEL.read_text(encoding="utf-8"))
 
@@ -70,7 +74,7 @@ def test_read_model_has_no_writes_execution_or_http_calls() -> None:
             }:
                 violations.append(function_name)
 
-            if function_name.endswith(".write_text") or function_name.endswith(".write_bytes"):
+            if _is_forbidden_write_chain(function_name):
                 violations.append(function_name)
 
             if function_name == "open":
@@ -87,3 +91,11 @@ def test_read_model_has_no_writes_execution_or_http_calls() -> None:
                     violations.append(f"open:{mode}")
 
     assert violations == []
+
+
+def test_write_gate_catches_chained_call_receiver() -> None:
+    tree = ast.parse('Path("x").write_text("bad")')
+    call = next(node for node in ast.walk(tree) if isinstance(node, ast.Call))
+    chain = _attr_chain(call.func)
+    assert chain == "write_text"
+    assert _is_forbidden_write_chain(chain)
