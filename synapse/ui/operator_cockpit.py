@@ -347,6 +347,25 @@ def _guard_trail_flags(smoke: Mapping[str, Any]) -> tuple[Any, Any, Any]:
     )
 
 
+
+def _shopify_read_only_dry_run_evidence_available(evidence: Mapping[str, Any]) -> bool:
+    """Return True when local A8-R75 Shopify read-only dry-run evidence is visible."""
+    haystack = str(evidence).lower()
+    return (
+        "a8_r75_shopify_readonly_dryrun" in haystack
+        or "shopify_read_only_dry_run_summary.json" in haystack
+    )
+
+
+def _shopify_read_only_dry_run_status(evidence: Mapping[str, Any]) -> str:
+    return CHECK_OK if _shopify_read_only_dry_run_evidence_available(evidence) else CHECK_PENDING
+
+
+def _shopify_read_only_dry_run_detail(evidence: Mapping[str, Any]) -> str:
+    if _shopify_read_only_dry_run_evidence_available(evidence):
+        return "A8-R75 Shopify read-only dry-run evidence visible in local runs/."
+    return "Awaiting A8-R75 Shopify read-only dry-run local evidence."
+
 def build_readiness_checklist(
     *,
     banner: Mapping[str, Any],
@@ -411,8 +430,8 @@ def build_readiness_checklist(
         },
         {
             "item": "shopify_read_only_dry_run",
-            "status": CHECK_PENDING,
-            "detail": "Reservado para R75+. Sin conexion en R74.",
+            "status": _shopify_read_only_dry_run_status(evidence),
+            "detail": _shopify_read_only_dry_run_detail(evidence),
         },
     ]
 
