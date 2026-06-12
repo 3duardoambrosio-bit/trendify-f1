@@ -348,13 +348,68 @@ def _guard_trail_flags(smoke: Mapping[str, Any]) -> tuple[Any, Any, Any]:
 
 
 
-def _shopify_read_only_dry_run_evidence_available(evidence: Mapping[str, Any]) -> bool:
-    """Return True when local A8-R75 Shopify read-only dry-run evidence is visible."""
-    haystack = str(evidence).lower()
+def _shopify_read_only_dry_run_summary_ok(payload: Mapping[str, Any]) -> bool:
+    mutation_probe = payload.get("mutation_probe")
+    network_guard = payload.get("network_guard")
+
+    if not hasattr(mutation_probe, "get") or not hasattr(network_guard, "get"):
+        return False
+
     return (
-        "a8_r75_shopify_readonly_dryrun" in haystack
-        or "shopify_read_only_dry_run_summary.json" in haystack
+        payload.get("component") == "shopify_read_only_dry_run"
+        and payload.get("status") == "OK"
+        and payload.get("external_io_attempted") is False
+        and payload.get("external_write_attempted") is False
+        and payload.get("live_shopify_attempted") is False
+        and payload.get("spend_attempted") is False
+        and mutation_probe.get("rejected_before_io") is True
+        and network_guard.get("decision") == "BLOCK"
+        and network_guard.get("expected_policy_block") is True
     )
+
+
+def _shopify_read_only_dry_run_candidate_paths(evidence: Mapping[str, Any]) -> list[Path]:
+    entries = evidence.get("entries", [])
+    if not isinstance(entries, list):
+        return []
+
+    paths: list[Path] = []
+
+    for entry in entries:
+        if not hasattr(entry, "get"):
+            continue
+
+        for key in ("path", "summary_path", "file_path"):
+            raw = entry.get(key)
+            if not raw:
+                continue
+
+            candidate = Path(str(raw))
+            haystack = str(candidate).lower()
+
+            if (
+                candidate.name == "shopify_read_only_dry_run_summary.json"
+                or "a8_r75_shopify_readonly_dryrun" in haystack
+            ):
+                paths.append(candidate)
+
+    return paths
+
+
+def _shopify_read_only_dry_run_evidence_available(evidence: Mapping[str, Any]) -> bool:
+    for path in _shopify_read_only_dry_run_candidate_paths(evidence):
+        try:
+            if not path.is_file():
+                continue
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+
+            if hasattr(payload, "get") and _shopify_read_only_dry_run_summary_ok(payload):
+                return True
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+
+    return False
 
 
 def _shopify_read_only_dry_run_status(evidence: Mapping[str, Any]) -> str:
@@ -363,8 +418,9 @@ def _shopify_read_only_dry_run_status(evidence: Mapping[str, Any]) -> str:
 
 def _shopify_read_only_dry_run_detail(evidence: Mapping[str, Any]) -> str:
     if _shopify_read_only_dry_run_evidence_available(evidence):
-        return "A8-R75 Shopify read-only dry-run evidence visible in local runs/."
-    return "Awaiting A8-R75 Shopify read-only dry-run local evidence."
+        return "Valid A8-R75 Shopify read-only dry-run evidence is visible in local runs/."
+    return "Awaiting valid A8-R75 Shopify read-only dry-run local evidence."
+
 
 def build_readiness_checklist(
     *,

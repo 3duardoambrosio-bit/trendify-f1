@@ -39,14 +39,35 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _is_expected_shopify_policy_block(exc: RuntimeError) -> bool:
+    message = str(exc)
+    return (
+        "NETWORK_BLOCKED_BY_FLAGS" in message
+        and "system=shopify" in message
+    )
+
+
 def _network_guard_probe(url: str) -> Dict[str, Any]:
     try:
         enforce_url_policy(url)
+    except RuntimeError as exc:
+        is_expected_policy_block = _is_expected_shopify_policy_block(exc)
+        return {
+            "url": url,
+            "enforce_url_policy_called": True,
+            "decision": "BLOCK" if is_expected_policy_block else "ERROR",
+            "expected_policy_block": is_expected_policy_block,
+            "policy_blocked": is_expected_policy_block,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
     except Exception as exc:
         return {
             "url": url,
             "enforce_url_policy_called": True,
-            "decision": "BLOCK",
+            "decision": "ERROR",
+            "expected_policy_block": False,
+            "policy_blocked": False,
             "error_type": type(exc).__name__,
             "error": str(exc),
         }
@@ -55,6 +76,8 @@ def _network_guard_probe(url: str) -> Dict[str, Any]:
         "url": url,
         "enforce_url_policy_called": True,
         "decision": "ALLOW",
+        "expected_policy_block": False,
+        "policy_blocked": False,
         "error_type": None,
         "error": None,
     }
@@ -77,7 +100,16 @@ def build_shopify_read_only_dry_run_payload() -> Dict[str, Any]:
 
     network_guard = _network_guard_probe(SHOPIFY_GRAPHQL_ENDPOINT_PROBE)
 
-    status = "OK" if read_token == "query" and mutation_rejected else "BLOCKED"
+    network_guard_policy_blocked = (
+        network_guard.get("decision") == "BLOCK"
+        and network_guard.get("expected_policy_block") is True
+    )
+
+    status = (
+        "OK"
+        if read_token == "query" and mutation_rejected and network_guard_policy_blocked
+        else "BLOCKED"
+    )
 
     return {
         "island": "A8-R75",
@@ -105,7 +137,9 @@ def build_shopify_read_only_dry_run_payload() -> Dict[str, Any]:
             "mutation_rejected_before_io": mutation_rejected,
             "no_external_io": True,
             "no_external_write": True,
-            "evidence_visible_to_cockpit": True,
+            "network_guard_policy_blocked": network_guard_policy_blocked,
+            "network_guard_decision": network_guard.get("decision"),
+            "evidence_visible_to_cockpit": status == "OK",
         },
     }
 
