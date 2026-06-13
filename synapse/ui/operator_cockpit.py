@@ -422,6 +422,96 @@ def _shopify_read_only_dry_run_detail(evidence: Mapping[str, Any]) -> str:
     return "Awaiting valid A8-R75 Shopify read-only dry-run local evidence."
 
 
+def _shopify_read_only_fixture_read_path_summary_ok(payload: Mapping[str, Any]) -> bool:
+    fixture_read = payload.get("fixture_read")
+    mutation_probe = payload.get("mutation_probe")
+    network_guard = payload.get("network_guard")
+    acceptance = payload.get("acceptance")
+    feature_flags = payload.get("feature_flags")
+
+    if not all(
+        hasattr(part, "get")
+        for part in (fixture_read, mutation_probe, network_guard, acceptance, feature_flags)
+    ):
+        return False
+
+    return (
+        payload.get("component") == "shopify_read_only_fixture_read_path"
+        and payload.get("status") == "OK"
+        and payload.get("source_mode") == "local_fixture_only"
+        and payload.get("external_io_attempted") is False
+        and payload.get("external_write_attempted") is False
+        and payload.get("live_shopify_attempted") is False
+        and payload.get("spend_attempted") is False
+        and feature_flags.get("shopify_live_api") is False
+        and fixture_read.get("products_loaded") is True
+        and fixture_read.get("orders_loaded") is True
+        and fixture_read.get("product_fixture_hit") is True
+        and fixture_read.get("order_fixture_hit") is True
+        and isinstance(fixture_read.get("product_edges_count"), int)
+        and fixture_read.get("product_edges_count") > 0
+        and isinstance(fixture_read.get("order_edges_count"), int)
+        and fixture_read.get("order_edges_count") > 0
+        and fixture_read.get("http_transport_called") is False
+        and fixture_read.get("http_transport_call_count") == 0
+        and mutation_probe.get("rejected_before_io") is True
+        and network_guard.get("decision") == "BLOCK"
+        and network_guard.get("expected_policy_block") is True
+        and acceptance.get("read_fixtures_loaded") is True
+        and acceptance.get("no_http_transport") is True
+        and acceptance.get("network_guard_policy_blocked") is True
+        and acceptance.get("mutation_rejected_before_io") is True
+        and acceptance.get("evidence_visible_to_cockpit") is True
+    )
+
+
+def _shopify_read_only_fixture_read_path_candidate_paths(evidence: Mapping[str, Any]) -> list[Path]:
+    entries = evidence.get("entries", [])
+    if not isinstance(entries, list):
+        return []
+
+    candidates: list[Path] = []
+    for entry in entries:
+        if not hasattr(entry, "get"):
+            continue
+
+        for key in ("path", "summary_path", "file_path"):
+            raw = entry.get(key)
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+
+            candidate = Path(raw)
+            if candidate.name == "shopify_fixture_read_path_summary.json":
+                candidates.append(candidate)
+
+    return candidates
+
+
+def _shopify_read_only_fixture_read_path_evidence_available(evidence: Mapping[str, Any]) -> bool:
+    for path in _shopify_read_only_fixture_read_path_candidate_paths(evidence):
+        try:
+            if not path.exists() or not path.is_file():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+
+        if hasattr(payload, "get") and _shopify_read_only_fixture_read_path_summary_ok(payload):
+            return True
+
+    return False
+
+
+def _shopify_read_only_fixture_read_path_status(evidence: Mapping[str, Any]) -> str:
+    return CHECK_OK if _shopify_read_only_fixture_read_path_evidence_available(evidence) else CHECK_PENDING
+
+
+def _shopify_read_only_fixture_read_path_detail(evidence: Mapping[str, Any]) -> str:
+    if _shopify_read_only_fixture_read_path_evidence_available(evidence):
+        return "Valid A8-R76 Shopify read-only fixture read path evidence found."
+    return "Awaiting valid A8-R76 Shopify read-only fixture read path evidence."
+
+
 def build_readiness_checklist(
     *,
     banner: Mapping[str, Any],
@@ -488,6 +578,11 @@ def build_readiness_checklist(
             "item": "shopify_read_only_dry_run",
             "status": _shopify_read_only_dry_run_status(evidence),
             "detail": _shopify_read_only_dry_run_detail(evidence),
+        },
+        {
+            "item": "shopify_read_only_fixture_read_path",
+            "status": _shopify_read_only_fixture_read_path_status(evidence),
+            "detail": _shopify_read_only_fixture_read_path_detail(evidence),
         },
     ]
 
