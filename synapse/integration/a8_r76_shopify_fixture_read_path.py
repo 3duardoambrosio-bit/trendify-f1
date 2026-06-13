@@ -57,13 +57,14 @@ def _local_read_only_flags() -> FeatureFlags:
     """Return FeatureFlags with all known live/write/spend toggles forced off."""
     flags = FeatureFlags.from_env() if hasattr(FeatureFlags, "from_env") else FeatureFlags()
 
+    # Use concrete FeatureFlags dataclass field names, not read-only aliases.
+    # `shopify_live_api` is a compatibility property backed by `shopify_live`;
+    # forcing the alias name through dataclasses.replace() is a no-op.
     forced_false = {
-        "shopify_live_api",
-        "dropi_live_orders",
-        "meta_live_ads",
+        "shopify_live",
+        "dropi_live",
+        "meta_live",
         "spend_real_money",
-        "live_write",
-        "shopify_enabled",
     }
 
     updates: dict[str, bool] = {}

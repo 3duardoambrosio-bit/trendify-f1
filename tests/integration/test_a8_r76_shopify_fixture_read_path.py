@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from config.feature_flags import FeatureFlags
+
 import pytest
 
 from synapse.integration import a8_r76_shopify_fixture_read_path as r76
@@ -141,3 +143,65 @@ def test_a8_r76_module_has_no_direct_network_or_external_write_surface():
     assert "ShopifyAdminClient" in source
     assert "enforce_url_policy" in source
     assert "shopify_live_api" in source
+def test_a8_r76_local_read_only_flags_forces_real_dataclass_fields_off_when_env_live(monkeypatch):
+    monkeypatch.setenv("SYNAPSE_SHOPIFY_LIVE", "1")
+    monkeypatch.setenv("SYNAPSE_DROPI_LIVE", "1")
+    monkeypatch.setenv("SYNAPSE_META_LIVE", "1")
+    monkeypatch.setenv("SYNAPSE_SPEND_REAL_MONEY", "1")
+
+    raw = FeatureFlags.from_env()
+    assert raw.shopify_live is True
+    assert raw.shopify_live_api is True
+
+    forced = r76._local_read_only_flags()
+
+    assert forced.shopify_live is False
+    assert forced.shopify_live_api is False
+    assert forced.dropi_live is False
+    assert forced.meta_live is False
+    assert forced.spend_real_money is False
+
+
+def test_a8_r76_live_env_still_reads_fixtures_because_flags_are_forced_off(monkeypatch):
+    monkeypatch.setenv("SYNAPSE_SHOPIFY_LIVE", "1")
+
+    payload = build_shopify_fixture_read_path_payload()
+
+    assert payload["status"] == "OK"
+    assert payload["feature_flags"]["shopify_live_api"] is False
+    assert payload["fixture_read"]["products_loaded"] is True
+    assert payload["fixture_read"]["orders_loaded"] is True
+    assert payload["fixture_read"]["http_transport_called"] is False
+    assert payload["fixture_read"]["http_transport_call_count"] == 0
+    assert payload["acceptance"]["read_fixtures_loaded"] is True
+    assert payload["acceptance"]["no_http_transport"] is True
+
+
+def test_a8_r76_forced_false_names_are_real_feature_flag_fields():
+    real_fields = {field.name for field in r76.fields(FeatureFlags)}
+
+    expected = {
+        "shopify_live",
+        "dropi_live",
+        "meta_live",
+        "spend_real_money",
+    }
+
+    assert expected.issubset(real_fields)
+
+    source = Path("synapse/integration/a8_r76_shopify_fixture_read_path.py").read_text(
+        encoding="utf-8"
+    )
+
+    forced_false_block = source.split("forced_false = {", 1)[1].split("}", 1)[0]
+
+    assert '"shopify_live",' in forced_false_block
+    assert '"dropi_live",' in forced_false_block
+    assert '"meta_live",' in forced_false_block
+    assert '"spend_real_money",' in forced_false_block
+
+    assert '"shopify_live_api",' not in forced_false_block
+    assert '"dropi_live_orders",' not in forced_false_block
+    assert '"meta_live_ads",' not in forced_false_block
+    assert '"live_write",' not in forced_false_block
+    assert '"shopify_enabled",' not in forced_false_block
