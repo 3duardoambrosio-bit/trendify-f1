@@ -360,6 +360,12 @@ def test_update_single_variant_fields_is_explicitly_not_implemented():
         )
 
 def test_run_graphql_transport_exception_returns_stable_error_code(monkeypatch):
+    # R78 routes Shopify transport through network_guard before post_json.
+    # This test intentionally disables dry-run with the canonical live flag so it
+    # still exercises the pre-existing transport-exception normalization path.
+    monkeypatch.setenv("SYNAPSE_DRY_RUN", "0")
+    monkeypatch.setenv("SYNAPSE_SHOPIFY_LIVE", "1")
+
     writer = m.ShopifyWriter(
         shop="demo-shop",
         access_token="token",
@@ -375,7 +381,6 @@ def test_run_graphql_transport_exception_returns_stable_error_code(monkeypatch):
 
     assert out["ok"] is False
     assert out["errors"] == ["graphql_transport_error:TimeoutError:socket timeout"]
-
 
 def test_execute_idempotent_write_unexpected_exception_returns_stable_error_code(monkeypatch):
     writer = m.ShopifyWriter(
