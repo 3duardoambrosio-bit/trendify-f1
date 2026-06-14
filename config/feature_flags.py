@@ -6,6 +6,21 @@ from typing import Any, Dict, Mapping
 
 _TRUE = {"1", "true", "t", "yes", "y", "on"}
 _FALSE = {"0", "false", "f", "no", "n", "off"}
+_LIVE_FLAG_NAMES = {
+    "meta_live",
+    "meta_live_api",
+    "live_meta",
+    "shopify_live",
+    "shopify_live_api",
+    "live_shopify",
+    "dropi_live",
+    "dropi_live_api",
+    "dropi_live_orders",
+    "live_dropi",
+    "spend_real_money",
+    "spend_real_money_api",
+    "spend_real",
+}
 
 
 def _normalize(name: str | None) -> str:
@@ -183,19 +198,69 @@ class FeatureFlags:
         )
         object.__setattr__(self, "values", merged)
 
-    @classmethod
-    def from_env(cls) -> "FeatureFlags":
-        return cls()
+    @staticmethod
+    def from_env() -> "FeatureFlags":
+        def env_bool(*names: str, default: bool = False) -> bool:
+            saw_explicit_false = False
+            for env_name in names:
+                raw = os.getenv(env_name)
+                if raw is None or raw.strip() == "":
+                    continue
 
+                parsed = _parse_bool(raw, default=default)
+                if parsed is True:
+                    return True
+
+                saw_explicit_false = True
+
+            if saw_explicit_false:
+                return False
+            return default
+
+        meta_live = env_bool("SYNAPSE_META_LIVE", "SYNAPSE_LIVE_META", default=False)
+        shopify_live = env_bool("SYNAPSE_SHOPIFY_LIVE", "SYNAPSE_LIVE_SHOPIFY", default=False)
+        dropi_live = env_bool("SYNAPSE_DROPI_LIVE", "SYNAPSE_LIVE_DROPI", default=False)
+        spend_real_money = env_bool(
+            "SYNAPSE_SPEND_REAL_MONEY",
+            "SYNAPSE_SPEND_REAL",
+            "SYNAPSE_REAL_SPEND",
+            default=False,
+        )
+        dry_run = env_bool("SYNAPSE_DRY_RUN", default=True)
+
+        return FeatureFlags(
+            meta_live=meta_live,
+            shopify_live=shopify_live,
+            dropi_live=dropi_live,
+            spend_real_money=spend_real_money,
+            dry_run=dry_run,
+            values={
+                "meta_live": meta_live,
+                "live_meta": meta_live,
+                "meta_live_api": meta_live,
+                "shopify_live": shopify_live,
+                "live_shopify": shopify_live,
+                "shopify_live_api": shopify_live,
+                "dropi_live": dropi_live,
+                "live_dropi": dropi_live,
+                "dropi_live_api": dropi_live,
+                "dropi_live_orders": dropi_live,
+                "spend_real_money": spend_real_money,
+                "spend_real": spend_real_money,
+                "spend_real_money_api": spend_real_money,
+                "dry_run": dry_run,
+            },
+        )
     @staticmethod
     def load(prefix: str = "SYNAPSE_FLAG_") -> "FeatureFlags":
-        loaded: Dict[str, bool] = {}
+        loaded: dict[str, bool] = {}
         for env_name, env_value in os.environ.items():
             if env_name.startswith(prefix):
                 name = _normalize(env_name[len(prefix):])
+                if prefix == "SYNAPSE_FLAG_" and name in _LIVE_FLAG_NAMES:
+                    continue
                 loaded[name] = _parse_bool(env_value, default=False)
         return FeatureFlags(values=loaded)
-
     def is_on(self, name: str, default: bool = False) -> bool:
         normalized = _normalize(name)
         if normalized == "":

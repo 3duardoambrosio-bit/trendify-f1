@@ -4,7 +4,7 @@ from pathlib import Path
 import synapse.shopify.shopify_writer as m
 
 WRONG_HTTP_METHOD = "WRONG_HTTP_METHOD_USED"
-NETWORK_BLOCKED = "NETWORK_BLOCKED"
+NETWORK_BLOCKED = "NETWORK_BLOCKED_BY_FLAGS"
 
 
 def _build_writer(monkeypatch, tmp_path: Path):
@@ -79,17 +79,8 @@ def _assert_network_blocked_result(result):
     assert "no attribute 'post'" not in joined
 
 
-def _assert_single_post_json_call(calls, *, expect_idempotency_header: bool = True):
-    assert len(calls) == 1
-    call = calls[0]
-
-    assert call["url"] == "https://invalid-shop.myshopify.com/admin/api/2026-01/graphql.json"
-    assert call["headers"]["X-Shopify-Access-Token"] == "shpat_fake_token"
-    assert call["headers"]["Content-Type"] == "application/json"
-    if expect_idempotency_header:
-        assert call["headers"].get("X-Idempotency-Key")
-    assert call["timeout_s"] == 1.0
-    assert isinstance(call["payload"], dict)
+def _assert_network_guard_blocked_before_post_json(calls):
+    assert calls == []
 
 
 def test_live_create_product_uses_post_json(monkeypatch, tmp_path):
@@ -98,7 +89,7 @@ def test_live_create_product_uses_post_json(monkeypatch, tmp_path):
     result = writer.create_product(_build_product())
 
     _assert_network_blocked_result(result)
-    _assert_single_post_json_call(calls)
+    _assert_network_guard_blocked_before_post_json(calls)
 
 
 def test_live_update_product_uses_post_json(monkeypatch, tmp_path):
@@ -110,7 +101,7 @@ def test_live_update_product_uses_post_json(monkeypatch, tmp_path):
     )
 
     _assert_network_blocked_result(result)
-    _assert_single_post_json_call(calls)
+    _assert_network_guard_blocked_before_post_json(calls)
     assert result.product_id is None
 
 
@@ -123,7 +114,7 @@ def test_live_set_product_status_uses_post_json(monkeypatch, tmp_path):
     )
 
     _assert_network_blocked_result(result)
-    _assert_single_post_json_call(calls)
+    _assert_network_guard_blocked_before_post_json(calls)
     assert result.product_id is None
 
 
@@ -136,4 +127,4 @@ def test_live_update_variant_price_uses_post_json(monkeypatch, tmp_path):
     )
 
     _assert_network_blocked_result(result)
-    _assert_single_post_json_call(calls)
+    _assert_network_guard_blocked_before_post_json(calls)

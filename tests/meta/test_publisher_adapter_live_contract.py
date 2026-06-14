@@ -19,20 +19,21 @@ from synapse.meta.publisher_contracts import (
 
 def _live_env() -> dict[str, str]:
     return {
-        "SYNAPSE_FLAG_META_LIVE_API": "1",
+        "SYNAPSE_META_LIVE": "1",
+        "SYNAPSE_DRY_RUN": "0",
         "META_ACCESS_TOKEN": "tok_test_123",
         "META_AD_ACCOUNT_ID": "123456789",
     }
 
 
 def test_create_campaign_off_mode_raises_not_implemented() -> None:
-    with patch.dict(os.environ, {"SYNAPSE_FLAG_META_LIVE_API": "0"}, clear=False):
+    with patch.dict(os.environ, {"SYNAPSE_META_LIVE": "0", "SYNAPSE_FLAG_META_LIVE_API": "1"}, clear=False):
         with pytest.raises(NotImplementedError, match="Live Meta campaign creation"):
             call_create_campaign(MetaCampaignPayload(name="Adapter Contract"))
 
 
 def test_pause_campaign_off_mode_raises_not_implemented() -> None:
-    with patch.dict(os.environ, {"SYNAPSE_FLAG_META_LIVE_API": "0"}, clear=False):
+    with patch.dict(os.environ, {"SYNAPSE_META_LIVE": "0", "SYNAPSE_FLAG_META_LIVE_API": "1"}, clear=False):
         with pytest.raises(NotImplementedError, match="Live Meta campaign pause"):
             call_pause_campaign(MetaPauseRequest(campaign_id="camp-live"))
 
@@ -85,7 +86,8 @@ def test_pause_campaign_live_posts_form_and_omits_campaign_id() -> None:
     with patch.dict(
         os.environ,
         {
-            "SYNAPSE_FLAG_META_LIVE_API": "1",
+            "SYNAPSE_META_LIVE": "1",
+            "SYNAPSE_DRY_RUN": "0",
             "META_ACCESS_TOKEN": "tok_test_123",
         },
         clear=False,
@@ -112,7 +114,8 @@ def test_create_campaign_live_requires_access_token() -> None:
     with patch.dict(
         os.environ,
         {
-            "SYNAPSE_FLAG_META_LIVE_API": "1",
+            "SYNAPSE_META_LIVE": "1",
+            "SYNAPSE_DRY_RUN": "0",
             "META_AD_ACCOUNT_ID": "123456789",
         },
         clear=True,
@@ -125,7 +128,8 @@ def test_pause_campaign_live_requires_campaign_id() -> None:
     with patch.dict(
         os.environ,
         {
-            "SYNAPSE_FLAG_META_LIVE_API": "1",
+            "SYNAPSE_META_LIVE": "1",
+            "SYNAPSE_DRY_RUN": "0",
             "META_ACCESS_TOKEN": "tok_test_123",
         },
         clear=False,

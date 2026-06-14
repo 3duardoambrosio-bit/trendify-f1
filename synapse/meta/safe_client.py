@@ -255,7 +255,7 @@ class MetaSafeClient:
 
     @property
     def _is_live(self) -> bool:
-        return self.feature_flags.is_on("meta_live_api", default=False)
+        return bool(getattr(self.feature_flags, "meta_live", False))
 
     @property
     def _idempotency_db_path(self) -> Path:

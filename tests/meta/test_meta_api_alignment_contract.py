@@ -80,6 +80,7 @@ def test_meta_write_guards_remain_paused_no_live_and_ledger_safe() -> None:
 
     assert 'payload["status"] = "PAUSED"' in safe_client
     assert '"status": "PAUSED"' in safe_client
-    assert "SYNAPSE_FLAG_META_LIVE_API" in publisher
+    assert "SYNAPSE_META_LIVE" in publisher
+    assert "SYNAPSE_FLAG_META_LIVE_API" not in publisher
     assert "Default/off mode stays mock/compat" in publisher
     assert "--ledger-disable is forbidden in --mode live" in execute

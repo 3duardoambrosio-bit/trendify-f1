@@ -27,7 +27,8 @@ def _capture_request_factory():
 
 
 def test_call_create_campaign_posts_form_encoded_payload(monkeypatch):
-    monkeypatch.setenv("SYNAPSE_FLAG_META_LIVE_API", "1")
+    monkeypatch.setenv("SYNAPSE_META_LIVE", "1")
+    monkeypatch.setenv("SYNAPSE_DRY_RUN", "0")
     monkeypatch.setenv("META_ACCESS_TOKEN", "tok_live_123")
     monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
     monkeypatch.setenv("META_GRAPH_VERSION", "v25.0")
@@ -60,7 +61,8 @@ def test_call_create_campaign_posts_form_encoded_payload(monkeypatch):
 
 
 def test_call_pause_campaign_posts_pause_request(monkeypatch):
-    monkeypatch.setenv("SYNAPSE_FLAG_META_LIVE_API", "1")
+    monkeypatch.setenv("SYNAPSE_META_LIVE", "1")
+    monkeypatch.setenv("SYNAPSE_DRY_RUN", "0")
     monkeypatch.setenv("META_ACCESS_TOKEN", "tok_live_456")
     monkeypatch.setenv("META_GRAPH_VERSION", "v25.0")
 
@@ -92,7 +94,8 @@ def test_call_pause_campaign_posts_pause_request(monkeypatch):
 
 
 def test_call_create_campaign_wraps_http_error(monkeypatch):
-    monkeypatch.setenv("SYNAPSE_FLAG_META_LIVE_API", "1")
+    monkeypatch.setenv("SYNAPSE_META_LIVE", "1")
+    monkeypatch.setenv("SYNAPSE_DRY_RUN", "0")
     monkeypatch.setenv("META_ACCESS_TOKEN", "tok_live_789")
     monkeypatch.setenv("META_AD_ACCOUNT_ID", "act_999")
 

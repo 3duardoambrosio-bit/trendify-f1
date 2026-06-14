@@ -23,6 +23,7 @@ import deal
 
 from config.feature_flags import FeatureFlags
 from infra.idempotency import execute_once
+from infra.network_guard import enforce_url_policy
 from synapse.integrations.http_client import SimpleHttpClient
 
 __MARKER__ = "SESSION_S11_shopify_writer_2026-03-02"
@@ -428,6 +429,7 @@ class ShopifyWriter:
         return {"ok": False, "data": None, "errors": [last_err or "unknown_error"]}
 
     def _http_post(self, url: str, headers: Dict[str, str], body: bytes) -> Tuple[int, str]:
+        enforce_url_policy(url)
         client = self._http
         payload = json.loads(body.decode("utf-8")) if body else {}
         resp = client.post_json(

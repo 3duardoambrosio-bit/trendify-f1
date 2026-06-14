@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any, Dict
 from urllib.parse import urlencode
 
+from infra.network_guard import enforce_url_policy
 from synapse.integrations.http_client import (
     HttpClientError,
     HttpRequest,
@@ -108,6 +109,7 @@ def _decode_response_body(body: bytes) -> Dict[str, Any]:
 
 
 def _post_form(url: str, fields: Mapping[str, Any]) -> Dict[str, Any]:
+    enforce_url_policy(url)
     client = _build_http_client()
     request = HttpRequest(
         method="POST",
@@ -153,28 +155,24 @@ def _parse_live_api_flag(raw: str) -> bool:
 
 
 def _is_live_transport_enabled() -> bool:
-    # Gate explícito del adapter.
-    # Mantiene compat legacy: OFF por default.
-    raw_api_flag = os.getenv("SYNAPSE_FLAG_META_LIVE_API", "")
-    if raw_api_flag.strip():
-        return _parse_live_api_flag(raw_api_flag)
-
-    flags = FeatureFlags.load()
+    # Canonical live intent only. SYNAPSE_FLAG_* is intentionally ignored for
+    # live/write decisions; network_guard remains the second gate before I/O.
+    flags = FeatureFlags.from_env()
     return bool(getattr(flags, "meta_live", False))
 
 
 def _raise_live_not_enabled_for_create() -> None:
     raise NotImplementedError(
-        "Live Meta campaign creation requires explicit live enablement. "
-        "Set SYNAPSE_FLAG_META_LIVE_API=1 only when doing live execution, "
-        "or use the full publish pipeline. Default/off mode stays mock/compat."
+        "Live Meta campaign creation requires explicit canonical live intent. "
+        "Set SYNAPSE_META_LIVE=1; network_guard still requires SYNAPSE_DRY_RUN=0 before transport. "
+        "Default/off mode stays mock/compat."
     )
 
 
 def _raise_live_not_enabled_for_pause() -> None:
     raise NotImplementedError(
-        "Live Meta campaign pause requires explicit live enablement. "
-        "Set SYNAPSE_FLAG_META_LIVE_API=1 only when doing live execution. "
+        "Live Meta campaign pause requires explicit canonical live intent. "
+        "Set SYNAPSE_META_LIVE=1; network_guard still requires SYNAPSE_DRY_RUN=0 before transport. "
         "Default/off mode stays mock/compat."
     )
 
