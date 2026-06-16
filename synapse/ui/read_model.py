@@ -12,7 +12,7 @@ from __future__ import annotations
 from synapse.cli._blacklist import GENERIC_BLACKLIST as NPC_BLACKLIST_PATTERNS
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 from synapse.ui._shopify_fixture_schema import (
@@ -77,6 +77,8 @@ RUNS_DIR = Path("runs/operacion_cli_dia1")
 PREFERRED_RUN_ROOT = Path("runs/operacion_cli_dia1") / "operacion_cli_dia1"
 FALLBACK_RUN_ROOT = Path("runs/operacion_cli_dia1") / "a8_r54k_gate_false_green_fix" / "known_cases_runtime"
 
+FEEDBACK_SIGNAL_FILE = "feedback_signal.json"
+
 REQUIRED_FILES = (
     "scenario.json",
     "decision.json",
@@ -125,6 +127,7 @@ class ProductRun:
     safety: Mapping[str, Any]
     creative: Mapping[str, Any]
     ledger_rows: Sequence[Mapping[str, Any]]
+    feedback_signal: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def product_name(self) -> str:
@@ -145,6 +148,21 @@ class ProductRun:
     @property
     def final_outcome(self) -> str:
         return as_text(self.decision.get("final_outcome"), fallback="UNKNOWN")
+
+    @property
+    def feedback_status(self) -> str:
+        return as_text(
+            self.feedback_signal.get("signal_status") or self.feedback_signal.get("status"),
+            fallback="UNKNOWN",
+        )
+
+    @property
+    def feedback_recommendation(self) -> str:
+        return as_text(self.feedback_signal.get("recommendation"), fallback="UNKNOWN")
+
+    @property
+    def feedback_reason_codes(self) -> list[Any]:
+        return as_list(self.feedback_signal.get("reason_codes"))
 
 
 @dataclass(frozen=True)
@@ -257,7 +275,8 @@ def load_product_run(path: Path) -> ProductRun:
         decision=read_json(path / "decision.json"),
         safety=read_json(path / "safety_posture.json"),
         creative=read_json(path / "creative_pack.json"),
-        ledger_rows=read_ndjson(path / "ledger_sandbox.ndjson"),
+        ledger_rows=read_ndjson(path / "ledger.ndjson"),
+        feedback_signal=read_json_object_if_exists(path / FEEDBACK_SIGNAL_FILE),
     )
 
 
