@@ -43,8 +43,67 @@ class DummyTransport:
         return item
 
 
+def live_cfg(**overrides):
+    values = {
+        "base_url": "https://example.test",
+        "api_token": "t",
+        "dry_run": False,
+        "live_enabled": True,
+    }
+    values.update(overrides)
+    return DropiOrderForwarderConfig(**values)
+
+
+def test_default_config_blocks_transport_in_dry_run_mode():
+    cfg = DropiOrderForwarderConfig(base_url="https://example.test", api_token="t")
+    tr = DummyTransport(responses=[(201, b'{"ok":true}')])
+    fwd = DropiOrderForwarder(cfg, transport=tr)
+
+    result = fwd.forward_shopify_order(ORDER, idempotency_key="dry-run-1")
+
+    assert result.ok is False
+    assert result.status_code == 0
+    assert result.dry_run is True
+    assert result.replayed is False
+    assert "DROPI_ORDER_FORWARDER_BLOCKED" in result.response_text
+    assert "transport_not_called" in result.response_text
+    assert tr.calls == []
+
+
+def test_live_path_enforces_url_policy_before_transport(monkeypatch):
+    cfg = live_cfg(max_attempts=1)
+    tr = DummyTransport(responses=[(201, b'{"ok":true}')])
+    fwd = DropiOrderForwarder(cfg, transport=tr)
+
+    guard_calls = []
+    monkeypatch.setattr(m, "enforce_url_policy", lambda url: guard_calls.append(url))
+
+    result = fwd.forward_shopify_order(ORDER, idempotency_key="guard-1")
+
+    assert result.ok is True
+    assert result.dry_run is False
+    assert guard_calls == ["https://example.test/orders"]
+    assert len(tr.calls) == 1
+
+
+def test_policy_block_prevents_transport_call(monkeypatch):
+    cfg = live_cfg(max_attempts=1)
+    tr = DummyTransport(responses=[(201, b'{"ok":true}')])
+    fwd = DropiOrderForwarder(cfg, transport=tr)
+
+    def block(_url):
+        raise RuntimeError("NETWORK_BLOCKED_BY_FLAGS")
+
+    monkeypatch.setattr(m, "enforce_url_policy", block)
+
+    with pytest.raises(RuntimeError, match="NETWORK_BLOCKED_BY_FLAGS"):
+        fwd.forward_shopify_order(ORDER, idempotency_key="guard-2")
+
+    assert tr.calls == []
+
+
 def test_idempotency_replays_without_second_call():
-    cfg = DropiOrderForwarderConfig(base_url="https://example.test", api_token="t", max_attempts=1)
+    cfg = live_cfg(max_attempts=1)
     tr = DummyTransport(responses=[(201, b'{"ok":true}')])
     store = InMemoryIdempotencyStore()
     fwd = DropiOrderForwarder(cfg, transport=tr, store=store)
@@ -58,8 +117,7 @@ def test_idempotency_replays_without_second_call():
 
 
 def test_payload_contains_external_id_items_headers_url_and_timeout():
-    cfg = DropiOrderForwarderConfig(
-        base_url="https://example.test",
+    cfg = live_cfg(
         api_token="tok_123",
         timeout_seconds=17,
         max_attempts=1,
@@ -89,9 +147,7 @@ def test_payload_contains_external_id_items_headers_url_and_timeout():
 
 
 def test_retries_on_5xx_until_success_with_incremental_backoff(monkeypatch):
-    cfg = DropiOrderForwarderConfig(
-        base_url="https://example.test",
-        api_token="t",
+    cfg = live_cfg(
         max_attempts=3,
         backoff_seconds=0.5,
     )
@@ -117,11 +173,7 @@ def test_retries_on_5xx_until_success_with_incremental_backoff(monkeypatch):
 
 
 def test_4xx_does_not_retry_and_failed_result_is_cached():
-    cfg = DropiOrderForwarderConfig(
-        base_url="https://example.test",
-        api_token="t",
-        max_attempts=3,
-    )
+    cfg = live_cfg(max_attempts=3)
     tr = DummyTransport(responses=[(400, b"bad_request")])
     store = InMemoryIdempotencyStore()
     fwd = DropiOrderForwarder(cfg, transport=tr, store=store)
@@ -139,9 +191,7 @@ def test_4xx_does_not_retry_and_failed_result_is_cached():
 
 
 def test_circuit_breaker_opens_after_threshold():
-    cfg = DropiOrderForwarderConfig(
-        base_url="https://example.test",
-        api_token="t",
+    cfg = live_cfg(
         max_attempts=1,
         circuit_fail_threshold=2,
         circuit_cooldown_seconds=60,
@@ -160,7 +210,7 @@ def test_circuit_breaker_opens_after_threshold():
 
 
 def test_transport_exception_bubbles_and_does_not_cache():
-    cfg = DropiOrderForwarderConfig(base_url="https://example.test", api_token="t", max_attempts=3)
+    cfg = live_cfg(max_attempts=3)
     tr = DummyTransport(responses=[RuntimeError("network_fail"), RuntimeError("network_fail")])
     store = InMemoryIdempotencyStore()
     fwd = DropiOrderForwarder(cfg, transport=tr, store=store)
@@ -176,7 +226,7 @@ def test_transport_exception_bubbles_and_does_not_cache():
 
 
 def test_success_resets_fail_count_after_prior_failure():
-    cfg = DropiOrderForwarderConfig(base_url="https://example.test", api_token="t", max_attempts=1)
+    cfg = live_cfg(max_attempts=1)
     tr = DummyTransport(responses=[(503, b"temporary"), (201, b'{"ok":true}')])
     fwd = DropiOrderForwarder(cfg, transport=tr)
 
