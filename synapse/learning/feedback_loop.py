@@ -162,6 +162,71 @@ def _normalize_feedback_signal_file(path: Path, base_dir: Path) -> dict[str, Any
     return normalized
 
 
+
+def _first_nested_value(payload: object, keys: tuple[str, ...]) -> Any:
+    if isinstance(payload, Mapping):
+        for key in keys:
+            value = payload.get(key)
+            if value is not None and value != "":
+                return value
+
+        for value in payload.values():
+            found = _first_nested_value(value, keys)
+            if found is not None and found != "":
+                return found
+
+    if isinstance(payload, (list, tuple)):
+        for item in payload:
+            found = _first_nested_value(item, keys)
+            if found is not None and found != "":
+                return found
+
+    return None
+
+
+def _with_reader_compatible_prediction_fields(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Add flat prediction fields expected by evidence_reader without mutating input."""
+
+    scenario = dict(payload)
+
+    if scenario.get("proposed_price_mxn") is None:
+        proposed_price = _first_nested_value(
+            scenario,
+            (
+                "proposed_price_mxn",
+                "price_mxn",
+                "selling_price_mxn",
+                "sale_price_mxn",
+                "proposed_price",
+                "price",
+            ),
+        )
+        if proposed_price is not None:
+            scenario["proposed_price_mxn"] = proposed_price
+
+    if scenario.get("estimated_landed_cost_mxn") is None:
+        landed_cost = _first_nested_value(
+            scenario,
+            (
+                "estimated_landed_cost_mxn",
+                "landed_cost_mxn",
+                "estimated_landed_cost",
+                "landed_cost",
+                "unit_landed_cost_mxn",
+                "unit_cost_mxn",
+                "supplier_cost_mxn",
+                "product_cost_mxn",
+                "source_cost_mxn",
+                "cost_mxn",
+                "product_cost",
+                "cost",
+            ),
+        )
+        if landed_cost is not None:
+            scenario["estimated_landed_cost_mxn"] = landed_cost
+
+    return scenario
+
 def materialize_smoke_feedback_run(
     smoke_result: Any,
     run_dir: Path | str,
@@ -359,7 +424,7 @@ def materialize_smoke_feedback_run(
         "feedback_signal": output_dir / FEEDBACK_SIGNAL_FILE,
     }
 
-    _dump_json(paths["scenario"], scenario_payload)
+    _dump_json(paths["scenario"], _with_reader_compatible_prediction_fields(scenario_payload))
     _dump_json(paths["decision"], decision_payload)
     _dump_json(paths["safety"], safety_payload)
     _dump_json(paths["creative"], creative_payload)

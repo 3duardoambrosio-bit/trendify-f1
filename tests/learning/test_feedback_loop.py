@@ -82,3 +82,50 @@ def test_materialize_smoke_feedback_run_is_deterministic_for_same_result(tmp_pat
         second_dir / "decision.json"
     ).read_text(encoding="utf-8")
 
+def test_materialized_smoke_feedback_waits_for_real_outcome_not_missing_prediction(tmp_path):
+    import importlib.util
+    import json
+    import sys
+    from pathlib import Path
+
+    from synapse.learning.evidence_reader import read_run_evidence
+    from synapse.learning.feedback_loop import materialize_smoke_feedback_run
+
+    repo = Path(__file__).resolve().parents[2]
+    smoke_path = repo / "synapse" / "integration" / "a8_r70_smoke.py"
+
+    spec = importlib.util.spec_from_file_location("a8_r80_regression_smoke", smoke_path)
+    assert spec is not None
+    assert spec.loader is not None
+
+    smoke = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = smoke
+    spec.loader.exec_module(smoke)
+
+    run_dir = tmp_path / "smoke_feedback_schema_fix"
+    smoke_result = smoke.run_a8_r70_smoke_integration()
+
+    materialize_smoke_feedback_run(
+        smoke_result,
+        run_dir,
+        generated_at="1970-01-01T00:00:00Z",
+    )
+
+    scenario = json.loads((run_dir / "scenario.json").read_text(encoding="utf-8"))
+    signal = json.loads((run_dir / "feedback_signal.json").read_text(encoding="utf-8"))
+    outcome = json.loads((run_dir / "outcome.json").read_text(encoding="utf-8"))
+    evidence = read_run_evidence(run_dir)
+
+    assert scenario["proposed_price_mxn"] is not None
+    assert scenario["estimated_landed_cost_mxn"] is not None
+
+    assert outcome["status"] == "UNKNOWN"
+    assert outcome["observed"] is False
+
+    assert evidence.prediction is not None
+
+    reason_codes = [str(reason) for reason in signal["reason_codes"]]
+
+    assert any("MISSING_REAL_OUTCOME" in reason for reason in reason_codes)
+    assert not any("MISSING_PREDICTION" in reason for reason in reason_codes)
+    assert not any("INVALID_PREDICTION_INPUT" in reason for reason in reason_codes)
