@@ -42,3 +42,31 @@ __all__ = [
     "BlueprintGenerator", "CampaignBlueprint", "Platform", "Objective",
     "TargetingConfig", "quick_blueprint",
 ]
+# A8-R86I2 expert foundation public surface
+from .expert_foundation import (
+    ExpertAd,
+    ExpertAdSet,
+    ExpertAudience,
+    ExpertCampaignStructure,
+    ExpertHook,
+    ExpertOffer,
+    ExpertStopRules,
+    MarketingExpertPack,
+    build_marketing_expert_pack,
+    pack_to_dict,
+)
+
+_EXPERT_FOUNDATION_EXPORTS = (
+    "ExpertAd",
+    "ExpertAdSet",
+    "ExpertAudience",
+    "ExpertCampaignStructure",
+    "ExpertHook",
+    "ExpertOffer",
+    "ExpertStopRules",
+    "MarketingExpertPack",
+    "build_marketing_expert_pack",
+    "pack_to_dict",
+)
+
+__all__ = tuple(dict.fromkeys(tuple(globals().get("__all__", ())) + _EXPERT_FOUNDATION_EXPORTS))
