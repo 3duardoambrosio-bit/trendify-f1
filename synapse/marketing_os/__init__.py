@@ -70,3 +70,19 @@ _EXPERT_FOUNDATION_EXPORTS = (
 )
 
 __all__ = tuple(dict.fromkeys(tuple(globals().get("__all__", ())) + _EXPERT_FOUNDATION_EXPORTS))
+# A8-R87I1 first selling pack public surface
+from .selling_pack import (
+    FirstSellingPack,
+    build_first_selling_pack,
+    build_first_selling_pack_dict,
+    first_selling_pack_to_dict,
+)
+
+_SELLING_PACK_EXPORTS = (
+    "FirstSellingPack",
+    "build_first_selling_pack",
+    "build_first_selling_pack_dict",
+    "first_selling_pack_to_dict",
+)
+
+__all__ = tuple(dict.fromkeys(tuple(globals().get("__all__", ())) + _SELLING_PACK_EXPORTS))
