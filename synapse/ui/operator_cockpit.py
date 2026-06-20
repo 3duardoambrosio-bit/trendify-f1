@@ -817,3 +817,34 @@ def run_app() -> None:
 
 if __name__ == "__main__":
     run_app()
+
+# A8-R88I2 — read-only operator artifact cockpit panel.
+def build_first_selling_pack_artifact_panel(root=None):
+    """Return read-only cockpit panel data for persisted FirstSellingPack artifacts."""
+    try:
+        inventory = read_model.build_first_selling_pack_artifact_inventory(root)
+    except Exception as exc:
+        return {
+            "schema_version": "a8-r88.first_selling_pack_artifact_panel.v1",
+            "status": "error",
+            "error": str(exc),
+            "artifact_count": 0,
+            "visible_artifact_count": 0,
+            "latest_artifact_dir": "N/A",
+            "artifacts": [],
+            "read_only": True,
+            "external_side_effects": False,
+        }
+
+    return {
+        "schema_version": "a8-r88.first_selling_pack_artifact_panel.v1",
+        "status": "ready",
+        "artifact_count": inventory["artifact_count"],
+        "visible_artifact_count": inventory["visible_artifact_count"],
+        "latest_artifact_dir": inventory["latest_artifact_dir"],
+        "latest_run_id": inventory["latest_run_id"],
+        "artifacts": inventory["artifacts"],
+        "read_only": True,
+        "external_side_effects": False,
+        "boundaries": inventory["boundaries"],
+    }

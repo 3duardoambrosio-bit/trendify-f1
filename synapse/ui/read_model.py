@@ -594,3 +594,166 @@ def run_app() -> None:
 
 if __name__ == "__main__":
     run_app()
+
+# A8-R88I2 — First Selling Pack artifact read-only surface.
+FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION = "a8-r88.first_selling_pack_artifact.v1"
+FIRST_SELLING_PACK_ARTIFACT_LIMIT = 8
+
+
+def _a8_r88_read_json(path):
+    import json
+    from pathlib import Path
+
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def is_first_selling_pack_artifact_dir(path) -> bool:
+    """Return True when path looks like a persisted A8-R88 operator artifact.
+
+    Read-only by design: this function does not write, publish, spend, or call
+    external connectors.
+    """
+    from pathlib import Path
+
+    root = Path(path)
+    manifest_path = root / "manifest.json"
+    first_pack_path = root / "first_selling_pack.json"
+    operator_review_path = root / "operator_review.md"
+
+    if not root.is_dir():
+        return False
+    if not manifest_path.is_file():
+        return False
+    if not first_pack_path.is_file():
+        return False
+    if not operator_review_path.is_file():
+        return False
+
+    try:
+        manifest = _a8_r88_read_json(manifest_path)
+    except Exception:
+        return False
+
+    return (
+        manifest.get("schema_version") == FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION
+        and manifest.get("artifact_type") == "first_selling_pack_operator_artifact"
+    )
+
+
+def discover_first_selling_pack_artifact_dirs(root=None):
+    """Discover local FirstSellingPack artifact dirs, newest last.
+
+    Read-only. It only scans files under root.
+    """
+    from pathlib import Path
+
+    search_root = Path(root) if root is not None else Path("runs")
+    if not search_root.exists():
+        return []
+
+    artifact_dirs = []
+    for manifest_path in sorted(search_root.rglob("manifest.json")):
+        candidate = manifest_path.parent
+        if is_first_selling_pack_artifact_dir(candidate):
+            artifact_dirs.append(candidate)
+
+    return sorted(set(artifact_dirs), key=lambda item: str(item))[-FIRST_SELLING_PACK_ARTIFACT_LIMIT:]
+
+
+def load_first_selling_pack_artifact(path):
+    """Load one A8-R88 FirstSellingPack artifact into a JSON-ready dict."""
+    from pathlib import Path
+
+    root = Path(path)
+    if not is_first_selling_pack_artifact_dir(root):
+        raise ValueError(f"Not a FirstSellingPack artifact dir: {root}")
+
+    manifest = _a8_r88_read_json(root / "manifest.json")
+    pack = _a8_r88_read_json(root / "first_selling_pack.json")
+
+    marketing_brief_path = root / "marketing_brief.json"
+    expert_pack_path = root / "expert_pack.json"
+    decision_path = root / "decision.json"
+    scenario_path = root / "scenario.json"
+    burnin_path = root / "burnin_summary.json"
+
+    loaded = {
+        "path": str(root),
+        "run_dir": str(root),
+        "run_id": str(manifest.get("run_id", "")),
+        "schema_version": manifest.get("schema_version"),
+        "artifact_type": manifest.get("artifact_type"),
+        "product_id": manifest.get("product_id"),
+        "product_name": manifest.get("product_name"),
+        "boundaries": list(manifest.get("boundaries") or []),
+        "manifest": manifest,
+        "first_selling_pack": pack,
+        "ready_for_operator_review": bool(pack.get("ready_for_operator_review")),
+        "warnings": list(pack.get("warnings") or []),
+        "platform": (
+            pack.get("expert_pack", {})
+            .get("campaign", {})
+            .get("platform", "unknown")
+        ),
+        "adset_count": len(
+            pack.get("expert_pack", {})
+            .get("campaign", {})
+            .get("adsets", [])
+        ),
+        "ad_count": sum(
+            len(adset.get("ads", []))
+            for adset in (
+                pack.get("expert_pack", {})
+                .get("campaign", {})
+                .get("adsets", [])
+            )
+        ),
+    }
+
+    if marketing_brief_path.is_file():
+        loaded["marketing_brief"] = _a8_r88_read_json(marketing_brief_path)
+    if expert_pack_path.is_file():
+        loaded["expert_pack"] = _a8_r88_read_json(expert_pack_path)
+    if decision_path.is_file():
+        loaded["decision"] = _a8_r88_read_json(decision_path)
+    if scenario_path.is_file():
+        loaded["scenario"] = _a8_r88_read_json(scenario_path)
+    if burnin_path.is_file():
+        loaded["burnin_summary"] = _a8_r88_read_json(burnin_path)
+
+    return loaded
+
+
+def load_first_selling_pack_artifacts(root=None):
+    """Load discovered FirstSellingPack artifacts, newest last."""
+    return [
+        load_first_selling_pack_artifact(path)
+        for path in discover_first_selling_pack_artifact_dirs(root)
+    ]
+
+
+def build_first_selling_pack_artifact_inventory(root=None):
+    """Build read-only operator inventory for persisted FirstSellingPack artifacts."""
+    artifacts = load_first_selling_pack_artifacts(root)
+    latest = artifacts[-1] if artifacts else None
+
+    return {
+        "schema_version": "a8-r88.first_selling_pack_artifact_inventory.v1",
+        "artifact_count": len(artifacts),
+        "visible_artifact_count": len(artifacts),
+        "latest_artifact_dir": latest["path"] if latest else "N/A",
+        "latest_run_id": latest["run_id"] if latest else "N/A",
+        "artifacts": artifacts,
+        "read_only": True,
+        "external_side_effects": False,
+        "boundaries": [
+            "dry_run_only",
+            "operator_in_control",
+            "no_live_writes",
+            "no_automatic_spend",
+            "no_fulfillment_automation",
+            "claims_require_operator_review",
+            "local_artifact_only",
+            "operator_review_required",
+        ],
+    }
