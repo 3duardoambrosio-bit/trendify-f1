@@ -86,3 +86,33 @@ _SELLING_PACK_EXPORTS = (
 )
 
 __all__ = tuple(dict.fromkeys(tuple(globals().get("__all__", ())) + _SELLING_PACK_EXPORTS))
+
+from .operator_artifact import (
+    FIRST_SELLING_PACK_ARTIFACT_BOUNDARIES,
+    FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION,
+    FirstSellingPackArtifact,
+    first_selling_pack_artifact_to_dict,
+    write_first_selling_pack_artifact,
+)
+
+try:
+    __all__ = tuple(
+        dict.fromkeys(
+            [
+                *__all__,
+                "FIRST_SELLING_PACK_ARTIFACT_BOUNDARIES",
+                "FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION",
+                "FirstSellingPackArtifact",
+                "first_selling_pack_artifact_to_dict",
+                "write_first_selling_pack_artifact",
+            ]
+        )
+    )
+except NameError:
+    __all__ = (
+        "FIRST_SELLING_PACK_ARTIFACT_BOUNDARIES",
+        "FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION",
+        "FirstSellingPackArtifact",
+        "first_selling_pack_artifact_to_dict",
+        "write_first_selling_pack_artifact",
+    )
