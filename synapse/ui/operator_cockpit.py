@@ -848,3 +848,32 @@ def build_first_selling_pack_artifact_panel(root=None):
         "external_side_effects": False,
         "boundaries": inventory["boundaries"],
     }
+
+from synapse.ui.operator_console import build_operator_console_panel
+
+def build_operator_console_cockpit_panel(evidence_root, *, limit=8):
+    """Build a read-only cockpit panel for the A8-R89 operator console model."""
+
+    panel = build_operator_console_panel(evidence_root, limit=limit)
+    rows = list(panel.get("rows", []))
+
+    return {
+        "schema_version": "a8-r89.operator_cockpit.operator_console.v1",
+        "title": "Operator Console",
+        "status": panel.get("status", "unknown"),
+        "row_count": panel.get("row_count", len(rows)),
+        "ready_for_operator_review_count": panel.get(
+            "ready_for_operator_review_count",
+            0,
+        ),
+        "stage_order": list(panel.get("stage_order", [])),
+        "rows": rows,
+        "source_model": panel,
+        "read_only": True,
+        "external_side_effects": False,
+        "live_connectors": False,
+        "live_writes": False,
+        "spend_enabled": False,
+        "fulfillment_automation": False,
+        "operator_review_required": True,
+    }
