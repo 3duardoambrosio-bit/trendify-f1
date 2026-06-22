@@ -1,0 +1,134 @@
+{
+  "metadata": {
+    "fixture_id": "dropi_supplier_products_nominal_v1",
+    "source": "fixture",
+    "captured_at": "2026-06-22T00:00:00Z",
+    "currency": "MXN",
+    "country": "MX"
+  },
+  "supplier": {
+    "supplier_id": "dropi_fixture_supplier_mx_001",
+    "supplier_name": "Dropi Fixture Supplier MX",
+    "country": "MX",
+    "platform": "dropi_fixture",
+    "rating": "4.7",
+    "risk_flags": [
+      "fixture_only",
+      "operator_review_required"
+    ],
+    "read_only": true
+  },
+  "products": [
+    {
+      "supplier_product_id": "dropi_fixture_product_001",
+      "supplier_sku": "DFX-MX-001",
+      "title": "Organizador plegable multiuso fixture",
+      "description": "Producto sintético para validar contrato Dropi fixture read-only.",
+      "category": "home_organization",
+      "brand": "FixtureBrand",
+      "images": [
+        "fixture://dropi/images/dfx-mx-001-main"
+      ],
+      "tags": [
+        "fixture",
+        "home",
+        "organizer"
+      ],
+      "read_only": true,
+      "inventory": {
+        "stock_status": "in_stock",
+        "stock_quantity": 42,
+        "warehouse_region": "MX-GOLFO",
+        "last_seen_at": "2026-06-22T00:00:00Z",
+        "inventory_reservation": false,
+        "read_only": true
+      },
+      "costs": {
+        "supplier_cost": "149.00",
+        "currency": "MXN",
+        "shipping_cost_estimate": "89.00",
+        "fees_estimate": "12.00",
+        "min_margin_required": "0.35"
+      },
+      "fulfillment": {
+        "fulfillment_supported": true,
+        "estimated_delivery_days_min": 2,
+        "estimated_delivery_days_max": 5,
+        "shipping_provider": "dropi_fixture_shipping",
+        "order_placement_supported": false,
+        "auto_fulfillment_enabled": false,
+        "read_only": true
+      },
+      "safety": {
+        "read_only": true,
+        "live_dropi": false,
+        "external_writes": false,
+        "spend": false,
+        "fulfillment_automation": false,
+        "order_placement": false,
+        "inventory_reservation": false,
+        "operator_review_required": true
+      }
+    },
+    {
+      "supplier_product_id": "dropi_fixture_product_002",
+      "supplier_sku": "DFX-MX-002",
+      "title": "Accesorio de cocina fixture",
+      "description": "Segundo producto sintético para validar conteos y stock bajo.",
+      "category": "kitchen_accessories",
+      "brand": "FixtureBrand",
+      "images": [
+        "fixture://dropi/images/dfx-mx-002-main"
+      ],
+      "tags": [
+        "fixture",
+        "kitchen"
+      ],
+      "read_only": true,
+      "inventory": {
+        "stock_status": "low_stock",
+        "stock_quantity": 3,
+        "warehouse_region": "MX-CENTRO",
+        "last_seen_at": "2026-06-22T00:00:00Z",
+        "inventory_reservation": false,
+        "read_only": true
+      },
+      "costs": {
+        "supplier_cost": "99.00",
+        "currency": "MXN",
+        "shipping_cost_estimate": "79.00",
+        "fees_estimate": "10.00",
+        "min_margin_required": "0.35"
+      },
+      "fulfillment": {
+        "fulfillment_supported": true,
+        "estimated_delivery_days_min": 3,
+        "estimated_delivery_days_max": 6,
+        "shipping_provider": "dropi_fixture_shipping",
+        "order_placement_supported": false,
+        "auto_fulfillment_enabled": false,
+        "read_only": true
+      },
+      "safety": {
+        "read_only": true,
+        "live_dropi": false,
+        "external_writes": false,
+        "spend": false,
+        "fulfillment_automation": false,
+        "order_placement": false,
+        "inventory_reservation": false,
+        "operator_review_required": true
+      }
+    }
+  ],
+  "safety": {
+    "read_only": true,
+    "live_dropi": false,
+    "external_writes": false,
+    "spend": false,
+    "fulfillment_automation": false,
+    "order_placement": false,
+    "inventory_reservation": false,
+    "operator_review_required": true
+  }
+}
