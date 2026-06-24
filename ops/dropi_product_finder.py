@@ -196,7 +196,7 @@ class DropiProductFinder:
                 "order_by": "id",
                 "order_type": "asc",
             }
-            resp = client.post("/products/index", body)
+            resp = client.post_readonly("/products/index", body)
             # Many Dropi responses include `objects` list.
             objects = resp.get("objects") if isinstance(resp, dict) else None
             if not objects:
