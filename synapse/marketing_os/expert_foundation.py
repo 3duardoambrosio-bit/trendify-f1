@@ -153,48 +153,9 @@ def _detect_claim_warnings(*texts: str) -> tuple[str, ...]:
 
 
 def _category_angle(category: str) -> tuple[str, str, str]:
-    c = category.lower()
-
-    if any(k in c for k in ("beauty", "belleza", "skin", "cuidado")):
-        return (
-            "rutina visible sin promesas absolutas",
-            "mecanismo de uso diario y mejora percibida",
-            "personas que ya compran cuidado personal pero dudan de productos milagro",
-        )
-
-    if any(k in c for k in ("pet", "mascota", "perro", "gato")):
-        return (
-            "tranquilidad del dueño",
-            "mecanismo de cuidado preventivo y conveniencia",
-            "dueños de mascota con ansiedad por bienestar y tiempo limitado",
-        )
-
-    if any(k in c for k in ("home", "hogar", "cocina", "organizador")):
-        return (
-            "orden y ahorro de fricción diaria",
-            "mecanismo de simplificación en casa",
-            "personas con casa/departamento que compran soluciones prácticas",
-        )
-
-    if any(k in c for k in ("fitness", "gym", "deporte", "salud")):
-        return (
-            "progreso medible sin atajos falsos",
-            "mecanismo de constancia y soporte práctico",
-            "personas que entrenan o quieren empezar sin comprar humo",
-        )
-
-    if any(k in c for k in ("electronics", "tech", "audio", "gadget", "electronica", "electrónica")):
-        return (
-            "mejora práctica inmediata",
-            "mecanismo de conveniencia tecnológica",
-            "compradores de gadgets que buscan utilidad real, no novedad vacía",
-        )
-
-    return (
-        "problema cotidiano con solución concreta",
-        "mecanismo de reducción de fricción",
-        "compradores con dolor claro y baja tolerancia a promesas genéricas",
-    )
+    """A8-R104 compatibility wrapper backed by methodology decision engine."""
+    from synapse.marketing_os.methodology_decision_engine import category_angle_from_methodology
+    return category_angle_from_methodology(category)
 
 
 def build_marketing_expert_pack(
