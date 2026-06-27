@@ -141,17 +141,42 @@ def _proof_strength(context: Mapping[str, Any]) -> str:
     proof = context.get("proof_available")
     if not isinstance(proof, Sequence) or isinstance(proof, (str, bytes)):
         return "missing"
+
     proof_values = _lower_values([str(item) for item in proof if str(item).strip()])
     if not proof_values:
         return "missing"
+
     joined = " ".join(proof_values)
-    if any(term in joined for term in ("weak", "incomplete", "partial", "generic", "unclear")):
+    missing_terms = (
+        "no proof",
+        "no certificate",
+        "no clinical proof",
+        "no before-after",
+        "no motor test",
+        "photos only",
+        "images only",
+        "static product photos",
+        "supplier photos only",
+        "supplier images only",
+        "generic room photos",
+    )
+    weak_terms = ("weak", "incomplete", "partial", "generic", "unclear", "mixed reviews")
+
+    if any(term in joined for term in missing_terms):
+        return "missing"
+    if any(term in joined for term in weak_terms):
         return "weak"
     return "present"
 
 
 def _semantic_match(rule: ExecutableRule, context: Mapping[str, Any]) -> bool:
-    """Deterministic semantic guard above R102 field-presence predicates."""
+    """Deterministic semantic guard above R102 field-presence predicates.
+
+    A8-R104.1 change:
+    - No permissive match-all fallback.
+    - Rule families only match when context values justify them.
+    - Blind products with proof can reach an accepted angle.
+    """
 
     when = rule.when.lower()
     rule_id = rule.id
@@ -160,46 +185,119 @@ def _semantic_match(rule: ExecutableRule, context: Mapping[str, Any]) -> bool:
     margin_profile = str(context.get("margin_profile", "")).lower()
     buyer_state = str(context.get("buyer_state", "")).lower()
     candidate_output = str(context.get("candidate_output", "")).lower()
+    category = str(context.get("category", "")).lower()
     proof_strength = _proof_strength(context)
     has_product_facts = _context_has_product_specificity(context)
 
+    facts = context.get("product_facts")
+    fact_terms = ()
+    if isinstance(facts, Sequence) and not isinstance(facts, (str, bytes)):
+        fact_terms = _lower_values([str(item) for item in facts])
+
+    saturated_or_generic = (
+        "common saturated" in " ".join(fact_terms)
+        or "saturated" in category
+        or "perfect room decoration" in candidate_output
+        or "perfect for everyone" in candidate_output
+        or "noun swap" in candidate_output
+    )
+
+    risky_claim = claim_risk in {"high", "medical", "safety"}
+    tight_margin = "tight" in margin_profile
+    meta_with_weak_proof = channel == "meta" and proof_strength in {"weak", "missing"}
+
     if rule_id == "AGR-D001":
-        return not has_product_facts
+        return not has_product_facts or saturated_or_generic
     if rule_id == "AGR-D003":
-        return "noun swap" in candidate_output or "perfect for everyone" in candidate_output
+        return saturated_or_generic
     if rule_id == "HOK-D008":
-        return not has_product_facts or "noun swap" in candidate_output
+        return not has_product_facts or saturated_or_generic
     if rule_id == "CLR-D003":
-        return claim_risk in {"high", "medical", "safety"}
+        return risky_claim
     if rule_id == "OFF-D002":
-        return "tight" in margin_profile
+        return tight_margin
     if rule_id == "PRF-D006":
         return proof_strength == "missing"
     if rule_id == "CHN-D002":
-        return channel == "meta" and proof_strength in {"weak", "missing"}
+        return meta_with_weak_proof
     if rule_id == "CTA-D002":
         return buyer_state in {"cold", "latent"} or proof_strength in {"weak", "missing"}
     if rule_id == "ANG-D001":
-        return has_product_facts and proof_strength == "present"
+        return has_product_facts and proof_strength == "present" and not risky_claim and not saturated_or_generic
     if rule_id == "ANG-D005":
-        return "tight" in margin_profile or "cac" in margin_profile
+        return has_product_facts and proof_strength == "present" and not risky_claim and tight_margin
 
     if "proof missing" in when or "proof is incomplete" in when or "proof weak" in when:
         return proof_strength in {"missing", "weak"}
     if "proof exists" in when or "demo proof exists" in when or "visual proof" in when:
-        return proof_strength == "present"
+        return has_product_facts and proof_strength == "present" and not risky_claim
     if "claim risk high" in when or "risk high" in when or "risky claim" in when:
-        return claim_risk in {"high", "medium", "unclear"}
+        return risky_claim
     if "margin is tight" in when or "cac/margin tight" in when or "margin tight" in when:
-        return "tight" in margin_profile
+        return tight_margin
     if "meta" in when or "channel is meta" in when:
-        return channel == "meta"
+        return meta_with_weak_proof
     if "category-only" in when or "category only" in when:
         return not has_product_facts
     if "buyer cold" in when or "buyer is cold" in when:
         return buyer_state == "cold"
 
-    return has_product_facts or proof_strength == "present"
+    return False
+
+
+def _candidate_rule_ids_for_context(
+    contract: ExecutableMethodologyContract,
+    context: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Select a small context-relevant rule set instead of running all 82 rules."""
+
+    available = {rule.id for rule in iter_rules(contract)}
+    selected: list[str] = []
+
+    def add(*rule_ids: str) -> None:
+        for rule_id in rule_ids:
+            if rule_id in available and rule_id not in selected:
+                selected.append(rule_id)
+
+    claim_risk = str(context.get("claim_risk", "")).lower()
+    channel = str(context.get("channel", "")).lower()
+    margin_profile = str(context.get("margin_profile", "")).lower()
+    buyer_state = str(context.get("buyer_state", "")).lower()
+    candidate_output = str(context.get("candidate_output", "")).lower()
+    category = str(context.get("category", "")).lower()
+    proof_strength = _proof_strength(context)
+    has_product_facts = _context_has_product_specificity(context)
+
+    facts = context.get("product_facts")
+    fact_terms = ()
+    if isinstance(facts, Sequence) and not isinstance(facts, (str, bytes)):
+        fact_terms = _lower_values([str(item) for item in facts])
+
+    risky_claim = claim_risk in {"high", "medical", "safety"}
+    tight_margin = "tight" in margin_profile
+    saturated_or_generic = (
+        "common saturated" in " ".join(fact_terms)
+        or "saturated" in category
+        or "perfect room decoration" in candidate_output
+        or "perfect for everyone" in candidate_output
+        or "noun swap" in candidate_output
+    )
+
+    if risky_claim:
+        add("CLR-D003", "PRF-D006", "CHN-D002", "CTA-D002")
+    if proof_strength in {"missing", "weak"}:
+        add("PRF-D006", "CHN-D002", "CTA-D002")
+    if tight_margin:
+        add("OFF-D002", "OFF-D006", "ANG-D005")
+    if saturated_or_generic or buyer_state == "cold":
+        add("AGR-D001", "AGR-D003", "HOK-D008", "CTA-D002")
+    if has_product_facts and proof_strength == "present" and not risky_claim and not saturated_or_generic:
+        add("ANG-D001")
+
+    if not selected:
+        add("CTA-D002", "ANG-D001")
+
+    return tuple(selected)
 
 
 def _triggers_for_rule(rule: ExecutableRule, semantic_matched: bool) -> tuple[str, ...]:
@@ -275,14 +373,78 @@ def evaluate_rule_decision(
     )
 
 
+def _selection_rank_for_context(
+    decision: RuleDecision,
+    context: Mapping[str, Any],
+) -> tuple[int, int]:
+    """Rank matched rules by business context, not raw rule priority alone.
+
+    A8-R104.1R2 change:
+    - Risk/safety beats everything.
+    - Tight margin economics beats generic channel constraint.
+    - Generic/saturated rejection beats proof/channel fallbacks.
+    - Proof/channel rules remain useful but should not dominate all cases.
+    """
+
+    claim_risk = str(context.get("claim_risk", "")).lower()
+    channel = str(context.get("channel", "")).lower()
+    margin_profile = str(context.get("margin_profile", "")).lower()
+    buyer_state = str(context.get("buyer_state", "")).lower()
+    candidate_output = str(context.get("candidate_output", "")).lower()
+    category = str(context.get("category", "")).lower()
+    proof_strength = _proof_strength(context)
+
+    facts = context.get("product_facts")
+    fact_terms = ()
+    if isinstance(facts, Sequence) and not isinstance(facts, (str, bytes)):
+        fact_terms = _lower_values([str(item) for item in facts])
+
+    risky_claim = claim_risk in {"high", "medical", "safety"}
+    tight_margin = "tight" in margin_profile
+    saturated_or_generic = (
+        "common saturated" in " ".join(fact_terms)
+        or "saturated" in category
+        or "perfect room decoration" in candidate_output
+        or "perfect for everyone" in candidate_output
+        or "noun swap" in candidate_output
+        or buyer_state == "cold"
+    )
+    meta_with_weak_proof = channel == "meta" and proof_strength in {"weak", "missing"}
+
+    rule_id = decision.rule_id
+
+    if risky_claim and rule_id in {"CLR-D003", "CLR-D001", "CLR-D005"}:
+        family_rank = 900
+    elif tight_margin and rule_id in {"OFF-D002", "OFF-D006", "ANG-D005"}:
+        family_rank = 800
+    elif saturated_or_generic and rule_id in {"AGR-D001", "AGR-D003", "HOK-D008", "CTA-D002"}:
+        family_rank = 700
+    elif proof_strength == "missing" and rule_id in {"PRF-D006", "CTA-D002"}:
+        family_rank = 600
+    elif meta_with_weak_proof and rule_id in {"CHN-D002", "CTA-D002"}:
+        family_rank = 500
+    elif rule_id.startswith("ANG-"):
+        family_rank = 400
+    else:
+        family_rank = 100
+
+    return (family_rank, decision.priority)
+
+
+
 def decide_marketing_methodology(
     contract: ExecutableMethodologyContract,
     decision_input: MethodologyDecisionInput,
     candidate_rule_ids: Sequence[str] | None = None,
 ) -> MarketingMethodologyDecision:
-    """Run local deterministic methodology decisions over candidate rules."""
+    """Run local deterministic methodology decisions over context-relevant rules."""
 
-    selected_rules = tuple(candidate_rule_ids) if candidate_rule_ids is not None else tuple(rule.id for rule in iter_rules(contract))
+    context = decision_input.as_context()
+    selected_rules = (
+        tuple(candidate_rule_ids)
+        if candidate_rule_ids is not None
+        else _candidate_rule_ids_for_context(contract, context)
+    )
     if not selected_rules:
         raise MethodologyDecisionEngineError("At least one candidate rule id is required")
 
@@ -290,7 +452,11 @@ def decide_marketing_methodology(
     matched = tuple(item for item in decisions if item.semantic_matched)
 
     if matched:
-        selected = sorted(matched, key=lambda item: item.priority, reverse=True)[0]
+        selected = sorted(
+            matched,
+            key=lambda item: _selection_rank_for_context(item, context),
+            reverse=True,
+        )[0]
     else:
         selected = decisions[0]
 
@@ -321,13 +487,19 @@ def _safe_output_for_decision(
 ) -> str:
     facts = ", ".join(decision_input.product_facts[:2]) if decision_input.product_facts else "specific product proof"
     category = decision_input.category.strip() or "product"
+    trigger_text = ", ".join(triggers[:3]) if triggers else "no strong methodology trigger"
 
     if status == "blocked":
-        return f"Blocked by {selected.rule_id}; operator review required before using {category} messaging."
+        return (
+            f"Blocked by {selected.rule_id} for {category}: {trigger_text}. "
+            f"Operator review required before using claims. Evidence checked: {facts}."
+        )
     if "demo_angle" in triggers:
         return f"Show the {category} use case with concrete proof: {facts}."
     if "cta_softened_or_rejected" in triggers:
-        return f"Use a softer evaluation CTA for {category}; proof is not strong enough for aggressive wording."
+        return f"Use a softer evaluation CTA for {category}; proof is not strong enough for aggressive wording. Evidence checked: {facts}."
+    if status == "fallback":
+        return f"No safe marketing angle selected for {category}; collect stronger proof before use. Evidence checked: {facts}."
     return f"Use methodology rule {selected.rule_id} for {category}, grounded in: {facts}."
 
 
