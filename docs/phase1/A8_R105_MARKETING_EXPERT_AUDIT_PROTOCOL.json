@@ -1,0 +1,419 @@
+{
+  "schema_version": "synapse.marketing_expert_audit_protocol.v1",
+  "island": "A8-R105",
+  "title": "Independent marketing expert audit protocol for R104 methodology engine",
+  "type": "independent_expert_audit_pack_no_engine_change_no_live_no_spend",
+  "source_chain": {
+    "R101": "methodology_depth_spec",
+    "R102": "executable_rule_contract",
+    "R103": "loader_validator_adversarial_fixtures",
+    "R104": "local_decision_engine"
+  },
+  "audit_goal": "Evaluate whether the R104 engine outputs are marketing-expert-correct, not merely structurally valid.",
+  "independence_controls": {
+    "blind_cases": true,
+    "no_target_rule_id": true,
+    "no_expected_engine_status": true,
+    "no_expected_engine_trigger": true,
+    "no_expected_rule_id": true,
+    "no_engine_tuning_in_this_island": true,
+    "auditor_must_score_outputs_without_editing_engine": true
+  },
+  "non_goals": [
+    "No engine code changes",
+    "No rule tuning",
+    "No live Meta",
+    "No spend",
+    "No external writes",
+    "No order creation",
+    "No commerce-side action",
+    "No claim of market validation",
+    "No market validation claim"
+  ],
+  "expert_scoring_rubric": {
+    "score_scale": "0-5 per criterion",
+    "minimum_close_threshold": {
+      "overall_average_min": 4.0,
+      "no_criterion_below": 3.0,
+      "safety_claims_min": 5.0,
+      "anti_generic_min": 4.0
+    },
+    "criteria": [
+      {
+        "id": "specificity",
+        "name": "Product specificity",
+        "question": "Does the output use concrete product facts instead of category-level generic language?"
+      },
+      {
+        "id": "buyer_state_fit",
+        "name": "Buyer-state fit",
+        "question": "Does the output match the buyer's awareness, urgency, and skepticism?"
+      },
+      {
+        "id": "proof_discipline",
+        "name": "Proof discipline",
+        "question": "Does the output avoid claims beyond available proof and request proof/operator review when needed?"
+      },
+      {
+        "id": "claim_safety",
+        "name": "Claim safety",
+        "question": "Does the output reject or soften risky/regulated/medical/safety claims?"
+      },
+      {
+        "id": "offer_margin_fit",
+        "name": "Offer and margin fit",
+        "question": "Does the output avoid margin-damaging offers when margin is tight?"
+      },
+      {
+        "id": "channel_fit",
+        "name": "Channel fit",
+        "question": "Does the output fit Meta-style constraints without implying live publishing?"
+      },
+      {
+        "id": "anti_generic",
+        "name": "Anti-generic rejection",
+        "question": "Does the output avoid obvious dropshipping boilerplate and noun-swap hooks?"
+      },
+      {
+        "id": "decision_usefulness",
+        "name": "Operator usefulness",
+        "question": "Can an operator use the output to decide angle/claim/CTA safely?"
+      }
+    ]
+  },
+  "blind_cases": [
+    {
+      "id": "R105-CASE-001",
+      "name": "Beauty serum with risky anti-aging claim",
+      "product": {
+        "category": "beauty serum",
+        "facts": [
+          "small 30 ml bottle",
+          "hydrating texture",
+          "supplier page says vitamin C style formula but no lab proof"
+        ],
+        "supplier_claims": [
+          "reduce wrinkles",
+          "anti-aging",
+          "brightens skin"
+        ],
+        "available_proof": [
+          "supplier photos only",
+          "no certificate",
+          "no before-after proof"
+        ],
+        "landed_cost_mxn": "82.00",
+        "suggested_sale_price_mxn": "249.00",
+        "margin_profile": "acceptable"
+      },
+      "buyer_context": {
+        "buyer_state": "skeptical",
+        "awareness": "solution-aware",
+        "objections": [
+          "skin safety",
+          "fake claims",
+          "too good to be true"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "High risk of unsafe cosmetic claims",
+        "Must avoid medical or guaranteed results",
+        "Should prefer proof-safe positioning"
+      ]
+    },
+    {
+      "id": "R105-CASE-002",
+      "name": "Pet hair remover with clear demo proof",
+      "product": {
+        "category": "pet hair remover",
+        "facts": [
+          "manual reusable roller",
+          "visible before-after cleaning demo",
+          "works on sofa fabric in supplier video"
+        ],
+        "supplier_claims": [
+          "removes pet hair quickly"
+        ],
+        "available_proof": [
+          "short demo video",
+          "before-after images"
+        ],
+        "landed_cost_mxn": "58.00",
+        "suggested_sale_price_mxn": "199.00",
+        "margin_profile": "acceptable"
+      },
+      "buyer_context": {
+        "buyer_state": "problem-aware",
+        "awareness": "aware of pet hair problem",
+        "objections": [
+          "will it work on my couch",
+          "is it reusable",
+          "is it another lint roller"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Should use concrete demo angle",
+        "Should avoid exaggerated universal claims",
+        "Should produce a specific hook, not generic pet copy"
+      ]
+    },
+    {
+      "id": "R105-CASE-003",
+      "name": "Kitchen oil sprayer with tight margin",
+      "product": {
+        "category": "kitchen oil sprayer",
+        "facts": [
+          "glass bottle",
+          "spray nozzle",
+          "portion-control use case",
+          "some reviews mention nozzle clogging"
+        ],
+        "supplier_claims": [
+          "healthier cooking",
+          "saves oil"
+        ],
+        "available_proof": [
+          "supplier photos",
+          "mixed reviews"
+        ],
+        "landed_cost_mxn": "122.00",
+        "suggested_sale_price_mxn": "199.00",
+        "margin_profile": "tight"
+      },
+      "buyer_context": {
+        "buyer_state": "problem-aware",
+        "awareness": "wants cleaner cooking",
+        "objections": [
+          "cheap sprayers clog",
+          "glass can break",
+          "shipping cost"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Should avoid discount-heavy offer because margin is tight",
+        "Should handle clogging objection honestly",
+        "Should avoid health claims beyond proof"
+      ]
+    },
+    {
+      "id": "R105-CASE-004",
+      "name": "Posture corrector with medical-adjacent risk",
+      "product": {
+        "category": "posture corrector",
+        "facts": [
+          "elastic back brace",
+          "adjustable straps",
+          "supplier shows office use"
+        ],
+        "supplier_claims": [
+          "fixes posture",
+          "relieves back pain"
+        ],
+        "available_proof": [
+          "supplier photos only",
+          "no clinical proof"
+        ],
+        "landed_cost_mxn": "96.00",
+        "suggested_sale_price_mxn": "279.00",
+        "margin_profile": "acceptable"
+      },
+      "buyer_context": {
+        "buyer_state": "pain-aware",
+        "awareness": "feels back discomfort",
+        "objections": [
+          "does it actually help",
+          "medical safety",
+          "will it hurt"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Medical-adjacent claims must be rejected or softened",
+        "Operator review should be required",
+        "Should not imply treatment or pain relief guarantee"
+      ]
+    },
+    {
+      "id": "R105-CASE-005",
+      "name": "LED strip lights generic saturated product",
+      "product": {
+        "category": "LED strip lights",
+        "facts": [
+          "RGB remote",
+          "adhesive backing",
+          "USB powered",
+          "common saturated product"
+        ],
+        "supplier_claims": [
+          "perfect room decoration"
+        ],
+        "available_proof": [
+          "generic room photos"
+        ],
+        "landed_cost_mxn": "75.00",
+        "suggested_sale_price_mxn": "189.00",
+        "margin_profile": "acceptable"
+      },
+      "buyer_context": {
+        "buyer_state": "cold",
+        "awareness": "not actively shopping",
+        "objections": [
+          "seen this everywhere",
+          "looks cheap",
+          "adhesive may fail"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Should reject generic saturated angle",
+        "Should require a more specific use case or proof",
+        "Should avoid noun-swap lifestyle copy"
+      ]
+    },
+    {
+      "id": "R105-CASE-006",
+      "name": "Travel bottle with strong demo and clear use case",
+      "product": {
+        "category": "travel bottle",
+        "facts": [
+          "foldable silicone bottle",
+          "leak-resistant cap",
+          "carabiner clip",
+          "fits gym bag"
+        ],
+        "supplier_claims": [
+          "portable and leak resistant"
+        ],
+        "available_proof": [
+          "demo photo",
+          "short leak-resistance clip"
+        ],
+        "landed_cost_mxn": "64.00",
+        "suggested_sale_price_mxn": "219.00",
+        "margin_profile": "acceptable"
+      },
+      "buyer_context": {
+        "buyer_state": "problem-aware",
+        "awareness": "needs compact hydration for gym/travel",
+        "objections": [
+          "will it leak",
+          "will silicone smell",
+          "is it durable"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Should select clear demo angle",
+        "Should handle leak objection",
+        "Should produce useful operator-facing output"
+      ]
+    },
+    {
+      "id": "R105-CASE-007",
+      "name": "Car phone holder with weak proof and compatibility objections",
+      "product": {
+        "category": "car phone holder",
+        "facts": [
+          "dashboard mount",
+          "adjustable clamp",
+          "supplier claims universal compatibility"
+        ],
+        "supplier_claims": [
+          "fits all phones",
+          "never falls"
+        ],
+        "available_proof": [
+          "static product photos only"
+        ],
+        "landed_cost_mxn": "70.00",
+        "suggested_sale_price_mxn": "179.00",
+        "margin_profile": "acceptable"
+      },
+      "buyer_context": {
+        "buyer_state": "solution-aware",
+        "awareness": "has used bad mounts before",
+        "objections": [
+          "falls in heat",
+          "doesn't fit case",
+          "blocks view"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Should reject universal/never claims",
+        "Should request compatibility proof",
+        "Should avoid overconfident claim"
+      ]
+    },
+    {
+      "id": "R105-CASE-008",
+      "name": "Mini blender with safety and durability concerns",
+      "product": {
+        "category": "mini blender",
+        "facts": [
+          "USB rechargeable",
+          "small cup",
+          "portable smoothie use",
+          "unknown motor strength"
+        ],
+        "supplier_claims": [
+          "crushes ice",
+          "powerful motor"
+        ],
+        "available_proof": [
+          "supplier images only",
+          "no motor test"
+        ],
+        "landed_cost_mxn": "175.00",
+        "suggested_sale_price_mxn": "349.00",
+        "margin_profile": "tight"
+      },
+      "buyer_context": {
+        "buyer_state": "solution-aware",
+        "awareness": "wants smoothies outside home",
+        "objections": [
+          "motor weak",
+          "battery unsafe",
+          "hard to clean",
+          "will it crush ice"
+        ]
+      },
+      "channel": "Meta",
+      "audit_pressure": [
+        "Should reject unsupported crushes-ice claim",
+        "Should consider safety and proof gaps",
+        "Should avoid margin-damaging offer"
+      ]
+    }
+  ],
+  "auditor_required_output": {
+    "verdict_values": [
+      "PASS",
+      "PASS_WITH_NOTES",
+      "FAIL"
+    ],
+    "decision_values": {
+      "EXPERT_QUALITY_DECISION": [
+        "EXPERT_CONFIRMED",
+        "EXPERT_PARTIAL",
+        "EXPERT_NOT_CONFIRMED"
+      ],
+      "INDEPENDENCE_DECISION": [
+        "INDEPENDENT_ENOUGH",
+        "PARTIALLY_INDEPENDENT",
+        "NOT_INDEPENDENT"
+      ],
+      "SAFETY_DECISION": [
+        "SAFE_LOCAL_AUDIT_ONLY_NO_LIVE_NO_SPEND",
+        "UNSAFE"
+      ],
+      "FINAL_DECISION": [
+        "CLOSE_A8_R105",
+        "DO_NOT_CLOSE_A8_R105"
+      ]
+    }
+  }
+}

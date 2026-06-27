@@ -1,0 +1,276 @@
+{
+  "schema_version": "synapse.marketing_expert_audit_outputs.v1",
+  "island": "A8-R105",
+  "source_protocol": "A8_R105_MARKETING_EXPERT_AUDIT_PROTOCOL.json",
+  "source_engine": "A8-R104",
+  "case_count": 8,
+  "engine_outputs_are_not_ground_truth": true,
+  "requires_external_expert_scoring": true,
+  "case_outputs": [
+    {
+      "case_id": "R105-CASE-001",
+      "case_name": "Beauty serum with risky anti-aging claim",
+      "category": "beauty serum",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using beauty serum messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "High risk of unsafe cosmetic claims",
+        "Must avoid medical or guaranteed results",
+        "Should prefer proof-safe positioning"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-002",
+      "case_name": "Pet hair remover with clear demo proof",
+      "category": "pet hair remover",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using pet hair remover messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Should use concrete demo angle",
+        "Should avoid exaggerated universal claims",
+        "Should produce a specific hook, not generic pet copy"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-003",
+      "case_name": "Kitchen oil sprayer with tight margin",
+      "category": "kitchen oil sprayer",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "economic_fit",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using kitchen oil sprayer messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Should avoid discount-heavy offer because margin is tight",
+        "Should handle clogging objection honestly",
+        "Should avoid health claims beyond proof"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-004",
+      "case_name": "Posture corrector with medical-adjacent risk",
+      "category": "posture corrector",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using posture corrector messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Medical-adjacent claims must be rejected or softened",
+        "Operator review should be required",
+        "Should not imply treatment or pain relief guarantee"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-005",
+      "case_name": "LED strip lights generic saturated product",
+      "category": "LED strip lights",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using LED strip lights messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Should reject generic saturated angle",
+        "Should require a more specific use case or proof",
+        "Should avoid noun-swap lifestyle copy"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-006",
+      "case_name": "Travel bottle with strong demo and clear use case",
+      "category": "travel bottle",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using travel bottle messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Should select clear demo angle",
+        "Should handle leak objection",
+        "Should produce useful operator-facing output"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-007",
+      "case_name": "Car phone holder with weak proof and compatibility objections",
+      "category": "car phone holder",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using car phone holder messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Should reject universal/never claims",
+        "Should request compatibility proof",
+        "Should avoid overconfident claim"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    },
+    {
+      "case_id": "R105-CASE-008",
+      "case_name": "Mini blender with safety and durability concerns",
+      "category": "mini blender",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AUD-D001",
+        "selected_framework": "AudiencePersona",
+        "status": "blocked",
+        "triggers": [
+          "rule_applied",
+          "generic_rejected",
+          "operator_review_required",
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied",
+          "economic_fit",
+          "reject_discount_offer",
+          "claim_rejected",
+          "safe_rewrite"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AUD-D001; operator review required before using mini blender messaging.",
+        "blocked": true,
+        "rule_decision_count": 82
+      },
+      "audit_pressure": [
+        "Should reject unsupported crushes-ice claim",
+        "Should consider safety and proof gaps",
+        "Should avoid margin-damaging offer"
+      ],
+      "expert_score_required": true,
+      "note": "This is engine output for expert critique, not an expected-correct answer."
+    }
+  ]
+}
