@@ -1,0 +1,138 @@
+{
+  "schema_version": "synapse.marketing_methodology.adversarial_fixtures.v1",
+  "source_schema_version": "synapse.marketing_methodology.depth.v1",
+  "island": "A8-R103",
+  "title": "Adversarial fixtures for A8-R101 methodology predicates",
+  "does_not_implement_engine": true,
+  "does_not_touch_live_or_spend": true,
+  "scenarios": [
+    {
+      "id": "ADV-001",
+      "name": "poor_product_data",
+      "target_rule_id": "AGR-D001",
+      "context": {
+        "product_facts": [],
+        "buyer_state": "unknown",
+        "proof_available": [],
+        "claim_risk": "unclear",
+        "channel": "Meta",
+        "margin_profile": "unknown"
+      },
+      "expected_predicate_matched": false,
+      "expected_missing_fields": ["product_facts"],
+      "must_trigger": ["fallback", "operator_review_required"]
+    },
+    {
+      "id": "ADV-002",
+      "name": "insufficient_proof",
+      "target_rule_id": "PRF-D006",
+      "context": {
+        "product_facts": ["compact"],
+        "buyer_state": "problem-aware",
+        "proof_available": [],
+        "claim_risk": "medium",
+        "channel": "Meta",
+        "margin_profile": "acceptable"
+      },
+      "expected_predicate_matched": false,
+      "expected_missing_fields": ["proof_available"],
+      "must_trigger": ["proof_gap", "lower_claim_or_reject"]
+    },
+    {
+      "id": "ADV-003",
+      "name": "risky_claim",
+      "target_rule_id": "CLR-D003",
+      "context": {
+        "product_facts": ["skin contact accessory"],
+        "buyer_state": "skeptical",
+        "proof_available": ["source attribute"],
+        "claim_risk": "high",
+        "channel": "Meta",
+        "margin_profile": "acceptable"
+      },
+      "expected_predicate_matched": true,
+      "expected_missing_fields": [],
+      "must_trigger": ["claim_rejected", "safe_rewrite"]
+    },
+    {
+      "id": "ADV-004",
+      "name": "tight_margin_discount_offer",
+      "target_rule_id": "OFF-D002",
+      "context": {
+        "product_facts": ["low landed cost variance"],
+        "buyer_state": "problem-aware",
+        "proof_available": ["pricing trace"],
+        "claim_risk": "low",
+        "channel": "Meta",
+        "margin_profile": "tight"
+      },
+      "expected_predicate_matched": true,
+      "expected_missing_fields": [],
+      "must_trigger": ["reject_discount_offer", "operator_review_required"]
+    },
+    {
+      "id": "ADV-005",
+      "name": "competing_rules",
+      "target_rule_id": "ANG-D001",
+      "context": {
+        "product_facts": ["foldable", "leak resistant"],
+        "buyer_state": "problem-aware",
+        "proof_available": ["demo photo"],
+        "claim_risk": "low",
+        "channel": "Meta",
+        "margin_profile": "acceptable"
+      },
+      "expected_predicate_matched": true,
+      "expected_missing_fields": [],
+      "must_trigger": ["tie_break_applied"]
+    },
+    {
+      "id": "ADV-006",
+      "name": "meta_weak_proof",
+      "target_rule_id": "CHN-D002",
+      "context": {
+        "product_facts": ["visual use case"],
+        "buyer_state": "solution-aware",
+        "proof_available": ["weak demo"],
+        "claim_risk": "medium",
+        "channel": "Meta",
+        "margin_profile": "acceptable"
+      },
+      "expected_predicate_matched": true,
+      "expected_missing_fields": [],
+      "must_trigger": ["channel_constraint", "operator_review_required"]
+    },
+    {
+      "id": "ADV-007",
+      "name": "pretty_but_generic_hook",
+      "target_rule_id": "HOK-D008",
+      "context": {
+        "product_facts": [],
+        "buyer_state": "cold",
+        "proof_available": ["generic image"],
+        "claim_risk": "unclear",
+        "channel": "Meta",
+        "margin_profile": "acceptable"
+      },
+      "expected_predicate_matched": false,
+      "expected_missing_fields": ["product_facts"],
+      "must_trigger": ["generic_rejected"]
+    },
+    {
+      "id": "ADV-008",
+      "name": "cold_buyer_aggressive_cta",
+      "target_rule_id": "CTA-D002",
+      "context": {
+        "product_facts": ["simple use case"],
+        "buyer_state": "cold",
+        "proof_available": ["incomplete proof"],
+        "claim_risk": "medium",
+        "channel": "Meta",
+        "margin_profile": "acceptable"
+      },
+      "expected_predicate_matched": true,
+      "expected_missing_fields": [],
+      "must_trigger": ["cta_softened_or_rejected"]
+    }
+  ]
+}
