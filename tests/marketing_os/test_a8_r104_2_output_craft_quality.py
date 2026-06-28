@@ -123,6 +123,7 @@ def test_a8_r104_2_blocked_outputs_are_clean_primary_reason_not_trigger_dump() -
         assert "claim safety:" in output
         assert "Evidence checked:" in output
         assert "Operator action:" in output
+        assert "Operator review required" in output
         assert "Safe next step:" in output
         assert "claim_rejected" not in output
         assert "safe_rewrite" not in output

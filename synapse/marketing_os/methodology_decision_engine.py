@@ -581,6 +581,7 @@ def _safe_output_for_decision(
             f"Primary reason: {primary_reason} "
             f"Evidence checked: {facts}. "
             f"{action} "
+            f"Operator review required. "
             f"Safe next step: create a proof-safe rewrite for a {buyer_state} buyer on {channel}, then review before use."
         )
 
