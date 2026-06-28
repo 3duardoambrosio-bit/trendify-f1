@@ -1,0 +1,270 @@
+{
+  "schema_version": "synapse.marketing_expert_audit_outputs.v2",
+  "island": "A8-R105.1",
+  "source_protocol": "A8_R105_MARKETING_EXPERT_AUDIT_PROTOCOL.json",
+  "source_engine": "A8-R104.1",
+  "source_engine_head": "126a7ce687f69acb72925f17ee1f2dfe7a8c165f",
+  "source_engine_subject": "fix(marketing): remediate decision engine overblocking",
+  "case_count": 8,
+  "engine_outputs_are_not_ground_truth": true,
+  "requires_external_expert_scoring": true,
+  "r105_protocol_unchanged": true,
+  "rerun_after": "A8-R104.1",
+  "summary": {
+    "statuses": [
+      "accepted",
+      "blocked"
+    ],
+    "selected_rule_ids": [
+      "AGR-D001",
+      "ANG-D001",
+      "CLR-D003",
+      "OFF-D002"
+    ],
+    "accepted_count": 2,
+    "blocked_count": 6,
+    "all_blocked": false,
+    "all_aud_d001": false,
+    "all_outputs_identical": false
+  },
+  "case_outputs": [
+    {
+      "case_id": "R105-CASE-001",
+      "case_name": "Beauty serum with risky anti-aging claim",
+      "category": "beauty serum",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by CLR-D003 for beauty serum: claim_rejected, safe_rewrite, operator_review_required. Operator review required before using claims. Evidence checked: small 30 ml bottle, hydrating texture.",
+        "blocked": true,
+        "rule_decision_count": 4
+      },
+      "audit_pressure": [
+        "High risk of unsafe cosmetic claims",
+        "Must avoid medical or guaranteed results",
+        "Should prefer proof-safe positioning"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-002",
+      "case_name": "Pet hair remover with clear demo proof",
+      "category": "pet hair remover",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "ANG-D001",
+        "selected_framework": "AngleSelection",
+        "status": "accepted",
+        "triggers": [
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied"
+        ],
+        "operator_review_required": false,
+        "safe_output": "Show the pet hair remover use case with concrete proof: manual reusable roller, visible before-after cleaning demo.",
+        "blocked": false,
+        "rule_decision_count": 1
+      },
+      "audit_pressure": [
+        "Should use concrete demo angle",
+        "Should avoid exaggerated universal claims",
+        "Should produce a specific hook, not generic pet copy"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-003",
+      "case_name": "Kitchen oil sprayer with tight margin",
+      "category": "kitchen oil sprayer",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "OFF-D002",
+        "selected_framework": "OfferConstruction",
+        "status": "blocked",
+        "triggers": [
+          "channel_constraint",
+          "operator_review_required",
+          "cta_softened_or_rejected",
+          "reject_discount_offer"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by OFF-D002 for kitchen oil sprayer: channel_constraint, operator_review_required, cta_softened_or_rejected. Operator review required before using claims. Evidence checked: glass bottle, spray nozzle.",
+        "blocked": true,
+        "rule_decision_count": 6
+      },
+      "audit_pressure": [
+        "Should avoid discount-heavy offer because margin is tight",
+        "Should handle clogging objection honestly",
+        "Should avoid health claims beyond proof"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-004",
+      "case_name": "Posture corrector with medical-adjacent risk",
+      "category": "posture corrector",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by CLR-D003 for posture corrector: claim_rejected, safe_rewrite, operator_review_required. Operator review required before using claims. Evidence checked: elastic back brace, adjustable straps.",
+        "blocked": true,
+        "rule_decision_count": 4
+      },
+      "audit_pressure": [
+        "Medical-adjacent claims must be rejected or softened",
+        "Operator review should be required",
+        "Should not imply treatment or pain relief guarantee"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-005",
+      "case_name": "LED strip lights generic saturated product",
+      "category": "LED strip lights",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AGR-D001",
+        "selected_framework": "AntiGenericRejection",
+        "status": "blocked",
+        "triggers": [
+          "proof_gap",
+          "lower_claim_or_reject",
+          "operator_review_required",
+          "channel_constraint",
+          "cta_softened_or_rejected",
+          "fallback",
+          "generic_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by AGR-D001 for LED strip lights: proof_gap, lower_claim_or_reject, operator_review_required. Operator review required before using claims. Evidence checked: RGB remote, adhesive backing.",
+        "blocked": true,
+        "rule_decision_count": 6
+      },
+      "audit_pressure": [
+        "Should reject generic saturated angle",
+        "Should require a more specific use case or proof",
+        "Should avoid noun-swap lifestyle copy"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-006",
+      "case_name": "Travel bottle with strong demo and clear use case",
+      "category": "travel bottle",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "ANG-D001",
+        "selected_framework": "AngleSelection",
+        "status": "accepted",
+        "triggers": [
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied"
+        ],
+        "operator_review_required": false,
+        "safe_output": "Show the travel bottle use case with concrete proof: foldable silicone bottle, leak-resistant cap.",
+        "blocked": false,
+        "rule_decision_count": 1
+      },
+      "audit_pressure": [
+        "Should select clear demo angle",
+        "Should handle leak objection",
+        "Should produce useful operator-facing output"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-007",
+      "case_name": "Car phone holder with weak proof and compatibility objections",
+      "category": "car phone holder",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by CLR-D003 for car phone holder: claim_rejected, safe_rewrite, operator_review_required. Operator review required before using claims. Evidence checked: dashboard mount, adjustable clamp.",
+        "blocked": true,
+        "rule_decision_count": 4
+      },
+      "audit_pressure": [
+        "Should reject universal/never claims",
+        "Should request compatibility proof",
+        "Should avoid overconfident claim"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-008",
+      "case_name": "Mini blender with safety and durability concerns",
+      "category": "mini blender",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected",
+          "reject_discount_offer"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked by CLR-D003 for mini blender: claim_rejected, safe_rewrite, operator_review_required. Operator review required before using claims. Evidence checked: USB rechargeable, small cup.",
+        "blocked": true,
+        "rule_decision_count": 7
+      },
+      "audit_pressure": [
+        "Should reject unsupported crushes-ice claim",
+        "Should consider safety and proof gaps",
+        "Should avoid margin-damaging offer"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.1 remediation; evidence for expert critique, not ground truth."
+    }
+  ]
+}
