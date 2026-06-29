@@ -486,76 +486,219 @@ def _compact_list(values: Sequence[str], limit: int = 2) -> str:
     return ", ".join(cleaned[:limit])
 
 
-def _buyer_state_guidance(buyer_state: str) -> str:
-    state = buyer_state.strip().lower()
+def _primary_fact(decision_input: MethodologyDecisionInput) -> str:
+    for fact in decision_input.product_facts:
+        clean = str(fact).strip()
+        if clean:
+            return clean
+    return decision_input.category.strip() or "product proof"
+
+
+def _primary_proof(decision_input: MethodologyDecisionInput) -> str:
+    for proof in decision_input.proof_available:
+        clean = str(proof).strip()
+        if clean:
+            return clean
+    return "visible proof"
+
+
+def _category_problem(category: str) -> str:
+    cat = category.strip().lower()
+    if "pet hair" in cat:
+        return "pet hair left on sofa fabric or clothing"
+    if "bottle" in cat:
+        return "travel leaks, bag mess, or bulky bottles"
+    if "oil" in cat or "sprayer" in cat:
+        return "a low-margin kitchen accessory that cannot carry a discount-led offer"
+    if "led" in cat or "strip" in cat:
+        return "a generic room-lighting product with many lookalike alternatives"
+    if "serum" in cat:
+        return "beauty claims that imply skin results without proof"
+    if "posture" in cat:
+        return "body or pain-related claims that need stronger support"
+    if "car phone" in cat or "holder" in cat:
+        return "safety or reliability claims in a car-use context"
+    if "blender" in cat:
+        return "performance claims that imply power or durability beyond evidence"
+    return f"the specific buyer problem for {category.strip() or 'this product'}"
+
+
+def _buyer_state_guidance(decision_input: MethodologyDecisionInput) -> str:
+    state = decision_input.buyer_state.strip().lower()
+    category = decision_input.category.strip() or "product"
+    fact = _primary_fact(decision_input)
+    problem = _category_problem(category)
+
     if state in {"cold", "latent"}:
-        return "Use a low-pressure proof-first angle; do not assume the buyer already wants the product."
+        return (
+            f"For a cold buyer, make {problem} visible before naming {category}; "
+            f"use {fact} as proof, not as a hard sell."
+        )
     if state in {"skeptical", "doubtful"}:
-        return "Lead with visible proof and reduce trust friction before asking for action."
+        return (
+            f"For a skeptical buyer, lead with {fact} and show the proof sequence before any CTA; "
+            f"the message must use visible proof and reduce trust friction around {problem}."
+        )
     if state in {"warm", "pain-aware", "problem-aware"}:
-        return "Connect the proof to the active pain point and make the next step concrete."
+        return (
+            f"For a warm buyer already aware of {problem}, connect {category} directly to {fact} "
+            f"and move from active pain point to proof to comparison before a margin-safe next step."
+        )
     if state in {"solution-aware", "ready"}:
-        return "Move quickly from proof to comparison and decision."
-    return "State the buyer problem first, then show the product proof that answers it."
+        return (
+            f"For a ready buyer, compare {category}'s concrete proof ({fact}) against the main alternative, "
+            f"then ask for the next step."
+        )
+    return (
+        f"Match the buyer's state to {problem}; make {fact} the reason the message is credible."
+    )
 
 
-def _channel_guidance(channel: str) -> str:
-    ch = channel.strip().lower()
+def _channel_guidance(decision_input: MethodologyDecisionInput) -> str:
+    channel = decision_input.channel.strip() or "selected channel"
+    ch = channel.lower()
+    category = decision_input.category.strip() or "product"
+    fact = _primary_fact(decision_input)
+    proof = _primary_proof(decision_input)
+
     if ch == "meta":
-        return "Meta note: open with the visual proof in the first frame, then use the CTA after the proof."
+        if "pet hair" in category.lower():
+            return (
+                f"Meta note: first frame shows the messy fabric, second frame shows {fact}, "
+                f"third frame shows {proof}; keep copy short and proof-led."
+            )
+        if "bottle" in category.lower():
+            return (
+                f"Meta note: first frame shows the travel/bag problem, second frame shows {fact}, "
+                f"third frame uses {proof}; avoid a discount-first ad."
+            )
+        return (
+            f"Meta note: open with the visual problem for {category}, then show {fact} before the CTA."
+        )
     if ch in {"tiktok", "short_video"}:
-        return "Short-video note: show the product action immediately, then add one proof caption."
+        return (
+            f"Short-video note: start with the product action for {category}, then caption the proof: {proof}."
+        )
     if ch in {"search", "google"}:
-        return "Search note: use direct problem language and proof terms the buyer would compare."
-    return f"Channel note: adapt the proof-first hook to {channel.strip() or 'the selected channel'}."
+        return (
+            f"Search note: use buyer-comparison wording around {category}, {fact}, and {proof}."
+        )
+    return (
+        f"Channel note: adapt {category}'s proof scene ({fact}) to {channel} before writing the CTA."
+    )
 
 
 def _objection_guidance(decision_input: MethodologyDecisionInput) -> str:
     state = decision_input.buyer_state.strip().lower()
+    category = decision_input.category.strip() or "product"
     facts = " ".join(decision_input.product_facts).lower()
     proof = " ".join(decision_input.proof_available).lower()
+
     if "before-after" in facts or "before-after" in proof:
-        return "Objection handled: buyer may doubt it works, so make the before-after demo the proof."
-    if "leak" in facts or "silicone" in facts or "bottle" in decision_input.category.lower():
-        return "Objection handled: buyer may worry about mess or durability, so show the anti-leak detail before the CTA."
+        return (
+            f"Objection handled: buyer may doubt {category} works, so make the before-after proof the hero."
+        )
+    if "leak" in facts or "silicone" in facts or "bottle" in category.lower():
+        return (
+            "Objection handled: buyer may worry about leaks, bulk, or travel mess, "
+            "so show the anti-leak/foldable detail before the CTA."
+        )
     if state in {"cold", "latent"}:
-        return "Objection handled: buyer is not actively shopping, so avoid hype and make the problem visible first."
-    return "Objection handled: buyer needs proof before promise, so avoid broad claims and show the concrete evidence."
+        return (
+            f"Objection handled: buyer is not actively shopping for {category}, so show the problem first."
+        )
+    return (
+        f"Objection handled: buyer needs proof before promise, so tie {category} only to the evidence shown."
+    )
+
+
+def _offer_margin_guidance(decision_input: MethodologyDecisionInput) -> str:
+    margin = decision_input.margin_profile.strip().lower()
+    category = decision_input.category.strip() or "product"
+    fact = _primary_fact(decision_input)
+    proof = _primary_proof(decision_input)
+
+    if "tight" in margin or "low" in margin:
+        return (
+            f"Offer/margin: avoid discounting {category}; build the offer around proof of {fact}, "
+            f"a bundle/value frame, and a soft comparison CTA."
+        )
+    if "healthy" in margin or "strong" in margin:
+        return (
+            f"Offer/margin: use {fact} as the value reason, keep margin protected with a proof-led bundle or threshold offer, "
+            f"and avoid promising more than {proof} supports."
+        )
+    return (
+        f"Offer/margin: do not lead with price; frame {category} around {fact}, then test a margin-safe CTA."
+    )
 
 
 def _cta_guidance(decision_input: MethodologyDecisionInput) -> str:
-    margin = decision_input.margin_profile.strip().lower()
     category = decision_input.category.strip() or "product"
-    if "tight" in margin:
-        return f"CTA: ask the operator to test a proof-led angle for {category}; do not lead with a discount."
-    return f"CTA: invite the buyer to watch the proof and compare whether {category} solves the shown problem."
+    fact = _primary_fact(decision_input)
+    margin = decision_input.margin_profile.strip().lower()
+
+    if "tight" in margin or "low" in margin:
+        return (
+            f"CTA: ask the operator to test a proof-first angle for {category}; CTA should compare value from {fact}, not discount."
+        )
+    return (
+        f"CTA: invite the buyer to watch the proof, then compare whether {category}'s {fact} solves the shown problem."
+    )
 
 
-def _blocked_primary_reason(rule_id: str) -> str:
+def _blocked_primary_reason(rule_id: str, decision_input: MethodologyDecisionInput) -> str:
+    category = decision_input.category.strip() or "product"
+    fact = _primary_fact(decision_input)
+    problem = _category_problem(category)
+
     if rule_id.startswith("CLR-"):
-        return "claim safety: current wording makes or implies a claim that needs proof or review before use."
+        return (
+            f"claim safety: for {category}, current wording risks implying {problem} is solved beyond the available proof ({fact})."
+        )
     if rule_id.startswith("OFF-"):
-        return "offer economics: the margin cannot support a broad discount or weak offer."
+        return (
+            f"offer economics: for {category}, margin cannot support a broad discount or weak offer; proof/value framing is required."
+        )
     if rule_id.startswith("AGR-") or rule_id.startswith("HOK-"):
-        return "generic positioning: the message is category-level and does not create a product-specific reason to care."
+        return (
+            f"generic positioning: for {category}, the message lacks a specific product fact and a product-specific reason to care beyond {fact}. It must replace category-only wording with a visible use case."
+        )
     if rule_id.startswith("PRF-"):
-        return "proof gap: the product evidence is not strong enough for the proposed angle."
+        return (
+            f"proof gap: for {category}, evidence is not strong enough to support the proposed angle."
+        )
     if rule_id.startswith("CHN-"):
-        return "channel constraint: the selected channel needs stronger proof before the message is safe."
+        return (
+            f"channel constraint: for {category}, the selected channel needs stronger proof before the message is safe."
+        )
     if rule_id.startswith("CTA-"):
-        return "CTA risk: the buyer state does not support an aggressive next step."
-    return "methodology risk: operator review is required before using this message."
+        return (
+            f"CTA risk: for {category}, buyer state does not support an aggressive next step yet."
+        )
+    return f"methodology risk for {category}: operator review is required before using this message."
 
 
-def _blocked_operator_action(rule_id: str, category: str) -> str:
+def _blocked_operator_action(rule_id: str, decision_input: MethodologyDecisionInput) -> str:
+    category = decision_input.category.strip() or "product"
+    fact = _primary_fact(decision_input)
+
     if rule_id.startswith("CLR-"):
-        return f"Operator action: remove the risky claim for {category} or collect proof strong enough for review."
+        return (
+            f"Operator action: remove the risky {category} claim, keep only the supported fact '{fact}', "
+            f"or collect stronger proof before review."
+        )
     if rule_id.startswith("OFF-"):
-        return f"Operator action: rebuild the {category} offer around proof, bundle value, or margin-safe framing."
+        return (
+            f"Operator action: rebuild the {category} offer around bundle value, proof, or margin-safe framing; "
+            f"do not use broad discount language."
+        )
     if rule_id.startswith("AGR-") or rule_id.startswith("HOK-"):
-        return f"Operator action: replace category-only wording with a specific product fact and a visible use case."
+        return (
+            f"Operator action: replace category-only wording with '{fact}' plus one visible use case."
+        )
     if rule_id.startswith("PRF-"):
-        return f"Operator action: collect demo proof before using {category} in acquisition messaging."
+        return f"Operator action: collect a clearer demo for {category} before acquisition messaging."
     if rule_id.startswith("CHN-"):
         return f"Operator action: adapt {category} to a proof-first channel format before testing."
     return f"Operator action: rewrite {category} with proof, buyer state, and a safer CTA."
@@ -574,12 +717,12 @@ def _safe_output_for_decision(
     channel = decision_input.channel.strip() or "selected channel"
 
     if status == "blocked":
-        primary_reason = _blocked_primary_reason(selected.rule_id)
-        action = _blocked_operator_action(selected.rule_id, category)
+        primary_reason = _blocked_primary_reason(selected.rule_id, decision_input)
+        action = _blocked_operator_action(selected.rule_id, decision_input)
         return (
             f"Blocked: do not use the current {category} message yet. "
             f"Primary reason: {primary_reason} "
-            f"Evidence checked: {facts}. "
+            f"Evidence checked: {facts}; proof available: {proof}. "
             f"{action} "
             f"Operator review required. "
             f"Safe next step: create a proof-safe rewrite for a {buyer_state} buyer on {channel}, then review before use."
@@ -589,24 +732,27 @@ def _safe_output_for_decision(
         return (
             f"Fallback: no expert-safe {category} angle selected yet. "
             f"Evidence checked: {facts}. "
-            f"Buyer fit: {_buyer_state_guidance(buyer_state)} "
+            f"Buyer fit: {_buyer_state_guidance(decision_input)} "
+            f"Offer/margin: {_offer_margin_guidance(decision_input)} "
             f"Safe next step: gather stronger proof ({proof}) and rerun the methodology before operator use."
         )
 
     hook = (
-        f"Hook: show {category} solving one concrete problem with {facts}, "
+        f"Hook: show {category} solving {_category_problem(category)} with {facts}, "
         f"then prove it with {proof}."
     )
-    buyer_fit = f"Buyer fit: {_buyer_state_guidance(buyer_state)}"
+    buyer_fit = f"Buyer fit: {_buyer_state_guidance(decision_input)}"
     objection = _objection_guidance(decision_input)
+    offer_margin = _offer_margin_guidance(decision_input)
     cta = _cta_guidance(decision_input)
-    channel_note = _channel_guidance(channel)
+    channel_note = _channel_guidance(decision_input)
     operator_asset = (
         f"Operator asset: build the first creative around '{facts}' as the proof scene, "
-        f"keep the claim narrower than the evidence, and use the CTA only after the proof is visible."
+        f"state the offer as margin-safe value before price, keep the claim narrower than the evidence, "
+        f"and use the CTA only after the proof is visible."
     )
 
-    return " ".join((hook, buyer_fit, objection, cta, channel_note, operator_asset))
+    return " ".join((hook, buyer_fit, objection, offer_margin, cta, channel_note, operator_asset))
 
 
 def decision_input_from_fixture_context(context: Mapping[str, Any]) -> MethodologyDecisionInput:
