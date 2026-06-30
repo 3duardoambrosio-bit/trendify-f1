@@ -154,11 +154,51 @@ def _parse_live_api_flag(raw: str) -> bool:
     return False
 
 
+def _require_standard_live_write_guards() -> None:
+    """Require every standard live/write guard before Meta transport.
+
+    The legacy adapter flag SYNAPSE_META_LIVE remains necessary, but it is
+    no longer sufficient. Meta publish transport must also satisfy the global
+    SYNAPSE_LIVE_META and SYNAPSE_LIVE_WRITE gates, and dry-run must be off.
+    """
+
+    required_enabled = {
+        "SYNAPSE_META_LIVE": os.getenv("SYNAPSE_META_LIVE", ""),
+        "SYNAPSE_LIVE_META": os.getenv("SYNAPSE_LIVE_META", ""),
+        "SYNAPSE_LIVE_WRITE": os.getenv("SYNAPSE_LIVE_WRITE", ""),
+    }
+    missing = [
+        name
+        for name, value in required_enabled.items()
+        if not _parse_live_api_flag(str(value))
+    ]
+    dry_run = os.getenv("SYNAPSE_DRY_RUN", "1").strip()
+    if dry_run != "0":
+        missing.append("SYNAPSE_DRY_RUN=0")
+
+    if missing:
+        raise NotImplementedError(
+            "Live Meta campaign transport requires explicit canonical live intent. "
+            "Set SYNAPSE_META_LIVE=1, SYNAPSE_LIVE_META=1, SYNAPSE_LIVE_WRITE=1; "
+            "network_guard still requires SYNAPSE_DRY_RUN=0 before transport. "
+            "Default/off mode stays mock/compat. Missing or disabled: "
+            + ", ".join(missing)
+        )
+
+
 def _is_live_transport_enabled() -> bool:
     # Canonical live intent only. SYNAPSE_FLAG_* is intentionally ignored for
     # live/write decisions; network_guard remains the second gate before I/O.
     flags = FeatureFlags.from_env()
-    return bool(getattr(flags, "meta_live", False))
+    legacy_meta_live = bool(getattr(flags, "meta_live", False)) or _parse_live_api_flag(
+        os.getenv("SYNAPSE_META_LIVE", "")
+    )
+    return (
+        legacy_meta_live
+        and _parse_live_api_flag(os.getenv("SYNAPSE_LIVE_META", ""))
+        and _parse_live_api_flag(os.getenv("SYNAPSE_LIVE_WRITE", ""))
+        and os.getenv("SYNAPSE_DRY_RUN", "1").strip() == "0"
+    )
 
 
 def _raise_live_not_enabled_for_create() -> None:
@@ -185,6 +225,7 @@ def call_create_campaign(payload: MetaCampaignPayload | Mapping[str, Any]) -> Di
     - default/off mode => NotImplementedError
     - explicit live gate ON => real HTTP transport
     """
+    _require_standard_live_write_guards()
     if not _is_live_transport_enabled():
         _raise_live_not_enabled_for_create()
 
@@ -218,6 +259,7 @@ def call_pause_campaign(request: MetaPauseRequest | str) -> Dict[str, Any]:
     - default/off mode => NotImplementedError
     - explicit live gate ON => real HTTP transport
     """
+    _require_standard_live_write_guards()
     if not _is_live_transport_enabled():
         _raise_live_not_enabled_for_pause()
 

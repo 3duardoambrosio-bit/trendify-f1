@@ -20,6 +20,8 @@ from synapse.meta.publisher_contracts import (
 def _live_env() -> dict[str, str]:
     return {
         "SYNAPSE_META_LIVE": "1",
+        "SYNAPSE_LIVE_META": "1",
+        "SYNAPSE_LIVE_WRITE": "1",
         "SYNAPSE_DRY_RUN": "0",
         "META_ACCESS_TOKEN": "tok_test_123",
         "META_AD_ACCOUNT_ID": "123456789",
@@ -27,14 +29,14 @@ def _live_env() -> dict[str, str]:
 
 
 def test_create_campaign_off_mode_raises_not_implemented() -> None:
-    with patch.dict(os.environ, {"SYNAPSE_META_LIVE": "0", "SYNAPSE_FLAG_META_LIVE_API": "1"}, clear=False):
-        with pytest.raises(NotImplementedError, match="Live Meta campaign creation"):
+    with patch.dict(os.environ, {"SYNAPSE_META_LIVE": "0", "SYNAPSE_LIVE_META": "1", "SYNAPSE_LIVE_WRITE": "1", "SYNAPSE_DRY_RUN": "0", "SYNAPSE_FLAG_META_LIVE_API": "1"}, clear=False):
+        with pytest.raises(NotImplementedError, match="Live Meta campaign transport requires explicit canonical live intent"):
             call_create_campaign(MetaCampaignPayload(name="Adapter Contract"))
 
 
 def test_pause_campaign_off_mode_raises_not_implemented() -> None:
-    with patch.dict(os.environ, {"SYNAPSE_META_LIVE": "0", "SYNAPSE_FLAG_META_LIVE_API": "1"}, clear=False):
-        with pytest.raises(NotImplementedError, match="Live Meta campaign pause"):
+    with patch.dict(os.environ, {"SYNAPSE_META_LIVE": "0", "SYNAPSE_LIVE_META": "1", "SYNAPSE_LIVE_WRITE": "1", "SYNAPSE_DRY_RUN": "0", "SYNAPSE_FLAG_META_LIVE_API": "1"}, clear=False):
+        with pytest.raises(NotImplementedError, match="Live Meta campaign transport requires explicit canonical live intent"):
             call_pause_campaign(MetaPauseRequest(campaign_id="camp-live"))
 
 
@@ -87,6 +89,8 @@ def test_pause_campaign_live_posts_form_and_omits_campaign_id() -> None:
         os.environ,
         {
             "SYNAPSE_META_LIVE": "1",
+            "SYNAPSE_LIVE_META": "1",
+            "SYNAPSE_LIVE_WRITE": "1",
             "SYNAPSE_DRY_RUN": "0",
             "META_ACCESS_TOKEN": "tok_test_123",
         },
@@ -115,6 +119,8 @@ def test_create_campaign_live_requires_access_token() -> None:
         os.environ,
         {
             "SYNAPSE_META_LIVE": "1",
+            "SYNAPSE_LIVE_META": "1",
+            "SYNAPSE_LIVE_WRITE": "1",
             "SYNAPSE_DRY_RUN": "0",
             "META_AD_ACCOUNT_ID": "123456789",
         },
@@ -129,6 +135,8 @@ def test_pause_campaign_live_requires_campaign_id() -> None:
         os.environ,
         {
             "SYNAPSE_META_LIVE": "1",
+            "SYNAPSE_LIVE_META": "1",
+            "SYNAPSE_LIVE_WRITE": "1",
             "SYNAPSE_DRY_RUN": "0",
             "META_ACCESS_TOKEN": "tok_test_123",
         },
