@@ -1,0 +1,426 @@
+{
+  "fixture_id": "a8_r109a_recommended",
+  "source_kind": "frozen_local_fixture",
+  "scenario": "recommended",
+  "product": {
+    "product_id": "dropi-mx-88121",
+    "name": "Organizador de Cables Magnetico Pro",
+    "category": "hogar_y_oficina",
+    "supplier": "Dropi MX (fixture)",
+    "market": "MX",
+    "status": "candidate"
+  },
+  "decision": {
+    "outcome": "RECOMMENDED_FOR_PREPARE",
+    "permission_gate": "PASS",
+    "reason": "Score sobre umbral con margen de contribucion positivo y riesgo de claims bajo.",
+    "reason_codes": ["SCORE_ABOVE_THRESHOLD", "MARGIN_OK", "CLAIMS_REVIEWED"],
+    "caveats": [
+      "Competencia moderada en Meta MX; validar CPM real con datos de mercado en Fase 2.",
+      "Brief sin notas de competidores; completar antes de escalar creativos."
+    ]
+  },
+  "economics": {
+    "currency": "MXN",
+    "price_mxn": 349.0,
+    "compare_at_price_mxn": 449.0,
+    "product_cost_mxn": 128.0,
+    "shipping_cost_mxn": 55.0,
+    "payment_fee_mxn": 14.0,
+    "contribution_margin_mxn": 152.0,
+    "contribution_margin_percent": 43.6,
+    "breakeven_cpa_mxn": 152.0,
+    "notes": "Numeros locales del fixture; sin datos reales de mercado."
+  },
+  "scores": {
+    "opportunity_score": 7.8,
+    "threshold": 7.0,
+    "demand_signal": 7.5,
+    "competition_pressure": 6.2,
+    "logistics_risk": 3.1,
+    "claim_risk": 2.4
+  },
+  "operator_input": {
+    "target_audience": "Personas de 25-45 en Mexico que trabajan o estudian desde casa con escritorio propio.",
+    "pain_points": [
+      "Los cables se caen detras del escritorio y hay que pescarlos.",
+      "Cables enredados entre trabajo, celular y tablet."
+    ],
+    "desires": [
+      "Escritorio ordenado sin gastar en muebles nuevos.",
+      "Encontrar cada cable a la mano al momento de cargar."
+    ],
+    "objections": [
+      "Ya probe organizadores adhesivos y se despegan.",
+      "Parece algo que puedo improvisar con cinta."
+    ],
+    "differentiators": [
+      "Base magnetica con respaldo antideslizante reposicionable.",
+      "Seis ranuras en un solo modulo compacto."
+    ],
+    "tone_of_voice": "Directo, practico, sin exageraciones; espanol de Mexico.",
+    "market_context": "Home office consolidado en MX; accesorios de organizacion de escritorio con demanda estable.",
+    "customer_language": [
+      "se me cae el cable",
+      "cables enredados",
+      "escritorio hecho un desastre"
+    ],
+    "proof_elements": [
+      "Especificacion del fabricante: capacidad de 6 cables.",
+      "Video de demostracion del proveedor mostrando la base antideslizante."
+    ],
+    "competitor_notes": ""
+  },
+  "claim_guard": {
+    "allowed_claims": [
+      "Sujeta hasta 6 cables segun especificacion del fabricante.",
+      "Base magnetica con respaldo antideslizante.",
+      "Instalacion sin herramientas."
+    ],
+    "risky_claims": [
+      "\"Nunca mas se te caera un cable\": promesa absoluta; usar redaccion condicional."
+    ],
+    "prohibited_claims": [
+      "Claims de productividad medible sin evidencia de mercado."
+    ],
+    "safe_wording": [
+      "Usar \"ayuda a mantener\" en lugar de \"garantiza\".",
+      "Citar la capacidad como especificacion del fabricante."
+    ],
+    "claim_guard_summary": "Riesgo de claims bajo; evitar promesas absolutas y claims de productividad medible."
+  },
+  "shopify": {
+    "title": "Organizador de Cables Magnetico Pro",
+    "subtitle": "Escritorio ordenado sin adhesivos que fallan",
+    "short_description": "Organizador magnetico para hasta 6 cables de carga y datos. Base con respaldo antideslizante, sin herramientas y sin adhesivos permanentes.",
+    "long_description": "El Organizador de Cables Magnetico Pro mantiene tus cables de carga y datos en su lugar sobre el escritorio o el buro. Sujeta hasta 6 cables segun especificacion del fabricante, con una base magnetica de respaldo antideslizante que se reubica sin danar la superficie. Pensado para home office en Mexico: se instala sin herramientas y sin adhesivos permanentes.",
+    "bullets": [
+      "Sujeta hasta 6 cables de carga y datos.",
+      "Base magnetica con respaldo antideslizante.",
+      "Instalacion sin herramientas ni adhesivos permanentes.",
+      "Compatible con cables USB-A, USB-C y Lightning.",
+      "Tamano compacto para escritorio, buro o cocina."
+    ],
+    "benefits": [
+      "Cables siempre a la mano al momento de cargar.",
+      "Evita pescar cables caidos detras del mueble.",
+      "Se reubica sin danar la superficie."
+    ],
+    "specifications": [
+      {"name": "Material", "value": "ABS con iman de neodimio"},
+      {"name": "Capacidad", "value": "6 ranuras para cable"},
+      {"name": "Dimensiones", "value": "9.5 x 3.2 x 1.8 cm"},
+      {"name": "Peso", "value": "48 g"}
+    ],
+    "faq": [
+      {
+        "q": "Raya o dana el escritorio?",
+        "a": "No. La base usa respaldo antideslizante reposicionable; no usa adhesivo permanente."
+      },
+      {
+        "q": "Funciona con cables gruesos?",
+        "a": "Sujeta cables de hasta 5 mm de diametro, el estandar de cables de carga."
+      },
+      {
+        "q": "Cuando llega mi pedido?",
+        "a": "Tiempos de envio se confirman con el proveedor antes de publicar; este paquete es de preparacion local."
+      }
+    ],
+    "seo_title": "Organizador de Cables Magnetico Pro | Escritorio sin enredos",
+    "seo_meta_description": "Organizador magnetico para hasta 6 cables. Base antideslizante, instalacion sin herramientas. Ideal para home office.",
+    "handle": "organizador-cables-magnetico-pro",
+    "tags": ["organizador", "cables", "home-office", "escritorio", "magnetico"],
+    "category": "Hogar y Oficina > Organizacion",
+    "shipping_note": "Envio nacional estandar; tiempos y costos se confirman con el proveedor antes de publicar.",
+    "refund_claim_note": "Politica de devolucion de 30 dias por defecto; confirmar con el proveedor antes de publicar.",
+    "claim_safe_disclaimer": "Imagenes de referencia del proveedor. Capacidades sujetas a especificaciones del fabricante.",
+    "image_checklist": [
+      "Foto principal sobre escritorio real.",
+      "Detalle de las 6 ranuras con cables colocados.",
+      "Foto de la base antideslizante.",
+      "Foto del empaque real del proveedor."
+    ],
+    "publish_checklist": [
+      "Confirmar stock y costo con el proveedor Dropi.",
+      "Revisar claim guard antes de publicar.",
+      "Cargar fotos reales del producto.",
+      "Verificar precio y precio de comparacion en la tienda."
+    ],
+    "missing_inputs": ["fotos_reales_producto", "confirmacion_stock_proveedor"]
+  },
+  "marketing": {
+    "strategy_summary": "Angulo de orden y practicidad para home office; entrada por dolor cotidiano (cables caidos y enredados) con demostracion visual simple.",
+    "core_angle": "Deja de pescar cables detras del escritorio.",
+    "why_this_angle": "El dolor es visual, universal en home office y demostrable en video corto sin claims de rendimiento.",
+    "buyer_profile": "Persona de 25-45 que trabaja o estudia desde casa en Mexico, con escritorio compartido entre trabajo y uso personal.",
+    "hooks": [
+      "Otra vez se te cayo el cable detras del escritorio?",
+      "Tu escritorio no esta desordenado: le falta esto.",
+      "El accesorio de menos de $350 que ordena tu home office.",
+      "Regalo util de menos de $350: si existe.",
+      "Tu setup merece dejar de pelear con los cables."
+    ],
+    "headlines": [
+      "Cables en su lugar, siempre a la mano.",
+      "Orden magnetico para tu escritorio.",
+      "Se acabo pescar cables."
+    ],
+    "primary_texts": [
+      "Sujeta hasta 6 cables de carga y datos en un solo modulo compacto. Base magnetica con respaldo antideslizante: se instala sin herramientas y se reubica sin danar tu escritorio.",
+      "Si trabajas desde casa, ya conoces el ritual de pescar el cable que se cayo detras del escritorio. Este organizador magnetico lo mantiene a la mano, junto con otros 5."
+    ],
+    "short_ads": [
+      "Cables caidos detras del escritorio? Este organizador magnetico los mantiene a la mano. Hasta 6 cables, sin herramientas.",
+      "Home office ordenado con un solo accesorio: organizador magnetico para 6 cables, base antideslizante."
+    ],
+    "long_ads": [
+      "El cable siempre se cae en el peor momento. Este organizador magnetico sujeta hasta 6 cables de carga y datos sobre tu escritorio, con base de respaldo antideslizante que se reubica sin danar la superficie. Sin herramientas, sin adhesivos permanentes. Pedido bajo demanda para Mexico."
+    ],
+    "captions": [
+      "El fin del cable perdido detras del escritorio.",
+      "6 cables, un solo lugar."
+    ],
+    "ugc_scripts": [
+      "Apertura: mostrar el cable cayendo detras del escritorio. Desarrollo: colocar el organizador y acomodar 6 cables. Cierre: jalar un cable y mostrar que el resto queda en su lugar."
+    ],
+    "video_scripts": [
+      "Escena 1 (0-3s): cable cayendo detras del escritorio. Escena 2 (3-10s): instalacion sin herramientas. Escena 3 (10-20s): 6 cables ordenados, tiron de prueba. Cierre: oferta y precio."
+    ],
+    "image_ad_concepts": [
+      "Antes/despues del escritorio con y sin organizador.",
+      "Primer plano de las 6 ranuras con cables de colores."
+    ],
+    "channel_packs": [
+      {
+        "channel": "meta_feed",
+        "objective": "trafico_a_producto",
+        "notes": "Usar demostracion antes/despues; sin claims absolutos."
+      },
+      {
+        "channel": "video_corto_organico",
+        "objective": "prueba_creativa_sin_gasto",
+        "notes": "Guion UGC de 20 segundos; medir retencion manualmente."
+      }
+    ],
+    "testing_plan": {
+      "phase_1": "Publicar 2 creativos de demostracion con el mismo copy base.",
+      "phase_2": "Iterar el hook ganador con 2 variantes de apertura.",
+      "budget_note": "Sin gasto en Fase 1; plan preparado para ejecucion del operador."
+    },
+    "angle_matrix": [
+      {
+        "angle_id": "A1",
+        "angle_name": "Dolor cotidiano: el cable perdido",
+        "promise_type": "alivio_de_dolor",
+        "target_segment": "Home office MX 25-45 con escritorio propio.",
+        "pain_addressed": "Los cables se caen detras del escritorio y hay que pescarlos.",
+        "desire_addressed": "Encontrar cada cable a la mano al momento de cargar.",
+        "objection_addressed": "Ya probe organizadores adhesivos y se despegan.",
+        "proof_needed": "Video de demostracion del proveedor mostrando la base antideslizante.",
+        "claim_risk": "low",
+        "safe_wording": "Ayuda a mantener los cables a la mano; sin promesas absolutas.",
+        "why_it_might_work": "El dolor es visual, universal en home office y demostrable en los primeros 3 segundos.",
+        "why_it_might_fail": "El dolor puede percibirse trivial y no justificar la compra inmediata."
+      },
+      {
+        "angle_id": "A2",
+        "angle_name": "Orden visual del escritorio",
+        "promise_type": "aspiracional_orden",
+        "target_segment": "Estudiantes con escritorio propio.",
+        "pain_addressed": "Escritorio hecho un desastre entre clases y trabajo.",
+        "desire_addressed": "Escritorio ordenado sin gastar en muebles nuevos.",
+        "objection_addressed": "Parece algo que puedo improvisar con cinta.",
+        "proof_needed": "Fotos reales antes/despues del escritorio.",
+        "claim_risk": "medium",
+        "safe_wording": "Un escritorio mas ordenado; nunca prometer productividad medible.",
+        "why_it_might_work": "El antes/despues genera scroll-stop y es facil de producir.",
+        "why_it_might_fail": "Roza el claim prohibido de productividad medible; exige disciplina de copy."
+      },
+      {
+        "angle_id": "A3",
+        "angle_name": "Regalo practico de bajo riesgo",
+        "promise_type": "regalo_practico",
+        "target_segment": "Compradores de accesorios de organizacion para regalar.",
+        "pain_addressed": "No saber que regalar util sin gastar de mas.",
+        "desire_addressed": "Un regalo util de menos de $350.",
+        "objection_addressed": "Un organizador no parece suficiente regalo.",
+        "proof_needed": "Foto del empaque real del proveedor.",
+        "claim_risk": "low",
+        "safe_wording": "Describir como accesorio practico; sin promesas de satisfaccion del receptor.",
+        "why_it_might_work": "Precio de regalo y utilidad inmediata percibida.",
+        "why_it_might_fail": "Fuera de temporada de regalos el angulo pierde fuerza."
+      }
+    ],
+    "creative_hypotheses": [
+      {
+        "hypothesis_id": "H1",
+        "hypothesis": "El hook de dolor (cable caido) supera al hook aspiracional en CTR.",
+        "variable_tested": "hook de apertura",
+        "expected_signal": "CTR mayor en la variante de dolor con alcance comparable.",
+        "failure_signal": "CTR plano o menor que la variante aspiracional.",
+        "minimum_evidence_needed": "Dos creativos con el mismo copy base y alcance comparable observado por el operador.",
+        "channel": "meta_feed",
+        "linked_angle_id": "A1"
+      },
+      {
+        "hypothesis_id": "H2",
+        "hypothesis": "El formato demostracion retiene mas que la foto estatica en video corto.",
+        "variable_tested": "formato del creativo",
+        "expected_signal": "Retencion de 3 segundos mayor en la demostracion.",
+        "failure_signal": "Retencion igual o menor que la foto estatica.",
+        "minimum_evidence_needed": "Dos publicaciones organicas comparables observadas por el operador.",
+        "channel": "video_corto_organico",
+        "linked_angle_id": "A2"
+      },
+      {
+        "hypothesis_id": "H3",
+        "hypothesis": "Mostrar el precio en el creativo no degrada el CTR del angulo de regalo.",
+        "variable_tested": "precio visible en el creativo",
+        "expected_signal": "CTR estable con precio visible.",
+        "failure_signal": "Caida clara de CTR al mostrar el precio.",
+        "minimum_evidence_needed": "Una tanda con y sin precio visible sobre el mismo publico.",
+        "channel": "meta_feed",
+        "linked_angle_id": "A3"
+      }
+    ],
+    "claim_risk_by_copy": [
+      {
+        "copy_key": "hooks",
+        "risk_level": "low",
+        "risky_terms": [],
+        "prohibited_terms": [],
+        "safe_rewrite": "Mantener preguntas de dolor sin promesa absoluta.",
+        "reason": "Hooks descriptivos de dolor cotidiano; no contienen claims."
+      },
+      {
+        "copy_key": "headlines",
+        "risk_level": "medium",
+        "risky_terms": ["siempre"],
+        "prohibited_terms": [],
+        "safe_rewrite": "Cables en su lugar, a la mano.",
+        "reason": "El absoluto 'siempre' roza la promesa absoluta senalada por el claim guard."
+      },
+      {
+        "copy_key": "primary_texts",
+        "risk_level": "low",
+        "risky_terms": [],
+        "prohibited_terms": [],
+        "safe_rewrite": "Mantener las especificaciones del fabricante como unica fuente de capacidad.",
+        "reason": "Texto basado en especificaciones verificables del fabricante."
+      },
+      {
+        "copy_key": "short_ads",
+        "risk_level": "low",
+        "risky_terms": [],
+        "prohibited_terms": [],
+        "safe_rewrite": "Mantener beneficios descriptivos sin cuantificar resultados.",
+        "reason": "Anuncios cortos descriptivos; sin promesas de resultado."
+      },
+      {
+        "copy_key": "long_ads",
+        "risk_level": "medium",
+        "risky_terms": ["siempre se cae"],
+        "prohibited_terms": [],
+        "safe_rewrite": "El cable se cae en el peor momento.",
+        "reason": "El 'siempre' aplica al dolor y no a la promesa; aceptable con revision, no repetirlo en la promesa."
+      }
+    ],
+    "testing_plan_v2": {
+      "first_test_budget_boundary_dry_run_only": "Boundary teorico de primera prueba: hasta MXN 1500.00 para la primera tanda; Fase 1 es dry-run, sin gasto real.",
+      "success_signals": [
+        "CTR de la variante de dolor por encima de la variante aspiracional.",
+        "CPA observado por debajo de MXN 106.40 (70% del breakeven)."
+      ],
+      "warning_signals": [
+        "CTR alto con conversion baja en la pagina de producto.",
+        "CPA entre 70% y 100% del breakeven."
+      ],
+      "stop_signals": [
+        "CPA sostenido por encima de MXN 152.00 (breakeven).",
+        "Cualquier necesidad de un claim prohibido para sostener el angulo."
+      ],
+      "continue_if": [
+        "CPA observado menor o igual al 70% del breakeven durante la primera tanda de pruebas."
+      ],
+      "review_if": [
+        "CPA entre 70% y 100% del breakeven.",
+        "CTR bajo con CPM razonable."
+      ],
+      "kill_if": [
+        "CPA sostenido por encima del breakeven.",
+        "Vender requiere un claim prohibido."
+      ],
+      "what_not_to_conclude": [
+        "No concluir product-market fit por una tanda de pruebas.",
+        "No extrapolar el CPM de una semana a rendimiento estable.",
+        "No atribuir ventas organicas al creativo pagado sin observacion del operador."
+      ]
+    }
+  },
+  "learning": {
+    "hypotheses": [
+      "El dolor de cables caidos genera CTR suficiente en creativos de demostracion.",
+      "El precio de MXN 349.00 sostiene margen con CPA por debajo de MXN 152.00."
+    ],
+    "evidence_needed": [
+      "CPM y CTR reales de Meta MX.",
+      "Tasa de conversion de la pagina de producto.",
+      "Costo de envio confirmado del proveedor."
+    ],
+    "first_sale_signals": [
+      "Primera venta registrada por el operador.",
+      "Checkout completado sin quejas de envio."
+    ],
+    "risk_signals": [
+      "CPA observado por encima del breakeven.",
+      "Quejas de calidad del iman.",
+      "Retrasos de proveedor."
+    ],
+    "continue_if": [
+      "CPA observado menor o igual al 70% del breakeven durante la primera tanda de pruebas."
+    ],
+    "review_if": [
+      "CPA entre 70% y 100% del breakeven.",
+      "CTR bajo con CPM razonable."
+    ],
+    "kill_if": [
+      "CPA sostenido por encima del breakeven.",
+      "Vender requiere un claim prohibido."
+    ],
+    "operator_observations_schema": {
+      "fields": [
+        "fecha_observacion",
+        "canal",
+        "gasto_reportado_mxn",
+        "ventas_observadas",
+        "nota_operador"
+      ]
+    }
+  },
+  "blocked": [],
+  "operator_actions": [
+    {
+      "action_id": "confirm_supplier_stock",
+      "label": "Confirmar stock y costo con el proveedor Dropi.",
+      "kind": "verify_supplier",
+      "target": "shopify_pack.publish_checklist",
+      "notes": "Requerido antes de cualquier publicacion futura."
+    },
+    {
+      "action_id": "collect_real_photos",
+      "label": "Conseguir fotos reales del producto.",
+      "kind": "collect_assets",
+      "target": "shopify_pack.image_checklist",
+      "notes": "Las imagenes actuales son de referencia del proveedor."
+    }
+  ],
+  "evidence": {
+    "notes": [
+      "Fixture congelado A8-R109A; no proviene de datos vivos.",
+      "Economia calculada con costos locales del fixture."
+    ],
+    "artifacts": [
+      "tests/fixtures/a8_r109a/recommended.json"
+    ]
+  }
+}
