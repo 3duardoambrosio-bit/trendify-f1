@@ -49,6 +49,13 @@ REQUIRED_TOP_LEVEL_FIELDS = (
     "safety_boundary",
     "evidence",
     "copy_payloads",
+    # A8-R109A.1 system surfaces
+    "module_status_summary",
+    "candidate_pipeline",
+    "blocked_queue_summary",
+    "action_queue",
+    "system_health_board",
+    "capability_surface_map",
 )
 
 REQUIRED_SHOPIFY_FIELDS = (
@@ -1050,3 +1057,248 @@ def test_marketing_v2_sections_rendered_in_audit_html() -> None:
     assert 'data-payload-key="marketing_full_pack_v2"' in _section_html(
         _render("recommended"), "copy-payload-registry"
     )
+
+
+# --- A8-R109A.1 system surface extension (contract for R109B) -------------------
+
+REQUIRED_MODULE_IDS = (
+    "command_center",
+    "decision_center",
+    "product_lab",
+    "economics",
+    "shopify_studio",
+    "marketing_engine",
+    "safety_claim_guard",
+    "evidence",
+    "learning_feedback",
+    "blocked_queue",
+)
+
+REQUIRED_MODULE_STATUS_FIELDS = (
+    "module_id",
+    "label",
+    "status",
+    "badge_text",
+    "summary",
+    "operator_action",
+    "source_fields",
+    "is_real_now",
+    "is_future_placeholder",
+)
+
+ALLOWED_MODULE_STATUSES = {"pass", "warning", "blocked", "empty", "future", "audit"}
+
+REQUIRED_ACTION_QUEUE_FIELDS = (
+    "action_id",
+    "label",
+    "reason",
+    "target_module",
+    "priority",
+    "source_fields",
+    "is_primary",
+)
+
+CAPABILITY_TIERS = (
+    "real_now",
+    "fixture_only",
+    "future_or_not_connected",
+    "forbidden_to_claim",
+)
+
+
+# 1. module_status_summary covers all required modules on every fixture.
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_module_status_summary_covers_all_modules(name: str) -> None:
+    entries = _build(name).to_dict()["module_status_summary"]
+    assert tuple(entry["module_id"] for entry in entries) == REQUIRED_MODULE_IDS
+
+    for entry in entries:
+        for field_name in REQUIRED_MODULE_STATUS_FIELDS:
+            assert field_name in entry, f"module status missing: {field_name}"
+        assert entry["status"] in ALLOWED_MODULE_STATUSES
+        assert entry["label"]
+        assert entry["source_fields"], "module status must cite source fields"
+
+    learning = next(e for e in entries if e["module_id"] == "learning_feedback")
+    assert learning["status"] == "future"
+    assert learning["is_future_placeholder"] is True
+    assert learning["is_real_now"] is False
+
+    evidence = next(e for e in entries if e["module_id"] == "evidence")
+    assert evidence["status"] == "audit"
+
+
+# 2. recommended has exactly one primary action in the action queue.
+def test_recommended_action_queue_has_single_primary() -> None:
+    queue = _build("recommended").to_dict()["action_queue"]
+    assert queue, "recommended must expose an action queue"
+
+    primaries = [action for action in queue if action["is_primary"]]
+    assert len(primaries) == 1, "exactly one primary action is required"
+    assert primaries[0]["priority"] == 1
+
+    priorities = [action["priority"] for action in queue]
+    assert priorities == sorted(priorities)
+
+    for action in queue:
+        for field_name in REQUIRED_ACTION_QUEUE_FIELDS:
+            assert field_name in action, f"action queue missing: {field_name}"
+        assert action["target_module"] in REQUIRED_MODULE_IDS
+        assert action["source_fields"], "each action must cite source fields"
+
+
+# 3. candidate_pipeline never claims live discovery on fixture data.
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_candidate_pipeline_is_fixture_honest(name: str) -> None:
+    pipeline = _build(name).to_dict()["candidate_pipeline"]
+    assert pipeline["source"] == "fixture_scenario"
+    assert pipeline["confidence"] == "limited_fixture_only"
+    assert pipeline["live_discovery_connected"] is False
+    assert "sin discovery en vivo" in pipeline["pipeline_note"]
+    assert pipeline["source_fields"]
+
+    for key in (
+        "total_candidates",
+        "recommended_count",
+        "blocked_count",
+        "low_input_count",
+        "empty_count",
+        "current_candidate_rank",
+    ):
+        assert isinstance(pipeline[key], int), f"pipeline.{key} must be an int"
+
+    assert pipeline["pipeline_stage"] in (
+        "prepare_for_sale",
+        "blocked_review",
+        "enrich_brief",
+        "await_shortlist",
+    )
+
+
+# 4. blocked fixture exposes a constrained blocked_queue_summary.
+def test_blocked_fixture_blocked_queue_summary_constrained() -> None:
+    data = _build("blocked").to_dict()
+    summary = data["blocked_queue_summary"]
+    assert summary["blocked_count"] == 1
+    assert summary["can_prepare"] is False
+    assert "CLAIM_PROHIBITED_HEALTH" in summary["reason_codes"]
+    assert "MARGIN_BELOW_FLOOR" in summary["reason_codes"]
+    assert summary["required_operator_actions"]
+    assert summary["blocked_items"][0]["product_name"] == "Parche Reductor Detox Nocturno"
+    assert summary["source_fields"]
+
+    modules = {e["module_id"]: e for e in data["module_status_summary"]}
+    assert modules["blocked_queue"]["status"] == "blocked"
+    assert modules["marketing_engine"]["status"] == "blocked"
+    assert modules["safety_claim_guard"]["status"] == "blocked"
+    assert modules["economics"]["status"] == "blocked"
+    assert data["candidate_pipeline"]["blocked_count"] == 1
+
+    # The module stays exposed with zero items on the recommended fixture.
+    rec = _build("recommended").to_dict()["blocked_queue_summary"]
+    assert rec["blocked_count"] == 0
+    assert rec["blocked_items"] == []
+    assert rec["can_prepare"] is True
+
+
+# 5. low_input degrades the relevant module statuses.
+def test_low_input_degrades_module_statuses() -> None:
+    data = _build("low_input").to_dict()
+    modules = {e["module_id"]: e for e in data["module_status_summary"]}
+
+    assert modules["product_lab"]["status"] == "warning"
+    assert modules["marketing_engine"]["status"] == "warning"
+    assert modules["command_center"]["status"] == "warning"
+    assert modules["product_lab"]["operator_action"], "must tell the operator what to fill"
+
+    assert data["system_health_board"]["input_richness_status"] == "INPUT_LOW"
+    assert data["system_health_board"]["marketing_pack_status"] == "generic_low_confidence"
+    assert data["candidate_pipeline"]["low_input_count"] == 1
+
+
+# 6. empty_shortlist has an empty pipeline and no fake product/copy actions.
+def test_empty_shortlist_pipeline_empty_and_no_copy_actions() -> None:
+    data = _build("empty_shortlist").to_dict()
+    pipeline = data["candidate_pipeline"]
+    assert pipeline["total_candidates"] == 0
+    assert pipeline["recommended_count"] == 0
+    assert pipeline["blocked_count"] == 0
+    assert pipeline["current_candidate_id"] == ""
+    assert pipeline["current_candidate_rank"] == 0
+    assert pipeline["pipeline_stage"] == "await_shortlist"
+
+    for action in data["action_queue"]:
+        assert action["target_module"] not in ("shopify_studio", "marketing_engine"), (
+            "empty shortlist must not queue product/copy actions"
+        )
+
+    modules = {e["module_id"]: e for e in data["module_status_summary"]}
+    for module_id in ("product_lab", "economics", "shopify_studio", "marketing_engine"):
+        assert modules[module_id]["status"] == "empty", f"{module_id} must be empty"
+    assert modules["command_center"]["status"] == "empty"
+
+
+# 7. capability_surface_map distinguishes the four tiers without overlap.
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_capability_surface_map_distinguishes_tiers(name: str) -> None:
+    surface = _build(name).to_dict()["capability_surface_map"]
+    assert tuple(sorted(surface)) == tuple(sorted(CAPABILITY_TIERS))
+    for tier in CAPABILITY_TIERS:
+        assert surface[tier], f"capability tier must not be empty: {tier}"
+
+    all_items = [item for tier in CAPABILITY_TIERS for item in surface[tier]]
+    assert len(all_items) == len(set(all_items)), "capability tiers must not overlap"
+
+    assert "product_market_fit" in surface["forbidden_to_claim"]
+    assert "live_analytics_connected" in surface["forbidden_to_claim"]
+    assert "live_discovery_pipeline" in surface["future_or_not_connected"]
+    assert "candidate_pipeline_counts" in surface["fixture_only"]
+
+
+# 8. system_health_board preserves the Fase 1 boundaries everywhere.
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_system_health_board_preserves_boundaries(name: str) -> None:
+    board = _build(name).to_dict()["system_health_board"]
+    for key in ("offline_mode", "no_live_writes", "no_spend", "no_fulfillment", "no_credentials"):
+        assert board[key] is True, f"system_health_board.{key} must be True"
+    for key in (
+        "claim_guard_status",
+        "input_richness_status",
+        "shopify_pack_status",
+        "marketing_pack_status",
+        "evidence_status",
+    ):
+        assert board[key], f"system_health_board.{key} must not be empty"
+    assert board["source_fields"]
+
+    if name == "blocked":
+        assert board["claim_guard_status"] == "blocked"
+        assert board["shopify_pack_status"] == "blocked_do_not_publish"
+        assert board["marketing_pack_status"] == "blocked_by_claims"
+    if name == "recommended":
+        assert board["shopify_pack_status"] == "ready_with_missing_inputs"
+        assert board["marketing_pack_status"] == "ready_with_pending_rewrites"
+    if name == "empty_shortlist":
+        assert board["input_richness_status"] == "NO_PRODUCT"
+        assert board["shopify_pack_status"] == "disabled"
+
+
+# 9/10. new sections render and the forbidden token scan still holds.
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_system_surface_sections_rendered(name: str) -> None:
+    document = _render(name)
+    for section_id in (
+        "module-status-summary",
+        "candidate-pipeline",
+        "action-queue",
+        "blocked-queue-summary",
+        "system-health-board",
+        "capability-surface-map",
+    ):
+        assert f'<section id="{section_id}"' in document, f"missing section: {section_id}"
+
+    module_section = _section_html(document, "module-status-summary")
+    for module_id in REQUIRED_MODULE_IDS:
+        assert f'data-module-id="{module_id}"' in module_section
+
+    assert wb_renderer.scan_forbidden_tokens(document) == []

@@ -102,6 +102,26 @@ byte-for-byte. Fixture behavior: recommended carries 3 angles, 3 hypotheses,
 degrades every section confidence to `low` and lists missing marketing inputs;
 empty_shortlist renders none of it.
 
+## 4c. System surface extension (A8-R109A.1)
+
+Schema version is now `a8-r109a.workbench_view_model.v3`. Six new top-level
+surfaces let R109B render real system density without inferring or faking it:
+
+| Field | Content |
+|---|---|
+| `module_status_summary` | Ten modules in fixed order (`command_center`, `decision_center`, `product_lab`, `economics`, `shopify_studio`, `marketing_engine`, `safety_claim_guard`, `evidence`, `learning_feedback`, `blocked_queue`), each with `module_id`, `label`, `status` (`pass` / `warning` / `blocked` / `empty` / `future` / `audit`), `badge_text`, `summary`, `operator_action`, `source_fields`, `is_real_now`, `is_future_placeholder`. `learning_feedback` is always `future` (`is_real_now: false`); `evidence` is always `audit` |
+| `candidate_pipeline` | Fixture-honest pipeline summary: scenario-derived counts (`total_candidates`, `recommended_count`, `blocked_count`, `low_input_count`, `empty_count`), `current_candidate_id`/`rank`, `pipeline_stage` (`prepare_for_sale` / `blocked_review` / `enrich_brief` / `await_shortlist`), `source: fixture_scenario`, `confidence: limited_fixture_only`, `live_discovery_connected: false`. It never claims live discovery |
+| `blocked_queue_summary` | `blocked_count`, compact `blocked_items`, deduplicated `reason_codes`, `required_operator_actions`, `can_prepare` (true only for `RECOMMENDED_FOR_PREPARE`). Exposed on every fixture, including zero-item states |
+| `action_queue` | Ordered actions with `action_id`, `label`, `reason`, `target_module` (mapped from action kind), `priority`, `source_fields`, and exactly one `is_primary: true` — the UI must not infer the next action |
+| `system_health_board` | Fase 1 booleans (`offline_mode`, `no_live_writes`, `no_spend`, `no_fulfillment`, `no_credentials`) plus derived statuses for claim guard, input richness, Shopify pack, marketing pack, and evidence |
+| `capability_surface_map` | Static honesty tiers: `real_now`, `fixture_only`, `future_or_not_connected`, `forbidden_to_claim` (includes `product_market_fit`, `live_analytics_connected`, `autonomous_spend`). Identical for all fixtures so the UI cannot overpromise |
+
+All six surfaces derive deterministically from existing fixture content — no
+fixture changes were needed, no live data is read, and every derived summary
+cites its `source_fields`. The audit renderer gained matching sections
+(`module-status-summary`, `candidate-pipeline`, `action-queue`,
+`blocked-queue-summary`, `system-health-board`, `capability-surface-map`).
+
 ## 5. Blocked queue
 
 Every ViewModel has a `blocked_queue` (possibly empty). Each item carries

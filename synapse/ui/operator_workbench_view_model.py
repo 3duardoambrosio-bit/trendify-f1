@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-SCHEMA_VERSION = "a8-r109a.workbench_view_model.v2"
+SCHEMA_VERSION = "a8-r109a.workbench_view_model.v3"
 RENDER_MODE = "offline_static_html"
 SOURCE_KIND_DEFAULT = "frozen_local_fixture"
 GENERATED_AT_POLICY = "deterministic_no_runtime_clock"
@@ -160,6 +160,97 @@ BLOCKED_ITEM_SAFETY_BOUNDARY: dict[str, bool] = {
     "operator_decision_required": True,
 }
 
+# --- A8-R109A.1 system surface contract (consumed by R109B) -------------------
+
+MODULE_STATUS_PASS = "pass"
+MODULE_STATUS_WARNING = "warning"
+MODULE_STATUS_BLOCKED = "blocked"
+MODULE_STATUS_EMPTY = "empty"
+MODULE_STATUS_FUTURE = "future"
+MODULE_STATUS_AUDIT = "audit"
+
+WORKBENCH_MODULE_IDS: tuple[str, ...] = (
+    "command_center",
+    "decision_center",
+    "product_lab",
+    "economics",
+    "shopify_studio",
+    "marketing_engine",
+    "safety_claim_guard",
+    "evidence",
+    "learning_feedback",
+    "blocked_queue",
+)
+
+MODULE_LABELS: dict[str, str] = {
+    "command_center": "Command Center",
+    "decision_center": "Decision Center",
+    "product_lab": "Product Lab",
+    "economics": "Economics",
+    "shopify_studio": "Shopify Studio",
+    "marketing_engine": "Marketing Engine",
+    "safety_claim_guard": "Safety / Claim Guard",
+    "evidence": "Evidence",
+    "learning_feedback": "Learning / Feedback",
+    "blocked_queue": "Blocked Queue",
+}
+
+OUTCOME_RECOMMENDED = "RECOMMENDED_FOR_PREPARE"
+OUTCOME_BLOCKED = "BLOCKED"
+OUTCOME_REVIEW = "REVIEW_REQUIRED"
+
+PIPELINE_SOURCE_FIXTURE = "fixture_scenario"
+PIPELINE_CONFIDENCE_LIMITED = "limited_fixture_only"
+PIPELINE_NOTE_FIXTURE_ONLY = (
+    "Conteos derivados del escenario del fixture congelado; sin discovery en vivo."
+)
+
+# Maps operator action kinds to the workbench module that owns them.
+ACTION_KIND_TO_MODULE: dict[str, str] = {
+    "verify_supplier": "shopify_studio",
+    "collect_assets": "shopify_studio",
+    "enrich_input": "product_lab",
+    "review_blocked": "blocked_queue",
+    "repair_claims": "safety_claim_guard",
+    "repair_economics": "economics",
+    "reject_product": "blocked_queue",
+    "build_shortlist": "command_center",
+}
+ACTION_DEFAULT_MODULE = "command_center"
+
+# What the workbench may claim today vs never. Static and deterministic on
+# purpose: the UI must not infer capability from data shape.
+CAPABILITY_SURFACE_MAP: dict[str, tuple[str, ...]] = {
+    "real_now": (
+        "deterministic_view_model_from_frozen_fixture",
+        "input_richness_classification_r105_3",
+        "claim_guard_adjacent_to_copy_surfaces",
+        "copy_payload_registry_byte_exact",
+        "blocked_queue_with_reason_codes_and_repair_paths",
+        "offline_static_html_render_no_network",
+    ),
+    "fixture_only": (
+        "candidate_pipeline_counts",
+        "economics_unit_numbers",
+        "opportunity_scores",
+        "shopify_pack_content",
+        "marketing_pack_content",
+    ),
+    "future_or_not_connected": (
+        "live_discovery_pipeline",
+        "real_market_cpm_ctr_cpa",
+        "learning_feedback_live_observations",
+        "shopify_publish_flow",
+        "meta_campaign_execution",
+    ),
+    "forbidden_to_claim": (
+        "product_market_fit",
+        "guaranteed_sales_or_performance",
+        "live_analytics_connected",
+        "autonomous_spend",
+    ),
+}
+
 
 # --- basic coercion helpers -------------------------------------------------
 
@@ -247,6 +338,13 @@ class WorkbenchViewModel:
     safety_boundary: dict[str, bool]
     evidence: dict[str, Any]
     copy_payloads: dict[str, Any]
+    # A8-R109A.1 system surfaces (contract for R109B)
+    module_status_summary: tuple[dict[str, Any], ...]
+    candidate_pipeline: dict[str, Any]
+    blocked_queue_summary: dict[str, Any]
+    action_queue: tuple[dict[str, Any], ...]
+    system_health_board: dict[str, Any]
+    capability_surface_map: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
         """Canonical JSON-ready dict (tuples become lists, key order stable)."""
@@ -1342,6 +1440,493 @@ def build_copy_payloads(
     }
 
 
+# --- A8-R109A.1 system surface builders ---------------------------------------
+
+def _decision_outcome(fixture: Mapping[str, Any]) -> str:
+    return _text(_mapping(fixture.get("decision")).get("outcome"))
+
+
+def _has_prohibited_copy(marketing_pack: Mapping[str, Any]) -> bool:
+    return any(
+        _text(entry.get("risk_level")) == "prohibited"
+        for entry in marketing_pack.get("claim_risk_by_copy") or []
+    )
+
+
+def _medium_rewrite_count(marketing_pack: Mapping[str, Any]) -> int:
+    return sum(
+        1
+        for entry in marketing_pack.get("claim_risk_by_copy") or []
+        if _text(entry.get("risk_level")) == "medium"
+    )
+
+
+def build_module_status_summary(
+    fixture: Mapping[str, Any],
+    claim_guard: Mapping[str, Any],
+    input_richness: Mapping[str, Any],
+    shopify_pack: Mapping[str, Any],
+    marketing_pack: Mapping[str, Any],
+    blocked_queue: Sequence[Mapping[str, Any]],
+    operator_actions: Sequence[Mapping[str, Any]],
+    has_product: bool,
+) -> list[dict[str, Any]]:
+    """Per-module health so R109B renders real status instead of inferring it."""
+    decision = _mapping(fixture.get("decision"))
+    outcome = _text(decision.get("outcome"))
+    reason = _text(decision.get("reason"))
+    reason_codes = _texts(decision.get("reason_codes"))
+    economics = _mapping(fixture.get("economics"))
+    classification = _text(input_richness.get("classification"))
+    filled = int(input_richness.get("filled_count") or 0)
+    total = int(input_richness.get("total_fields") or 0)
+    missing_fields = _texts(input_richness.get("missing_fields"))
+
+    prohibited_copy = _has_prohibited_copy(marketing_pack)
+    rewrites = _medium_rewrite_count(marketing_pack)
+    primary_action = _text(operator_actions[0].get("label")) if operator_actions else ""
+
+    def outcome_status() -> str:
+        if not has_product:
+            return MODULE_STATUS_EMPTY
+        if outcome == OUTCOME_BLOCKED:
+            return MODULE_STATUS_BLOCKED
+        if outcome == OUTCOME_RECOMMENDED:
+            return MODULE_STATUS_PASS
+        return MODULE_STATUS_WARNING
+
+    entries: list[dict[str, Any]] = []
+
+    def add(
+        module_id: str,
+        status: str,
+        badge_text: str,
+        summary: str,
+        operator_action: str,
+        source_fields: Sequence[str],
+        *,
+        is_real_now: bool = True,
+        is_future_placeholder: bool = False,
+    ) -> None:
+        entries.append(
+            {
+                "module_id": module_id,
+                "label": MODULE_LABELS[module_id],
+                "status": status,
+                "badge_text": badge_text,
+                "summary": summary,
+                "operator_action": operator_action,
+                "source_fields": list(source_fields),
+                "is_real_now": is_real_now,
+                "is_future_placeholder": is_future_placeholder,
+            }
+        )
+
+    command_badges = {
+        MODULE_STATUS_PASS: "GO",
+        MODULE_STATUS_BLOCKED: "BLOQUEADO",
+        MODULE_STATUS_WARNING: "REVISION",
+        MODULE_STATUS_EMPTY: "SIN CANDIDATO",
+    }
+    command_status = outcome_status()
+    add(
+        "command_center",
+        command_status,
+        command_badges[command_status],
+        reason,
+        primary_action,
+        ("decision.outcome", "decision.reason", "operator_actions"),
+    )
+
+    add(
+        "decision_center",
+        outcome_status(),
+        outcome or "N/A",
+        ", ".join(reason_codes),
+        "Leer caveats antes de invertir tiempo en el candidato.",
+        ("decision", "scores"),
+    )
+
+    if not has_product:
+        add(
+            "product_lab",
+            MODULE_STATUS_EMPTY,
+            "SIN BRIEF",
+            "Sin producto en shortlist: no hay brief que trabajar.",
+            "",
+            ("input_richness",),
+        )
+    else:
+        lab_status = MODULE_STATUS_PASS if classification == INPUT_RICH else MODULE_STATUS_WARNING
+        lab_action = (
+            "Completar campos faltantes del brief: " + ", ".join(missing_fields[:MAX_ENRICH_ACTIONS])
+            if missing_fields
+            else ""
+        )
+        add(
+            "product_lab",
+            lab_status,
+            f"{filled}/{total}",
+            f"Brief clasificado {classification} ({filled}/{total} campos).",
+            lab_action,
+            ("input_richness",),
+        )
+
+    margin_percent = economics.get("contribution_margin_percent")
+    if not has_product:
+        add(
+            "economics",
+            MODULE_STATUS_EMPTY,
+            "SIN ECONOMIA",
+            "Sin producto seleccionado: no hay economia que evaluar.",
+            "",
+            ("economics",),
+        )
+    elif "MARGIN_BELOW_FLOOR" in reason_codes:
+        add(
+            "economics",
+            MODULE_STATUS_BLOCKED,
+            f"{margin_percent}%",
+            "Margen debajo del piso economico definido en la evaluacion local.",
+            "Renegociar costo o envio antes de reconsiderar el producto.",
+            ("economics", "decision.reason_codes"),
+        )
+    else:
+        add(
+            "economics",
+            MODULE_STATUS_PASS,
+            f"{margin_percent}%",
+            "Margen de contribucion sobre el piso; numeros locales del fixture.",
+            "Memorizar el CPA breakeven antes de planear pruebas.",
+            ("economics",),
+        )
+
+    if not shopify_pack.get("enabled"):
+        add(
+            "shopify_studio",
+            MODULE_STATUS_EMPTY,
+            "DESHABILITADO",
+            f"Pack deshabilitado: {_text(shopify_pack.get('disabled_reason'))}.",
+            "",
+            ("shopify_pack.enabled", "shopify_pack.disabled_reason"),
+        )
+    elif outcome == OUTCOME_BLOCKED:
+        add(
+            "shopify_studio",
+            MODULE_STATUS_BLOCKED,
+            "NO PUBLICAR",
+            "Producto bloqueado: el pack existe solo como registro; no publicar.",
+            "Resolver el bloqueo antes de cualquier checklist de publicacion.",
+            ("shopify_pack", "decision.outcome"),
+        )
+    else:
+        missing_inputs = _texts(shopify_pack.get("missing_inputs"))
+        if missing_inputs:
+            add(
+                "shopify_studio",
+                MODULE_STATUS_WARNING,
+                f"{len(missing_inputs)} FALTAN",
+                "Pack copy-ready con inputs pendientes: " + ", ".join(missing_inputs) + ".",
+                _texts(shopify_pack.get("publish_checklist"))[0]
+                if shopify_pack.get("publish_checklist")
+                else "",
+                ("shopify_pack.missing_inputs", "shopify_pack.publish_checklist"),
+            )
+        else:
+            add(
+                "shopify_studio",
+                MODULE_STATUS_PASS,
+                "LISTO",
+                "Pack copy-ready sin inputs pendientes.",
+                "Revisar claim guard antes de publicar.",
+                ("shopify_pack",),
+            )
+
+    if not marketing_pack.get("enabled"):
+        add(
+            "marketing_engine",
+            MODULE_STATUS_EMPTY,
+            "DESHABILITADO",
+            f"Pack deshabilitado: {_text(marketing_pack.get('disabled_reason'))}.",
+            "",
+            ("marketing_pack.enabled", "marketing_pack.disabled_reason"),
+        )
+    elif prohibited_copy:
+        add(
+            "marketing_engine",
+            MODULE_STATUS_BLOCKED,
+            "CLAIMS PROHIBIDOS",
+            "Todo el copy depende de claims prohibidos; no hay angulo utilizable.",
+            "Reposicionar el producto sin claims prohibidos antes de crear copy.",
+            ("marketing_pack.claim_risk_by_copy",),
+        )
+    elif classification == INPUT_LOW:
+        add(
+            "marketing_engine",
+            MODULE_STATUS_WARNING,
+            "COPY GENERICO",
+            "Brief pobre: el copy es generico y de baja confianza (R105.3).",
+            "Enriquecer el brief del operador para obtener copy experto.",
+            ("marketing_pack.confidence", "input_richness.classification"),
+        )
+    elif rewrites:
+        add(
+            "marketing_engine",
+            MODULE_STATUS_WARNING,
+            f"{rewrites} REWRITES",
+            f"Copy listo con {rewrites} superficies en riesgo medio pendientes de rewrite.",
+            "Aplicar los rewrites seguros antes de publicar.",
+            ("marketing_pack.claim_risk_by_copy", "marketing_pack.confidence_by_section"),
+        )
+    else:
+        add(
+            "marketing_engine",
+            MODULE_STATUS_PASS,
+            "LISTO",
+            "Copy listo sin superficies en riesgo medio o superior.",
+            "Elegir angulo y preparar la primera tanda de creativos.",
+            ("marketing_pack.claim_risk_by_copy", "marketing_pack.confidence_by_section"),
+        )
+
+    if outcome == OUTCOME_BLOCKED or prohibited_copy:
+        add(
+            "safety_claim_guard",
+            MODULE_STATUS_BLOCKED,
+            "RIESGO CRITICO",
+            _text(claim_guard.get("claim_guard_summary")),
+            "No preparar venta mientras el claim central sea prohibido.",
+            ("claim_guard", "decision.outcome"),
+        )
+    elif not has_product:
+        add(
+            "safety_claim_guard",
+            MODULE_STATUS_PASS,
+            "BOUNDARY OK",
+            "Sin copy activo; boundary de Fase 1 intacto.",
+            "",
+            ("claim_guard", "safety_boundary"),
+        )
+    else:
+        add(
+            "safety_claim_guard",
+            MODULE_STATUS_PASS,
+            "RIESGO BAJO",
+            _text(claim_guard.get("claim_guard_summary")),
+            "Aplicar la redaccion segura en todas las superficies de copy.",
+            ("claim_guard",),
+        )
+
+    evidence_notes = _texts(_mapping(fixture.get("evidence")).get("notes"))
+    add(
+        "evidence",
+        MODULE_STATUS_AUDIT,
+        "AUDIT",
+        evidence_notes[0] if evidence_notes else "Procedencia del fixture congelado.",
+        "Abrir solo para auditar procedencia.",
+        ("evidence", "provenance"),
+    )
+
+    add(
+        "learning_feedback",
+        MODULE_STATUS_FUTURE,
+        "FASE 2",
+        "Esquema de observaciones definido; datos en vivo no conectados.",
+        "Registrar observaciones manualmente cuando existan datos reales.",
+        ("learning_plan",),
+        is_real_now=False,
+        is_future_placeholder=True,
+    )
+
+    blocked_count = len(blocked_queue)
+    add(
+        "blocked_queue",
+        MODULE_STATUS_BLOCKED if blocked_count else MODULE_STATUS_EMPTY,
+        f"{blocked_count} EN COLA",
+        (
+            "Hay productos bloqueados esperando decision del operador."
+            if blocked_count
+            else "Cola de bloqueados vacia."
+        ),
+        "Decidir reparar o rechazar cada item bloqueado." if blocked_count else "",
+        ("blocked_queue",),
+    )
+
+    return entries
+
+
+def build_candidate_pipeline(
+    fixture: Mapping[str, Any],
+    input_richness: Mapping[str, Any],
+    blocked_queue: Sequence[Mapping[str, Any]],
+    has_product: bool,
+) -> dict[str, Any]:
+    """Fixture-honest pipeline summary: never claims live discovery counts."""
+    raw = _mapping(fixture.get("pipeline"))
+    outcome = _decision_outcome(fixture)
+    classification = _text(input_richness.get("classification"))
+    product_id = _text(_mapping(fixture.get("product")).get("product_id"))
+
+    if outcome == OUTCOME_RECOMMENDED:
+        stage = "prepare_for_sale"
+    elif outcome == OUTCOME_BLOCKED:
+        stage = "blocked_review"
+    elif outcome == OUTCOME_REVIEW:
+        stage = "enrich_brief"
+    else:
+        stage = "await_shortlist"
+
+    try:
+        total_candidates = int(raw.get("total_candidates"))
+    except (TypeError, ValueError):
+        total_candidates = 1 if has_product else 0
+    try:
+        current_rank = int(raw.get("current_candidate_rank"))
+    except (TypeError, ValueError):
+        current_rank = 1 if has_product else 0
+
+    return {
+        "source": _text(raw.get("source"), PIPELINE_SOURCE_FIXTURE),
+        "confidence": PIPELINE_CONFIDENCE_LIMITED,
+        "live_discovery_connected": False,
+        "total_candidates": total_candidates,
+        "recommended_count": 1 if outcome == OUTCOME_RECOMMENDED else 0,
+        "blocked_count": len(blocked_queue),
+        "low_input_count": 1 if has_product and classification == INPUT_LOW else 0,
+        "empty_count": 0 if has_product else 1,
+        "current_candidate_id": product_id,
+        "current_candidate_rank": current_rank,
+        "pipeline_stage": stage,
+        "pipeline_note": PIPELINE_NOTE_FIXTURE_ONLY,
+        "source_fields": [
+            "decision.outcome",
+            "product.product_id",
+            "blocked",
+            "input_richness.classification",
+        ],
+    }
+
+
+def build_blocked_queue_summary(
+    fixture: Mapping[str, Any],
+    blocked_queue: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    outcome = _decision_outcome(fixture)
+    reason_codes: list[str] = []
+    required_actions: list[str] = []
+    items: list[dict[str, Any]] = []
+    for item in blocked_queue:
+        items.append(
+            {
+                "product_name": _text(item.get("product_name")),
+                "reason": _text(item.get("reason")),
+                "reason_codes": _texts(item.get("reason_codes")),
+                "severity": _text(item.get("severity"), "unknown"),
+                "can_recover": bool(item.get("can_recover", False)),
+            }
+        )
+        reason_codes.extend(_texts(item.get("reason_codes")))
+        required_actions.extend(
+            _text(action.get("label"))
+            for action in item.get("operator_actions") or []
+            if _text(action.get("label"))
+        )
+    return {
+        "blocked_count": len(blocked_queue),
+        "blocked_items": items,
+        "reason_codes": sorted(set(reason_codes)),
+        "required_operator_actions": required_actions,
+        "can_prepare": outcome == OUTCOME_RECOMMENDED,
+        "source_fields": ["blocked", "decision.outcome"],
+    }
+
+
+def build_action_queue(
+    operator_actions: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Ordered operator actions with one explicit primary (no UI inference)."""
+    queue: list[dict[str, Any]] = []
+    for index, action in enumerate(operator_actions):
+        queue.append(
+            {
+                "action_id": _text(action.get("action_id")),
+                "label": _text(action.get("label")),
+                "reason": _text(action.get("notes")),
+                "target_module": ACTION_KIND_TO_MODULE.get(
+                    _text(action.get("kind")), ACTION_DEFAULT_MODULE
+                ),
+                "priority": index + 1,
+                "source_fields": [f"operator_actions[{index}]"],
+                "is_primary": index == 0,
+            }
+        )
+    return queue
+
+
+def build_system_health_board(
+    fixture: Mapping[str, Any],
+    claim_guard: Mapping[str, Any],
+    input_richness: Mapping[str, Any],
+    shopify_pack: Mapping[str, Any],
+    marketing_pack: Mapping[str, Any],
+    has_product: bool,
+) -> dict[str, Any]:
+    outcome = _decision_outcome(fixture)
+    prohibited_copy = _has_prohibited_copy(marketing_pack)
+    classification = _text(input_richness.get("classification"))
+
+    if outcome == OUTCOME_BLOCKED or prohibited_copy:
+        claim_guard_status = "blocked"
+    elif _texts(claim_guard.get("risky_claims")):
+        claim_guard_status = "risky_claims_flagged"
+    else:
+        claim_guard_status = "clear"
+
+    if not shopify_pack.get("enabled"):
+        shopify_status = "disabled"
+    elif outcome == OUTCOME_BLOCKED:
+        shopify_status = "blocked_do_not_publish"
+    elif _texts(shopify_pack.get("missing_inputs")):
+        shopify_status = "ready_with_missing_inputs"
+    else:
+        shopify_status = "ready"
+
+    if not marketing_pack.get("enabled"):
+        marketing_status = "disabled"
+    elif prohibited_copy:
+        marketing_status = "blocked_by_claims"
+    elif classification == INPUT_LOW:
+        marketing_status = "generic_low_confidence"
+    elif _medium_rewrite_count(marketing_pack):
+        marketing_status = "ready_with_pending_rewrites"
+    else:
+        marketing_status = "ready"
+
+    return {
+        "offline_mode": SAFETY_BOUNDARY["no_external_network"],
+        "no_live_writes": SAFETY_BOUNDARY["no_live_writes"],
+        "no_spend": SAFETY_BOUNDARY["no_spend"],
+        "no_fulfillment": SAFETY_BOUNDARY["no_fulfillment"],
+        "no_credentials": SAFETY_BOUNDARY["no_credentials_required"],
+        "claim_guard_status": claim_guard_status,
+        "input_richness_status": classification if has_product else "NO_PRODUCT",
+        "shopify_pack_status": shopify_status,
+        "marketing_pack_status": marketing_status,
+        "evidence_status": "frozen_fixture_audit_trail",
+        "source_fields": [
+            "safety_boundary",
+            "claim_guard",
+            "input_richness",
+            "shopify_pack",
+            "marketing_pack",
+        ],
+    }
+
+
+def build_capability_surface_map() -> dict[str, list[str]]:
+    """What the UI may claim today vs never; static so it cannot drift."""
+    return {tier: list(items) for tier, items in CAPABILITY_SURFACE_MAP.items()}
+
+
 # --- top-level assembly -------------------------------------------------------
 
 def load_fixture(path: str | Path) -> dict[str, Any]:
@@ -1376,6 +1961,25 @@ def build_view_model(
     }
     provenance = build_provenance(fixture, source_fixture, int(copy_payloads["count"]))
 
+    module_status_summary = build_module_status_summary(
+        fixture,
+        claim_guard,
+        input_richness,
+        shopify_pack,
+        marketing_pack,
+        blocked_queue,
+        operator_actions,
+        has_product,
+    )
+    candidate_pipeline = build_candidate_pipeline(
+        fixture, input_richness, blocked_queue, has_product
+    )
+    blocked_queue_summary = build_blocked_queue_summary(fixture, blocked_queue)
+    action_queue = build_action_queue(operator_actions)
+    system_health_board = build_system_health_board(
+        fixture, claim_guard, input_richness, shopify_pack, marketing_pack, has_product
+    )
+
     return WorkbenchViewModel(
         schema_version=SCHEMA_VERSION,
         fixture_id=_text(fixture.get("fixture_id"), "unknown_fixture"),
@@ -1397,6 +2001,12 @@ def build_view_model(
         safety_boundary=dict(SAFETY_BOUNDARY),
         evidence=evidence,
         copy_payloads=copy_payloads,
+        module_status_summary=tuple(module_status_summary),
+        candidate_pipeline=candidate_pipeline,
+        blocked_queue_summary=blocked_queue_summary,
+        action_queue=tuple(action_queue),
+        system_health_board=system_health_board,
+        capability_surface_map=build_capability_surface_map(),
     )
 
 

@@ -20,19 +20,25 @@ from synapse.ui.operator_workbench_view_model import (
     build_view_model_from_path,
 )
 
-RENDERER_VERSION = "a8-r109a.workbench_renderer.v1"
+RENDERER_VERSION = "a8-r109a.workbench_renderer.v2"
 
 SECTION_ORDER: tuple[str, ...] = (
     "provenance-seal",
+    "module-status-summary",
+    "candidate-pipeline",
+    "action-queue",
     "product-decision",
     "input-richness",
     "economics-scores",
     "shopify-pack",
     "marketing-pack",
     "learning-plan",
+    "blocked-queue-summary",
     "blocked-queue",
     "operator-actions",
+    "system-health-board",
     "safety-boundary",
+    "capability-surface-map",
     "evidence-notes",
     "copy-payload-registry",
 )
@@ -83,9 +89,13 @@ def _pre(text: str) -> str:
     return f"<pre>{_e(text)}</pre>"
 
 
-def _section(section_id: str, title: str, body: str) -> str:
-    return f'<section id="{section_id}"><h2>{_e(title)}</h2>\n{body}\n</section>'
-
+def _section(section_id: str, title: str, body: str, contract_key: str = "") -> str:
+    stable_contract_key = contract_key or section_id.replace("-", "_")
+    marker = f'<code class="contract-marker">{_e(stable_contract_key)}</code>'
+    return (
+        f'<section id="{_e(section_id)}" data-contract-section="{_e(stable_contract_key)}">'
+        f"<h2>{_e(title)}</h2>\n{marker}\n{body}\n</section>"
+    )
 
 def _claim_guard_adjacent(claim_guard: Mapping[str, Any], surface: str) -> str:
     parts = [
@@ -119,6 +129,109 @@ def _actions_list(actions: Sequence[Mapping[str, Any]]) -> str:
             "</li>"
         )
     return "<ul>" + "".join(rows) + "</ul>"
+
+
+def _render_module_status_summary(data: Mapping[str, Any]) -> str:
+    parts = []
+    for entry in data.get("module_status_summary") or []:
+        parts.append(
+            f'<div class="module-status" data-module-id="{_e(entry.get("module_id", ""))}"'
+            f' data-module-status="{_e(entry.get("status", ""))}">'
+        )
+        parts.append(f"<h3>{_e(entry.get('label', ''))}</h3>")
+        parts.append(
+            _kv_table(
+                {
+                    "module_id": entry.get("module_id", ""),
+                    "status": entry.get("status", ""),
+                    "badge_text": entry.get("badge_text", ""),
+                    "summary": entry.get("summary", ""),
+                    "operator_action": entry.get("operator_action", ""),
+                    "source_fields": ", ".join(entry.get("source_fields") or []),
+                    "is_real_now": entry.get("is_real_now", False),
+                    "is_future_placeholder": entry.get("is_future_placeholder", False),
+                }
+            )
+        )
+        parts.append("</div>")
+    return _section("module-status-summary", "Module Status Summary", "\n".join(parts))
+
+
+def _render_candidate_pipeline(data: Mapping[str, Any]) -> str:
+    pipeline = dict(data.get("candidate_pipeline") or {})
+    source_fields = pipeline.pop("source_fields", [])
+    body = (
+        _kv_table(pipeline)
+        + "<h4>Source fields</h4>"
+        + _ul(source_fields)
+        + '<p class="warning">Conteos solo del fixture congelado; discovery en vivo NO conectado.</p>'
+    )
+    return _section("candidate-pipeline", "Candidate Pipeline (fixture-only)", body)
+
+
+def _render_action_queue(data: Mapping[str, Any]) -> str:
+    queue = data.get("action_queue") or []
+    if not queue:
+        return _section("action-queue", "Action Queue", '<p class="empty">(sin acciones)</p>')
+    rows = []
+    for action in queue:
+        primary = " [PRIMARIA]" if action.get("is_primary") else ""
+        rows.append(
+            "<li>"
+            f"<strong>#{_e(action.get('priority', ''))} {_e(action.get('label', ''))}{primary}</strong>"
+            f" <code>target_module={_e(action.get('target_module', ''))}</code>"
+            f" <code>action_id={_e(action.get('action_id', ''))}</code>"
+            f"<br>{_e(action.get('reason', ''))}"
+            f"<br><small>source: {_e(', '.join(action.get('source_fields') or []))}</small>"
+            "</li>"
+        )
+    return _section("action-queue", "Action Queue", "<ol>" + "".join(rows) + "</ol>")
+
+
+def _render_blocked_queue_summary(data: Mapping[str, Any]) -> str:
+    summary = data.get("blocked_queue_summary") or {}
+    item_rows = [
+        f"{item.get('product_name', '')} | severidad: {item.get('severity', '')} | "
+        f"recuperable: {item.get('can_recover', False)} | {item.get('reason', '')}"
+        for item in summary.get("blocked_items") or []
+    ]
+    body = (
+        _kv_table(
+            {
+                "blocked_count": summary.get("blocked_count", 0),
+                "can_prepare": summary.get("can_prepare", False),
+                "source_fields": ", ".join(summary.get("source_fields") or []),
+            }
+        )
+        + "<h4>Items bloqueados</h4>"
+        + _ul(item_rows)
+        + "<h4>Reason codes</h4>"
+        + _ul(summary.get("reason_codes") or [])
+        + "<h4>Acciones requeridas del operador</h4>"
+        + _ul(summary.get("required_operator_actions") or [])
+    )
+    return _section("blocked-queue-summary", "Blocked Queue Summary", body)
+
+
+def _render_system_health_board(data: Mapping[str, Any]) -> str:
+    board = dict(data.get("system_health_board") or {})
+    source_fields = board.pop("source_fields", [])
+    body = _kv_table(board) + "<h4>Source fields</h4>" + _ul(source_fields)
+    return _section("system-health-board", "System Health Board", body)
+
+
+def _render_capability_surface_map(data: Mapping[str, Any]) -> str:
+    surface = data.get("capability_surface_map") or {}
+    parts = []
+    for title, key in (
+        ("Real hoy", "real_now"),
+        ("Solo fixture", "fixture_only"),
+        ("Futuro / no conectado", "future_or_not_connected"),
+        ("Prohibido reclamar", "forbidden_to_claim"),
+    ):
+        parts.append(f'<h4 data-capability-tier="{_e(key)}">{_e(title)}</h4>')
+        parts.append(_ul(surface.get(key) or []))
+    return _section("capability-surface-map", "Capability Surface Map", "\n".join(parts))
 
 
 def _render_provenance(data: Mapping[str, Any]) -> str:
@@ -505,7 +618,7 @@ pre { background: #f4f4f4; border: 1px solid #b5b5b5; padding: 8px; white-space:
 .empty { color: #555555; }
 .claim-guard-adjacent { border: 1px dashed #7a3030; padding: 8px; margin-top: 12px; }
 .provenance-seal { border: 2px double #1c1c1c; padding: 8px; }
-.blocked-item, .copy-payload { border-bottom: 1px solid #d0d0d0; padding: 8px 0; }
+.blocked-item, .copy-payload, .module-status { border-bottom: 1px solid #d0d0d0; padding: 8px 0; }
 """.strip()
 
 
@@ -516,15 +629,21 @@ def render_workbench_html(view_model: WorkbenchViewModel) -> str:
     sections = "\n".join(
         (
             _render_provenance(data),
+            _render_module_status_summary(data),
+            _render_candidate_pipeline(data),
+            _render_action_queue(data),
             _render_product_decision(data),
             _render_input_richness(data),
             _render_economics_scores(data),
             _render_shopify_pack(data),
             _render_marketing_pack(data),
             _render_learning_plan(data),
+            _render_blocked_queue_summary(data),
             _render_blocked_queue(data),
             _render_operator_actions(data),
+            _render_system_health_board(data),
             _render_safety_boundary(data),
+            _render_capability_surface_map(data),
             _render_evidence(data),
             _render_copy_payloads(data),
         )
