@@ -80,7 +80,10 @@ def test_meta_publisher_ignores_synapse_flag_live_alias(monkeypatch: pytest.Monk
     monkeypatch.setenv("META_ACCESS_TOKEN", "tok_guard")
     monkeypatch.setenv("META_AD_ACCOUNT_ID", "123456789")
 
-    with pytest.raises(NotImplementedError, match="Live Meta campaign creation"):
+    with pytest.raises(
+        NotImplementedError,
+        match="Live Meta campaign transport requires explicit canonical live intent",
+    ):
         call_create_campaign(MetaCampaignPayload(name="Alias Must Not Enable Live"))
 
 
@@ -98,8 +101,11 @@ def test_meta_publisher_blocks_at_network_guard_before_request(monkeypatch: pyte
             calls.append(req)
             raise AssertionError("request must not run before network_guard")
 
+    # Since the R106 global live-write guards, dry-run trips the standard
+    # guard stack before the network_guard layer; the security property under
+    # test is unchanged: no transport request may leave while dry-run is on.
     with patch("synapse.meta.publisher_adapter._build_http_client", return_value=_FakeClient()):
-        with pytest.raises(RuntimeError, match="NETWORK_BLOCKED_BY_FLAGS"):
+        with pytest.raises(NotImplementedError, match="SYNAPSE_DRY_RUN=0"):
             call_create_campaign(MetaCampaignPayload(name="Guarded Meta Campaign"))
 
     assert calls == []

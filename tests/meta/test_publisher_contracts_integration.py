@@ -120,7 +120,7 @@ def test_publisher_adapter_accepts_contract_payload_shape() -> None:
     try:
         call_create_campaign(MetaCampaignPayload(name="Adapter Contract"))
     except NotImplementedError as exc:
-        assert "Live Meta campaign creation" in str(exc)
+        assert "Live Meta campaign transport requires explicit canonical live intent" in str(exc)
     else:
         raise AssertionError("Expected NotImplementedError")
 
@@ -129,6 +129,6 @@ def test_publisher_adapter_accepts_pause_request_shape() -> None:
     try:
         call_pause_campaign(MetaPauseRequest(campaign_id="camp-live"))
     except NotImplementedError as exc:
-        assert "Live Meta campaign pause" in str(exc)
+        assert "Live Meta campaign transport requires explicit canonical live intent" in str(exc)
     else:
         raise AssertionError("Expected NotImplementedError")
