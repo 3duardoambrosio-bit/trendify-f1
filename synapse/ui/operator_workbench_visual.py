@@ -17,6 +17,16 @@ operator workspace on top of the R3 premium shell):
   accents, steel-blue audit accents, session gate (local-only, explicitly NOT
   real authentication), cockpit money metrics, executive brief, brain map,
   evidence black box.
+- R6 premium surface / operator power pass: Economics as a money cockpit
+  (hero KPI band, dominant margin waterfall with floor marker, executive
+  guardrail console, static local what-if simulator styling), candidate
+  pipeline as an operational board (stage track, driver/blocker chips,
+  featured recommended card), Shopify publish-gap console + storefront-chrome
+  listing preview, Marketing dominant/challenger angle hierarchy, hook
+  leaderboard (pack order only, never performance data), actionable rewrite
+  queue (copy-safe rewrite buttons + local review checks), working Evidence
+  Drawer open/close and local angle selection. All derived from existing
+  contract fields; local heuristics stay declared in the assumptions ledger.
 - Inline CSS + inline vanilla JS only. No network, no external assets, no
   forms, no live writes, no spend, no credentials, no analytics, no fake
   performance data.
@@ -36,7 +46,7 @@ from synapse.ui.operator_workbench_view_model import (
     build_view_model_from_path,
 )
 
-VISUAL_VERSION = "a8-r109b.operator_workbench_visual.v4-console"
+VISUAL_VERSION = "a8-r109b.operator_workbench_visual.v5-premium"
 
 # Local Fase 1 guardrails/assumptions for the Money Cockpit. These are
 # operator-facing heuristics computed from fixture numbers, never engine
@@ -256,6 +266,23 @@ def _pipeline_stage_for(data: Mapping[str, Any]) -> tuple[str, str]:
     return "IMPORTED", "muted"
 
 
+# Honest ordering of pipeline stages for the selector stage track. Ranks are
+# presentation-only (how far along the flow a stage sits); the stage itself
+# still comes from _pipeline_stage_for, i.e. from contract facts.
+_STAGE_RANK: dict[str, int] = {
+    "BLOCKED": 0,
+    "SIN CANDIDATO": 0,
+    "IMPORTED": 1,
+    "EVALUATING": 2,
+    "ECONOMICS_PASSED": 3,
+    "MARKETING_READY": 4,
+    "SUPPLIER_PENDING": 4,
+    "SHOPIFY_DRAFT_READY": 5,
+    "EXPORT_READY": 6,
+}
+_STAGE_TRACK_TOTAL = 6
+
+
 def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
     """Selector card facts, straight from existing ViewModel fields."""
     product = data.get("product") or {}
@@ -336,6 +363,7 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
         "kind": kind,
         "stage": stage,
         "stage_tone": stage_tone,
+        "stage_rank": _STAGE_RANK.get(stage, 0),
         "status": str(status),
         "outcome": str(decision.get("outcome", "") or "SIN CANDIDATO"),
         "margin_str": margin_str,
@@ -386,13 +414,32 @@ def _render_selector(
     for cand in candidates:
         active = cand["fid"] == selected_fid
         selected_attr = ' data-marker="selected_candidate_state"' if active else ""
+        rank = int(cand.get("stage_rank") or 0)
+        segments = "".join(
+            f'<i class="st-seg{" on" if index <= rank and rank > 0 else ""}'
+            f'{" st-" + _e(cand["stage_tone"]) if index <= rank and rank > 0 else ""}"></i>'
+            for index in range(1, _STAGE_TRACK_TOTAL + 1)
+        )
+        stage_track = (
+            f'<div class="stage-track" data-marker="pipeline_stage_track"'
+            f' title="Etapa derivada de hechos del contrato ({rank}/{_STAGE_TRACK_TOTAL})">'
+            f'{segments}<span class="st-label">{_e(cand["stage"])}</span></div>'
+        )
+        driver_chips = (
+            "".join(_chip(item, "go") for item in cand["drivers"])
+            or '<span class="sc-none">(sin drivers)</span>'
+        )
+        blocker_chips = (
+            "".join(_chip(item, "risk") for item in cand["blockers"])
+            or '<span class="sc-none">(sin blockers)</span>'
+        )
         drivers = (
             '<div class="sc-line sc-drivers" data-drivers="top_drivers">'
-            "<b>Drivers:</b> " + _e(", ".join(cand["drivers"]) or "(sin drivers)") + "</div>"
+            '<span class="sc-line-label">Drivers</span>' + driver_chips + "</div>"
         )
         blockers = (
             '<div class="sc-line sc-blockers" data-blockers="top_blockers">'
-            "<b>Blockers:</b> " + _e(", ".join(cand["blockers"]) or "(sin blockers)") + "</div>"
+            '<span class="sc-line-label">Blockers</span>' + blocker_chips + "</div>"
         )
         cards.append(
             f'<div class="sel-card{" active" if active else ""}"'
@@ -407,10 +454,14 @@ def _render_selector(
             f'{_e(cand["badge"])}</span>'
             f'<span class="chip chip-{_e(cand["stage_tone"])} sc-stage">{_e(cand["stage"])}</span></div>'
             f'<div class="sc-name">{_e(cand["name"])}</div>'
-            f'<div class="sc-score">Score compuesto: <b>{_e(cand["score_str"])}</b></div>'
-            f'<div class="sc-money">{_e(cand["margin_str"])}</div>'
+            f"{stage_track}"
+            f'<div class="sc-stats">'
+            f'<span class="sc-stat"><span class="sc-stat-label">Score compuesto</span>'
+            f'<b>{_e(cand["score_str"])}</b></span>'
+            f'<span class="sc-stat"><span class="sc-stat-label">Dinero</span>'
+            f'<b class="sc-money">{_e(cand["margin_str"])}</b></span></div>'
             f"{drivers}{blockers}"
-            f'<div class="sc-next">{_e(cand["next_str"])}</div>'
+            f'<div class="sc-next">{_e(cand["next_str"])}<span class="sc-arrow">-&gt;</span></div>'
             f'<div class="sc-rich">{_e(cand["richness_str"])}</div></div>'
         )
     compare_rows = "".join(
@@ -1627,13 +1678,47 @@ def _economics_verdict(data: Mapping[str, Any]) -> tuple[str, str, str]:
     return "WATCH", "warn", f"Gate {gate}: revisar caveats antes de avanzar."
 
 
-def _waterfall_row(label: str, amount: float, price: float, tone: str) -> str:
+def _waterfall_row(
+    label: str, amount: float, price: float, tone: str, *, floor_pct: float | None = None
+) -> str:
     width = max(2, min(100, int(round(abs(amount) * 100 / price)))) if price else 0
-    sign = "-" if tone in ("cost",) else ""
+    pct = round(abs(amount) * 100 / price, 1) if price else 0.0
+    sign = "-" if tone in ("cost", "reserve") else ""
+    floor_marker = (
+        f'<i class="wf-floor" style="left:{max(0, min(100, int(round(floor_pct))))}%"'
+        f' title="Piso local de margen ({MARGIN_FLOOR_PCT:.0f}% del precio)"></i>'
+        if floor_pct is not None
+        else ""
+    )
     return (
-        f'<div class="wf-row"><span class="wf-label">{_e(label)}</span>'
-        f'<span class="wf-track"><i class="wf-bar wf-{_e(tone)}" style="width:{width}%"></i></span>'
+        f'<div class="wf-row wf-row-{_e(tone)}"><span class="wf-label">{_e(label)}</span>'
+        f'<span class="wf-track"><i class="wf-bar wf-{_e(tone)}" style="width:{width}%"></i>'
+        f"{floor_marker}</span>"
+        f'<span class="wf-pct">{pct:.1f}%</span>'
         f'<span class="wf-val wf-v-{_e(tone)}">{sign}{_e(_fmt_money(abs(amount)))}</span></div>'
+    )
+
+
+def _kpi_tile(
+    label: str,
+    value: str,
+    sub: str = "",
+    *,
+    tone: str = "gold",
+    hero: bool = False,
+    state: str = "",
+    state_tone: str = "go",
+) -> str:
+    """Cockpit KPI tile; hero tiles dominate the strip, secondary tiles stack."""
+    state_html = (
+        f'<span class="chip chip-{_e(state_tone)} kpi-state">{_e(state)}</span>' if state else ""
+    )
+    sub_html = f'<span class="kpi-sub">{_e(sub)}</span>' if sub else ""
+    kind = "kpi-hero-tile" if hero else "kpi-mini-tile"
+    return (
+        f'<div class="kpi-tile {kind} kpi-{_e(tone)}">'
+        f'<span class="kpi-label">{_e(label)}{state_html}</span>'
+        f'<span class="kpi-value">{_e(value)}</span>{sub_html}</div>'
     )
 
 
@@ -1686,41 +1771,78 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
     reserve = round(price * RISK_RESERVE_RATE, 2)
     buffer = round(margin - reserve, 2)
     floor_mxn = round(price * MARGIN_FLOOR_PCT / 100, 2)
+    floor_pct_of_price = round(floor_mxn * 100 / price, 1) if price else 0.0
 
-    kpis = "".join(
+    def _floor_state(amount: float) -> tuple[str, str]:
+        return ("SOBRE PISO", "go") if amount >= floor_mxn else ("BAJO PISO", "risk")
+
+    margin_state, margin_tone = _floor_state(margin)
+    buffer_state, buffer_tone = _floor_state(buffer)
+    hero_tiles = "".join(
         (
-            _metric("Precio", _fmt_money(price), tone="ink"),
-            _metric("Costo producto", _fmt_money(cost), tone="ink"),
-            _metric("Envio", _fmt_money(shipping), tone="ink"),
-            _metric("Fees", _fmt_money(fee), tone="ink"),
-            _metric("Margen bruto", _fmt_money(margin), sub=_fmt_percent(pct), tone="gold"),
-            _metric("Breakeven CPA", _fmt_money(breakeven), tone="gold"),
-            _metric(
+            _kpi_tile(
+                "Margen / unidad",
+                _fmt_money(margin),
+                sub=f"{_fmt_percent(pct)} de contribucion (motor)",
+                hero=True,
+                state=margin_state,
+                state_tone=margin_tone,
+            ),
+            _kpi_tile(
+                "Breakeven CPA",
+                _fmt_money(breakeven),
+                sub="tope de adquisicion por unidad",
+                hero=True,
+            ),
+            _kpi_tile(
                 "Buffer post-reserva",
                 _fmt_money(buffer),
-                sub=f"reserva teorica {_fmt_money(reserve)} (supuesto local)",
-                tone="gold",
+                sub=f"tras reserva teorica {_fmt_money(reserve)} (supuesto local)",
+                hero=True,
+                state=buffer_state,
+                state_tone=buffer_tone,
             ),
+        )
+    )
+    mini_tiles = "".join(
+        (
+            _kpi_tile("Precio", _fmt_money(price), sub=f"compare-at {_fmt_money(economics.get('compare_at_price_mxn'))}", tone="ink"),
+            _kpi_tile("Costo producto", _fmt_money(cost), tone="ink"),
+            _kpi_tile("Envio", _fmt_money(shipping), tone="ink"),
+            _kpi_tile("Fees", _fmt_money(fee), tone="ink"),
+            _kpi_tile("Piso local", _fmt_money(floor_mxn), sub=f"{MARGIN_FLOOR_PCT:.0f}% del precio", tone="warn"),
         )
     )
     kpi_card = (
         '<div class="card money-cockpit" data-marker="money_cockpit">'
         "<h3>Money Cockpit - KPI strip (numeros del fixture)</h3>"
-        f'<div class="kpi-strip" data-marker="kpi_strip">{kpis}</div>'
+        f'<div class="kpi-strip" data-marker="kpi_strip">'
+        f'<div class="kpi-hero">{hero_tiles}</div>'
+        f'<div class="kpi-minis">{mini_tiles}</div></div>'
         + (f'<p class="honesty">{_e(notes)}</p>' if notes else "")
         + "</div>"
     )
 
+    kept_pct = round(margin * 100 / price, 1) if price else 0.0
     waterfall_card = (
-        '<div class="card" data-marker="margin_waterfall">'
+        '<div class="card waterfall-card" data-marker="margin_waterfall">'
         "<h3>Margin waterfall (por unidad)</h3>"
+        f'<div class="wf-headline">De {_e(_fmt_money(price))} de precio quedan'
+        f' <b>{_e(_fmt_money(margin))}</b> de margen ({kept_pct:.1f}%);'
+        f" piso local en {_e(_fmt_money(floor_mxn))}.</div>"
         + _waterfall_row("Precio", price, price, "price")
         + _waterfall_row("Costo producto", -cost, price, "cost")
         + _waterfall_row("Envio", -shipping, price, "cost")
         + _waterfall_row("Fees", -fee, price, "cost")
         + _waterfall_row("Reserva / riesgo (supuesto local)", -reserve, price, "reserve")
-        + _waterfall_row("Contribution margin (motor)", margin, price, "margin")
-        + _waterfall_row("Buffer post-reserva (local)", buffer, price, "buffer")
+        + _waterfall_row(
+            "Contribution margin (motor)", margin, price, "margin", floor_pct=floor_pct_of_price
+        )
+        + _waterfall_row(
+            "Buffer post-reserva (local)", buffer, price, "buffer", floor_pct=floor_pct_of_price
+        )
+        + '<div class="wf-legend"><span class="wf-legend-floor"></span>marca = piso local de'
+        f" margen ({MARGIN_FLOOR_PCT:.0f}% del precio)</div>"
         + '<p class="honesty">Reserva teorica del 10% del precio: supuesto local del'
         " cockpit declarado en el ledger de supuestos; no es salida del motor.</p></div>"
     )
@@ -1731,7 +1853,7 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
         state = "sobre piso" if s_margin >= s_floor else "BAJO PISO"
         tone = "go" if s_margin >= s_floor else "risk"
         return (
-            f'<div class="brief-card scenario-card"><span class="vh-tag">{_e(label)}</span>'
+            f'<div class="brief-card scenario-card sim-card"><span class="vh-tag">{_e(label)}</span>'
             f'<div class="m-value m-gold">{_e(_fmt_money(s_margin))}</div>'
             f'<span class="m-sub">margen teorico / unidad</span>'
             + _kv(
@@ -1755,44 +1877,53 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
         + "</div></div>"
     )
 
-    def sens_row(label: str, new_margin: float) -> str:
-        state = "sobre piso" if new_margin >= floor_mxn else "BAJO PISO"
-        tone = "go" if new_margin >= floor_mxn else "risk"
+    def sens_row(label: str, delta: str, new_margin: float) -> str:
+        state, tone = _floor_state(new_margin)
+        width = max(2, min(100, int(round(new_margin * 100 / margin)))) if margin else 0
         return (
-            f"<tr><th>{_e(label)}</th><td>{_e(_fmt_money(new_margin))}</td>"
-            f'<td><span class="chip chip-{tone}">{_e(state)}</span></td></tr>'
+            f'<div class="sim-row"><span class="sim-lamp lamp-{tone}"></span>'
+            f'<span class="sim-var">{_e(label)}<small>{_e(delta)}</small></span>'
+            f'<span class="sim-track"><i class="sim-bar sim-{tone}" style="width:{width}%"></i></span>'
+            f'<span class="sim-val">{_e(_fmt_money(new_margin))}</span>'
+            f'<span class="chip chip-{tone}">{_e(state)}</span></div>'
         )
 
     cpa_hit = round(margin - (breakeven or 0.0) * 1.15, 2)
     sensitivity_card = (
-        '<div class="card" data-marker="sensitivity_grid">'
-        "<h3>Sensitivity grid local (margen resultante por unidad)</h3>"
-        '<table class="kv"><tr><th>variable</th><td>margen resultante</td><td>vs piso</td></tr>'
-        + sens_row("CPA real = breakeven +15%", cpa_hit)
-        + sens_row("Precio -10%", round(margin - price * 0.10, 2))
-        + sens_row("Costo proveedor +10%", round(margin - cost * 0.10, 2))
-        + sens_row("Envio +10%", round(margin - shipping * 0.10, 2))
-        + sens_row("Aplicando reserva/fee teorica", buffer)
-        + "</table>"
-        '<p class="honesty">Calculos locales derivados del fixture; no usan datos de'
-        " mercado reales.</p></div>"
+        '<div class="card sim-console" data-marker="sensitivity_grid"'
+        ' data-sim="local_static_simulator">'
+        "<h3>Simulador local de margen (estatico; derivado del fixture)</h3>"
+        '<div class="sim-head"><span>escenario</span><span>margen resultante vs base</span></div>'
+        + sens_row("CPA real = breakeven +15%", f"vs base {_fmt_money(margin)}", cpa_hit)
+        + sens_row("Precio -10%", f"-{_fmt_money(price * 0.10)}", round(margin - price * 0.10, 2))
+        + sens_row("Costo proveedor +10%", f"-{_fmt_money(cost * 0.10)}", round(margin - cost * 0.10, 2))
+        + sens_row("Envio +10%", f"-{_fmt_money(shipping * 0.10)}", round(margin - shipping * 0.10, 2))
+        + sens_row("Aplicando reserva/fee teorica", f"-{_fmt_money(reserve)}", buffer)
+        + '<p class="honesty">Simulacion estatica local derivada del fixture; sin datos'
+        " de mercado reales y sin recalculo del motor.</p></div>"
     )
 
     plan = (data.get("marketing_pack") or {}).get("testing_plan_with_thresholds") or {}
+    boundary_text = str(
+        plan.get("first_test_budget_boundary_dry_run_only", "(boundary no definido)")
+    )
     guardrails_card = (
-        '<div class="card" data-marker="economics_guardrails">'
-        "<h3>Guardrails (locales Fase 1)</h3>"
-        + _ul(
-            [
-                f"Piso minimo de margen: {MARGIN_FLOOR_PCT:.0f}% del precio"
-                f" ({_fmt_money(floor_mxn)} por unidad) - guardrail local",
-                "Regla: no avanzar si margen bajo piso.",
-                "Perdida maxima teorica del primer test: "
-                + str(plan.get("first_test_budget_boundary_dry_run_only", "(boundary no definido)")),
-            ],
-            "plain warn",
-        )
-        + "</div>"
+        '<div class="card guardrail-console" data-marker="economics_guardrails"'
+        ' data-console="guardrail_console">'
+        "<h3>Guardrail console (locales Fase 1)</h3>"
+        '<div class="guard-tiles">'
+        '<div class="guard-tile"><span class="kpi-label">Piso minimo de margen</span>'
+        f'<span class="kpi-value">{_e(_fmt_money(floor_mxn))}</span>'
+        f'<span class="kpi-sub">{MARGIN_FLOOR_PCT:.0f}% del precio - guardrail local</span></div>'
+        '<div class="guard-tile"><span class="kpi-label">Buffer post-reserva</span>'
+        f'<span class="kpi-value">{_e(_fmt_money(buffer))}</span>'
+        f'<span class="kpi-sub">reserva teorica {_e(_fmt_money(reserve))} (supuesto local)</span></div>'
+        '<div class="guard-tile guard-tile-wide"><span class="kpi-label">'
+        "Perdida maxima teorica del primer test</span>"
+        f'<span class="kpi-sub guard-boundary">{_e(boundary_text)}</span></div>'
+        "</div>"
+        '<div class="guard-rule">Regla: no avanzar si margen bajo piso.</div>'
+        "</div>"
     )
 
     shopify = data.get("shopify_pack") or {}
@@ -1815,9 +1946,9 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
 
     body = (
         kpi_card
-        + f'<div class="grid g2">{waterfall_card}{verdict_card}</div>'
-        + scenarios_card
-        + f'<div class="grid g2">{sensitivity_card}{guardrails_card}</div>'
+        + f'<div class="grid g21">{waterfall_card}{verdict_card}</div>'
+        + guardrails_card
+        + f'<div class="grid g2">{sensitivity_card}{scenarios_card}</div>'
         + actions_card
     )
     return (
@@ -1870,11 +2001,48 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
             collapsible_keys=("shopify_full_pack",),
         )
         preview_card = ""
+        gap_console = ""
         if not blocked:
+            missing_inputs = [str(item) for item in pack.get("missing_inputs") or []]
+            asset_gaps = [str(item) for item in pack.get("image_checklist") or []]
+            gap_total = len(missing_inputs) + len(asset_gaps)
+            gap_chips = "".join(_chip(item, "risk") for item in missing_inputs) + "".join(
+                _chip(item, "warn") for item in asset_gaps
+            )
+            gap_console = (
+                '<div class="card gap-console" data-marker="publish_gap_console">'
+                "<h3>Que falta para publicar (gaps declarados por el contrato)</h3>"
+                '<div class="gap-head">'
+                f'<span class="gap-count">{gap_total}</span>'
+                '<div class="gap-copy"><b>pendientes antes de publicar</b>'
+                f"<span>{len(missing_inputs)} input(s) faltantes + {len(asset_gaps)}"
+                " asset(s) del checklist de imagenes. Nada se publica desde aqui;"
+                " el operador resuelve y decide.</span></div></div>"
+                f'<div class="field-chips gap-chips">{gap_chips or _chip("(sin gaps declarados)", "muted")}</div>'
+                "</div>"
+            )
             preview_bullets = _ul((pack.get("bullets") or [])[:3], "plain go")
+            guard_notes = pack.get("claim_guard_notes") or {}
+            trust_row = (
+                '<div class="lp-trust">'
+                + _chip("BORRADOR LOCAL", "steel")
+                + _chip("CLAIM GUARD ADYACENTE", "warn")
+                + _chip("SIN PUBLICACION", "risk")
+                + (
+                    f'<span class="lp-guard-summary">{_e(guard_notes.get("summary", ""))}</span>'
+                    if guard_notes.get("summary")
+                    else ""
+                )
+                + "</div>"
+            )
             preview_card = (
-                '<div class="card listing-preview" data-marker="listing_preview">'
+                '<div class="card listing-preview" data-marker="listing_preview"'
+                ' data-preview="storefront_preview">'
                 "<h3>Vista previa del listing (borrador local)</h3>"
+                '<div class="lp-window">'
+                '<div class="lp-chrome"><span class="lp-dot"></span><span class="lp-dot"></span>'
+                '<span class="lp-dot"></span>'
+                '<span class="lp-chrome-label">vista de tienda - borrador local - no publicado</span></div>'
                 '<div class="lp-frame">'
                 '<div class="lp-img" title="Gap declarado en image_checklist del contrato">'
                 "Imagen pendiente:<br>fotos reales del proveedor</div>"
@@ -1884,8 +2052,9 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
                 f'<div class="price-block"><span class="price-now">{_e(pack.get("price", ""))}</span>'
                 f'<span class="price-compare">{_e(pack.get("compare_at_price", ""))}</span></div>'
                 f"{preview_bullets}"
+                f"{trust_row}"
                 f'<div class="lp-note">{_e(pack.get("claim_safe_disclaimer", ""))}</div>'
-                "</div></div></div>"
+                "</div></div></div></div>"
             )
         identity_card = _card(
             "Identidad del listing",
@@ -1987,6 +2156,7 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
         body = (
             banner
             + '<div data-contract-section="shopify_listing_builder">'
+            + gap_console
             + preview_card
             + '<div class="studio">'
             + "<div>"
@@ -2147,16 +2317,27 @@ def _render_first_test_panel(data: Mapping[str, Any], blocked: bool) -> str:
         and str(entry.get("risk_level", "")).lower() not in ("low", "")
     ]
     rewrite_rows = "".join(
-        f'<div class="risk-note" data-rewrite-surface="{_e(entry.get("copy_key", ""))}">'
-        f'<span class="risk-tag">{_e(entry.get("copy_key", ""))}'
+        f'<div class="risk-note rw-row" data-rewrite-surface="{_e(entry.get("copy_key", ""))}"'
+        f' data-marker="rewrite_action_row">'
+        f'<div class="rw-body"><span class="risk-tag">{_e(entry.get("copy_key", ""))}'
         f' ({_e(entry.get("risk_level", ""))})</span> {_e(entry.get("reason", ""))}'
-        f'<br><span class="safe">Version claim-safe: {_e(entry.get("safe_rewrite", ""))}</span></div>'
+        f'<br><span class="safe">Version claim-safe: '
+        f'<span id="rw_q_{_e(entry.get("copy_key", ""))}">'
+        f'{_e(entry.get("safe_rewrite", ""))}</span></span></div>'
+        f'<div class="rw-actions">'
+        f'<button type="button" class="copy-btn rw-copy" data-copy-button'
+        f' data-copy-target="rw_q_{_e(entry.get("copy_key", ""))}">Copiar rewrite</button>'
+        f'<span class="action-item rw-check" data-local-check="rewrite_{_e(entry.get("copy_key", ""))}">'
+        f'<span class="ck"></span><span class="a-label">Revisado (check local)</span></span>'
+        f"</div></div>"
         for entry in rewrites
     )
     rewrite_card = _card(
-        f"Cola de rewrites ({len(rewrites)})",
+        f"Cola de rewrites ({len(rewrites)}) - copiar la version claim-safe y marcar revision local",
         (rewrite_rows or '<p class="empty">(sin rewrites pendientes)</p>')
-        + '<div data-marker="claim_safe_version"></div>',
+        + '<div data-marker="claim_safe_version"></div>'
+        + '<p class="local-note">El check de revision se guarda solo en este navegador;'
+        " no cambia el analisis de Claim Guard.</p>",
         attrs='data-marker="rewrite_queue"',
     )
 
@@ -2319,11 +2500,16 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
     rewrites_card = ""
     if rewrites and not blocked:
         rewrite_rows = "".join(
-            f'<div class="risk-note" data-rewrite-surface="{_e(entry.get("copy_key", ""))}">'
-            f'<span class="risk-tag">{_e(entry.get("copy_key", ""))}</span>'
+            f'<div class="risk-note rw-row" data-rewrite-surface="{_e(entry.get("copy_key", ""))}">'
+            f'<div class="rw-body"><span class="risk-tag">{_e(entry.get("copy_key", ""))}</span>'
             f' - terminos: {_e(", ".join(entry.get("risky_terms") or []) or "(ninguno)")}'
             f"<br>{_e(entry.get('reason', ''))}"
-            f'<br><span class="safe">Rewrite seguro: {_e(entry.get("safe_rewrite", ""))}</span></div>'
+            f'<br><span class="safe">Rewrite seguro: '
+            f'<span id="rw_main_{_e(entry.get("copy_key", ""))}">'
+            f'{_e(entry.get("safe_rewrite", ""))}</span></span></div>'
+            f'<button type="button" class="copy-btn rw-copy" data-copy-button'
+            f' data-copy-target="rw_main_{_e(entry.get("copy_key", ""))}">Copiar rewrite</button>'
+            f"</div>"
             for entry in rewrites
         )
         rewrites_card = _card(
@@ -2332,9 +2518,32 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
             attrs='data-rewrites-pending="true" data-marker="rewrites_pending"',
         )
 
+    # Tab counters: honest volume per surface, straight from pack list lengths.
+    tab_counts: dict[str, int | None] = {
+        "lab_firsttest": len(rewrites) or None,
+        "lab_strategy": None,
+        "lab_angles": len(pack.get("angle_matrix") or []) or None,
+        "lab_hooks": len(pack.get("hooks") or []) or None,
+        "lab_adcopy": (
+            len(pack.get("primary_texts") or [])
+            + len(pack.get("short_ads") or [])
+            + len(pack.get("long_ads") or [])
+            + len(pack.get("captions") or [])
+        )
+        or None,
+        "lab_channels": len(pack.get("channel_packs") or []) or None,
+        "lab_testplan": None,
+        "lab_learning": None,
+    }
     tabs_nav = "".join(
         f'<span class="lab-tab{" active" if tab_id == LAB_TABS[0][0] else ""}"'
-        f' data-lab-tab="{tab_id}">{_e(label)}</span>'
+        f' data-lab-tab="{tab_id}">{_e(label)}'
+        + (
+            f'<span class="tab-count">{tab_counts[tab_id]}</span>'
+            if tab_counts.get(tab_id)
+            else ""
+        )
+        + "</span>"
         for tab_id, label in LAB_TABS
     )
     first_test_panel = _render_first_test_panel(data, blocked)
@@ -2381,11 +2590,25 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
             if not blocked
             else ""
         )
+        # Rank-based visual hierarchy (rank = risk-adjusted local heuristic,
+        # never performance data): P1 dominates, P2 is the visible challenger.
+        if priority == 1:
+            rank_class = " angle-hero"
+            rank_marker = ' data-marker="dominant_angle"'
+            rank_chip = '<span class="chip chip-gold rank-chip">ANGULO DOMINANTE - P1</span>'
+        elif priority == 2:
+            rank_class = " angle-challenger"
+            rank_marker = ' data-marker="challenger_angle"'
+            rank_chip = '<span class="chip chip-steel rank-chip">CHALLENGER - P2</span>'
+        else:
+            rank_class = ""
+            rank_marker = ""
+            rank_chip = f'<span class="chip chip-gold">P{priority}</span>'
         angle_cards.append(
-            f'<div class="angle-card" data-angle-card="{angle_id}">'
+            f'<div class="angle-card{rank_class}" data-angle-card="{angle_id}"{rank_marker}>'
             f'<div class="a-top"><b>[{angle_id}]'
             f' {_e(angle.get("angle_name", ""))}</b>'
-            f'<span class="angle-meta"><span class="chip chip-gold">P{priority}</span>'
+            f'<span class="angle-meta">{rank_chip}'
             f'<span class="chip chip-steel" title="Heuristica local riesgo-ajustada;'
             f' no es prediccion de rendimiento">score {angle_score}/10</span>'
             f'<span class="chip chip-warn">riesgo {_e(angle.get("claim_risk", ""))}</span>'
@@ -2454,17 +2677,26 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
                 return '<span class="chip chip-warn">needs rewrite</span>'
         return '<span class="chip chip-muted">sin analisis</span>'
 
+    hooks = [str(hook) for hook in pack.get("hooks") or []]
     hook_rows = "".join(
-        f'<div class="hook-row"><span class="prio">H{index}</span>'
-        f'<span class="hook-text">{_e(hook)}</span>'
+        f'<div class="hook-row lb-row{" lb-top" if index == 1 else ""}">'
+        f'<span class="lb-rank lb-rank-{min(index, 4)}">{index:02d}</span>'
+        f'<span class="hook-text">{_e(hook)}'
+        + ('<span class="lb-first-tag">PRIMERO EN LA COLA (orden del pack)</span>' if index == 1 else "")
+        + "</span>"
         f"{_surface_state_chip('hooks')}</div>"
-        for index, hook in enumerate(pack.get("hooks") or [], start=1)
+        for index, hook in enumerate(hooks, start=1)
     )
     hooks_panel = (
         '<div class="lab-panel" data-lab-panel id="lab_hooks" data-marker="hooks_bank">'
         + _card(
-            "Hook Console (prioridad = orden del pack; estado por superficie)",
-            (hook_rows or '<p class="empty">(sin hooks)</p>') + _risk_chip_for(data, "hooks"),
+            f"Hook Leaderboard ({len(hooks)}) - ranking = orden del pack, nunca rendimiento",
+            f'<div class="leaderboard" data-marker="hook_leaderboard">'
+            + (hook_rows or '<p class="empty">(sin hooks)</p>')
+            + "</div>"
+            + _risk_chip_for(data, "hooks")
+            + '<p class="honesty">El orden viene del pack del contrato; no existe ningun'
+            " dato de rendimiento en Fase 1 y este ranking no lo simula.</p>",
             attrs='data-marker="hook_console"',
         )
         + _card("Headlines", _ul(pack.get("headlines") or []) + _risk_chip_for(data, "headlines"))
@@ -2927,7 +3159,11 @@ _INLINE_CSS = """
 --sans:"Segoe UI",system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
-body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+body{background:
+radial-gradient(1100px 500px at 85% -10%,rgba(216,179,106,.05),transparent 60%),
+radial-gradient(900px 480px at -10% 0,rgba(138,171,212,.05),transparent 55%),
+var(--bg);
+color:var(--ink);font-family:var(--sans);font-size:13.5px;line-height:1.48}
 .shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
 #module_rail{position:sticky;top:0;height:100vh;overflow-y:auto;
 background:linear-gradient(180deg,#0b0d13,#08090d);
@@ -2989,19 +3225,21 @@ font-family:var(--sans);letter-spacing:.02em}
 box-shadow:0 1px 8px rgba(216,179,106,.25)}
 .cta-warn{background:var(--warn);color:#241a02}
 .cta-muted{background:var(--panel-3);color:var(--ink-3);cursor:default}
-.content{padding:24px 26px 60px;max-width:1240px}
+.content{padding:20px 24px 60px;max-width:1340px}
 .module{display:none}
 .module.active{display:block}
-.mod-head h2{font-size:21px;font-weight:800;letter-spacing:.01em}
-.mod-head .purpose{font-size:12.5px;color:var(--ink-3);margin:2px 0 16px}
+.mod-head{border-bottom:1px solid var(--line-soft);margin-bottom:14px}
+.mod-head h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.mod-head .purpose{font-size:12px;color:var(--ink-3);margin:1px 0 10px}
 .card{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line-soft);
-border-radius:14px;padding:15px 17px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.35)}
-.card h3{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);
-margin-bottom:11px;padding-bottom:8px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:7px}
+border-radius:13px;padding:13px 15px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.card h3{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-3);
+margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:7px}
 .card h3::before{content:"";width:3px;height:11px;border-radius:2px;background:var(--gold);flex-shrink:0}
-.grid{display:grid;gap:14px}
+.grid{display:grid;gap:12px}
 .g2{grid-template-columns:1fr 1fr}
 .g3{grid-template-columns:1fr 1fr 1fr}
+.g21{grid-template-columns:2fr 1fr}
 .grid .card{margin-bottom:0}
 table.kv{border-collapse:collapse;width:100%;font-size:12.5px}
 table.kv th,table.kv td{border-bottom:1px dashed var(--line-soft);padding:5px 6px;text-align:left;vertical-align:top}
@@ -3260,11 +3498,175 @@ background:linear-gradient(90deg,var(--gold),var(--gold-2));transition:width .2s
 .prog-val{font-family:var(--mono);font-size:11.5px;color:var(--gold-2);white-space:nowrap}
 .export-panel{border-color:var(--gold-line);background:linear-gradient(165deg,#171205,var(--panel))}
 .export-panel h3{color:var(--gold-2)}
+.drawer-btn{background:var(--steel-soft);border:1px solid var(--steel-line);border-radius:7px;
+color:var(--steel);font-size:10.5px;font-weight:800;letter-spacing:.05em;font-family:var(--sans);
+padding:5px 12px;cursor:pointer}
+.drawer-btn:hover{color:var(--ink);border-color:var(--steel)}
+.evidence-drawer{position:fixed;top:0;right:0;bottom:0;width:min(540px,94vw);z-index:300;
+background:linear-gradient(180deg,#0d1017,#090b10);border-left:1px solid var(--steel-line);
+box-shadow:-18px 0 60px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;
+border-bottom:1px solid var(--line-soft);font-size:11px;font-weight:800;letter-spacing:.11em;
+text-transform:uppercase;color:var(--steel);flex-shrink:0}
+.drawer-body{overflow-y:auto;padding:14px 18px}
+.kpi-strip{display:flex;flex-direction:column;gap:10px}
+.kpi-hero{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi-minis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.kpi-tile{display:flex;flex-direction:column;gap:2px;border-radius:11px;padding:9px 12px;
+background:var(--bg-soft);border:1px solid var(--line-soft)}
+.kpi-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;
+color:var(--ink-4);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.kpi-value{font-size:15px;font-weight:800;font-family:var(--mono);color:var(--gold-2);letter-spacing:.01em}
+.kpi-sub{font-size:10px;color:var(--ink-3)}
+.kpi-state{margin:0;font-size:8.5px;padding:1px 7px}
+.kpi-hero-tile{padding:13px 16px;border-color:var(--gold-line);
+background:linear-gradient(165deg,#1a1408,var(--bg-soft))}
+.kpi-hero-tile .kpi-value{font-size:26px}
+.kpi-ink .kpi-value{color:var(--ink)} .kpi-warn .kpi-value{color:var(--warn)}
+.waterfall-card{border-color:var(--gold-line)}
+.wf-headline{font-size:12.5px;color:var(--ink-2);margin-bottom:10px;padding:9px 12px;
+border-radius:9px;background:var(--gold-soft);border:1px dashed var(--gold-line)}
+.wf-headline b{color:var(--gold-2);font-family:var(--mono)}
+.wf-row{display:flex;align-items:center;gap:10px;padding:5px 0}
+.wf-label{width:212px;font-size:11.5px;color:var(--ink-2);flex-shrink:0}
+.wf-track{flex:1;height:16px;border-radius:5px;background:var(--panel-3);overflow:hidden;position:relative}
+.wf-bar{display:block;height:100%;border-radius:5px}
+.wf-price{background:linear-gradient(90deg,#2b3d55,var(--steel))}
+.wf-cost{background:linear-gradient(90deg,#552726,var(--risk))}
+.wf-reserve{background:linear-gradient(90deg,#4e3d18,var(--warn))}
+.wf-margin{background:linear-gradient(90deg,#8a6b2c,var(--gold-2))}
+.wf-buffer{background:linear-gradient(90deg,#1c4a38,var(--go))}
+.wf-floor{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn)}
+.wf-pct{width:50px;text-align:right;font-family:var(--mono);font-size:10px;color:var(--ink-4);flex-shrink:0}
+.wf-val{width:118px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;flex-shrink:0}
+.wf-v-price{color:var(--steel)} .wf-v-cost{color:var(--risk)} .wf-v-reserve{color:var(--warn)}
+.wf-v-margin{color:var(--gold-2)} .wf-v-buffer{color:var(--go)}
+.wf-row-margin{border-top:1px dashed var(--line-soft);margin-top:4px;padding-top:8px}
+.wf-row-margin .wf-label,.wf-row-margin .wf-val{font-weight:800}
+.wf-legend{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--ink-4);
+margin-top:8px;font-family:var(--mono)}
+.wf-legend-floor{width:2px;height:12px;background:var(--warn);display:inline-block}
+.verdict-gate{border-color:var(--steel-line)}
+.gate-legend{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.gate-chip{font-size:10px;font-weight:800;letter-spacing:.07em;font-family:var(--mono);
+padding:4px 11px;border-radius:7px;border:1px solid var(--line-soft);color:var(--ink-4);
+background:var(--panel-3);opacity:.5}
+.gate-chip.current{opacity:1;box-shadow:0 0 0 1px currentColor}
+.gate-go{color:var(--go);background:var(--go-soft);border-color:var(--go-line)}
+.gate-warn{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.gate-risk{color:var(--risk);background:var(--risk-soft);border-color:var(--risk-line)}
+.verdict-gate .vh-outcome{font-size:30px;margin:2px 0 6px}
+.gate-current-go{color:var(--go)} .gate-current-warn{color:var(--warn)}
+.gate-current-risk{color:var(--risk)} .gate-current-muted{color:var(--ink-3)}
+.guardrail-console{border-color:var(--warn-line);background:linear-gradient(165deg,#191307,var(--panel))}
+.guard-tiles{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px}
+.guard-tile{border:1px solid var(--warn-line);background:var(--bg-soft);border-radius:11px;
+padding:11px 14px;display:flex;flex-direction:column;gap:3px}
+.guard-tile .kpi-value{font-size:22px;color:var(--warn)}
+.guard-boundary{font-size:11.5px;color:#e8cf9d;line-height:1.55}
+.guard-rule{margin-top:10px;padding:9px 13px;border-radius:9px;border:1px dashed var(--warn-line);
+background:var(--warn-soft);font-size:11.5px;font-weight:800;letter-spacing:.04em;color:var(--warn);
+font-family:var(--mono)}
+.sim-console{border-color:var(--steel-line)}
+.sim-head{display:flex;justify-content:space-between;font-size:9.5px;font-weight:800;
+text-transform:uppercase;letter-spacing:.1em;color:var(--ink-4);padding-bottom:6px;
+border-bottom:1px dashed var(--line-soft);margin-bottom:4px}
+.sim-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px dashed var(--line-soft)}
+.sim-row:last-of-type{border-bottom:0}
+.sim-lamp{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.lamp-go{background:var(--go);box-shadow:0 0 8px rgba(55,198,143,.7)}
+.lamp-risk{background:var(--risk);box-shadow:0 0 8px rgba(224,94,85,.7)}
+.sim-var{width:200px;font-size:11.5px;color:var(--ink-2);flex-shrink:0;display:flex;flex-direction:column}
+.sim-var small{font-size:9.5px;color:var(--ink-4);font-family:var(--mono)}
+.sim-track{flex:1;height:10px;border-radius:5px;background:var(--panel-3);overflow:hidden}
+.sim-bar{display:block;height:100%;border-radius:5px}
+.sim-go{background:linear-gradient(90deg,#1c4a38,var(--go))}
+.sim-risk{background:linear-gradient(90deg,#552726,var(--risk))}
+.sim-val{width:108px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;
+color:var(--ink);flex-shrink:0}
+.scenario-card .m-value{font-size:22px}
+.sel-cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.stage-track{display:flex;align-items:center;gap:3px;margin:7px 0 8px}
+.st-seg{flex:1;height:5px;border-radius:3px;background:var(--panel-3)}
+.st-seg.on{background:var(--gold)}
+.st-seg.st-go{background:var(--go)} .st-seg.st-warn{background:var(--warn)}
+.st-seg.st-risk{background:var(--risk)} .st-seg.st-muted{background:var(--ink-4)}
+.st-label{font-size:8.5px;font-weight:800;letter-spacing:.08em;color:var(--ink-4);
+font-family:var(--mono);margin-left:5px}
+.sc-stats{display:flex;gap:14px;margin:2px 0 6px;padding:6px 0;
+border-top:1px dashed var(--line-soft);border-bottom:1px dashed var(--line-soft)}
+.sc-stat{display:flex;flex-direction:column;gap:1px;font-size:11.5px}
+.sc-stat b{font-family:var(--mono);font-size:11.5px}
+.sc-stat-label{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-4)}
+.sc-line{display:flex;align-items:flex-start;gap:6px;margin-top:4px;flex-wrap:wrap}
+.sc-line .chip{font-size:9px;padding:2px 7px;margin:1px}
+.sc-line-label{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+color:var(--ink-4);padding-top:4px;width:52px;flex-shrink:0}
+.sc-none{font-size:10px;color:var(--ink-4);font-style:italic;padding-top:3px}
+.sel-card .sc-next{display:flex;align-items:center;gap:8px;justify-content:space-between;
+margin-top:8px;padding:7px 10px;border-radius:8px;background:var(--panel-3);
+font-size:11px;font-weight:700;color:var(--ink-2)}
+.sc-arrow{color:var(--gold);font-family:var(--mono);font-weight:800}
+.sel-card[data-candidate-kind="recommended"]{border-color:var(--gold-line);
+background:linear-gradient(170deg,#191307,var(--bg-soft))}
+.sel-card[data-candidate-kind="recommended"] .sc-next{background:var(--gold-soft);color:var(--gold-2)}
+.gap-console{border-color:var(--risk-line);background:linear-gradient(165deg,#1d1010,var(--panel))}
+.gap-console h3{color:#e8a9a5} .gap-console h3::before{background:var(--risk)}
+.gap-head{display:flex;align-items:center;gap:14px;margin-bottom:9px}
+.gap-count{font-size:34px;font-weight:800;font-family:var(--mono);color:var(--risk);
+background:var(--risk-soft);border:1px solid var(--risk-line);border-radius:12px;
+min-width:64px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.gap-copy{display:flex;flex-direction:column;gap:1px}
+.gap-copy b{font-size:13px}
+.gap-copy span{font-size:11px;color:var(--ink-3)}
+.gap-chips .chip{font-size:10px}
+.lp-window{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg-soft)}
+.lp-chrome{display:flex;align-items:center;gap:5px;padding:7px 12px;
+background:linear-gradient(180deg,var(--panel-3),var(--panel-2));border-bottom:1px solid var(--line-soft)}
+.lp-dot{width:9px;height:9px;border-radius:50%;background:var(--line);display:inline-block}
+.lp-chrome-label{margin-left:8px;font-size:9px;font-weight:800;letter-spacing:.12em;
+text-transform:uppercase;color:var(--ink-4);font-family:var(--mono)}
+.lp-window .lp-frame{padding:14px}
+.lp-trust{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:9px;
+padding-top:8px;border-top:1px dashed var(--line-soft)}
+.lp-trust .chip{font-size:8.5px;padding:2px 7px}
+.lp-guard-summary{font-size:10px;color:var(--ink-4);font-style:italic;margin-left:4px}
+.tab-count{margin-left:6px;font-size:9px;font-weight:800;font-family:var(--mono);
+background:var(--panel-3);border:1px solid var(--line-soft);border-radius:8px;
+padding:1px 6px;color:var(--ink-3)}
+.lab-tab.active .tab-count{background:var(--violet-soft);border-color:var(--violet-line);color:#cbb8ff}
+.angle-hero{border-color:var(--gold-line);background:linear-gradient(168deg,#1c1508,var(--bg-soft));
+box-shadow:0 0 0 1px var(--gold-line),0 8px 26px rgba(0,0,0,.35)}
+.angle-hero>.a-top b{font-size:15px}
+.angle-challenger{border-color:var(--steel-line);background:linear-gradient(168deg,#101a28,var(--bg-soft))}
+.rank-chip{font-size:9px}
+.angle-selected{outline:2px solid var(--gold);outline-offset:1px}
+.leaderboard{display:flex;flex-direction:column}
+.hook-row{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px dashed var(--line-soft)}
+.hook-row:last-child{border-bottom:0}
+.lb-rank{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--ink-3);
+background:var(--panel-3);border:1px solid var(--line-soft);border-radius:7px;
+width:34px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lb-rank-1{color:#1b1406;background:linear-gradient(180deg,var(--gold-2),var(--gold));border-color:var(--gold)}
+.lb-rank-2{color:var(--steel);border-color:var(--steel-line);background:var(--steel-soft)}
+.lb-rank-3{color:var(--warn);border-color:var(--warn-line);background:var(--warn-soft)}
+.lb-top{background:linear-gradient(90deg,rgba(216,179,106,.07),transparent);border-radius:9px}
+.hook-text{flex:1;font-size:12.5px;color:var(--ink);display:flex;flex-direction:column;gap:1px}
+.lb-first-tag{font-size:8.5px;font-weight:800;letter-spacing:.1em;color:var(--gold-2);font-family:var(--mono)}
+.rw-row{display:flex;align-items:flex-start;gap:12px}
+.rw-body{flex:1}
+.rw-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch;flex-shrink:0;min-width:170px}
+.rw-copy{white-space:nowrap}
+.rw-check{margin-bottom:0;padding:6px 9px}
+.rw-check .a-label{font-size:10.5px}
+.rw-check .ck{width:16px;height:16px;margin-top:0}
 .candidate-shell[hidden]{display:none}
-@media(max-width:1100px){.bmap{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1100px){.bmap{grid-template-columns:repeat(3,1fr)}
+.kpi-minis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:960px){.shell{grid-template-columns:1fr}
 #module_rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap}
-.g2,.g3,.studio,.slots,.lp-frame{grid-template-columns:1fr}.guard-rail{position:static}
+.g2,.g3,.g21,.studio,.slots,.lp-frame,.kpi-hero,.kpi-minis,.guard-tiles{grid-template-columns:1fr}
+.guard-rail{position:static}
 .bmap{grid-template-columns:repeat(2,1fr)}}
 """.strip()
 
@@ -3279,6 +3681,7 @@ _INLINE_JS = """
   var CHECKS_PREFIX = "r109b_checks_";
   var TABS_PREFIX = "r109b_tabs_";
   var DRAFTS_PREFIX = "r109b_drafts_";
+  var ANGLES_PREFIX = "r109b_angles_";
   var SESSION_KEY = "r109b_operator_session";
   var WORKSPACE_KEY = "r109b_workspace_state";
 
@@ -3598,6 +4001,53 @@ _INLINE_JS = """
     }
   }
 
+  // --- evidence drawer (local show/hide of the embedded audit panel) ---
+
+  function openDrawer(el) {
+    var drawer = rootOf(el).querySelector("[data-evidence-drawer]");
+    if (drawer) { drawer.removeAttribute("hidden"); }
+  }
+
+  function closeDrawer(el) {
+    var drawer = el.closest("[data-evidence-drawer]");
+    if (drawer) { drawer.setAttribute("hidden", ""); }
+  }
+
+  // --- local angle selection (browser memory only; never reorders the engine) ---
+
+  function applyAngleChoice(root, angleId) {
+    var cards = root.querySelectorAll("[data-angle-card]");
+    for (var i = 0; i < cards.length; i++) {
+      var chip = cards[i].querySelector("[data-angle-chosen]");
+      if (!chip) { continue; }
+      if (cards[i].getAttribute("data-angle-card") === angleId) {
+        chip.removeAttribute("hidden");
+        cards[i].classList.add("angle-selected");
+      } else {
+        chip.setAttribute("hidden", "");
+        cards[i].classList.remove("angle-selected");
+      }
+    }
+  }
+
+  function selectAngle(button) {
+    var root = rootOf(button);
+    var fid = fixtureIdOf(button);
+    var angleId = button.getAttribute("data-select-angle");
+    writeJson(ANGLES_PREFIX + fid, { chosen: angleId });
+    applyAngleChoice(root, angleId);
+  }
+
+  function restoreAngles() {
+    var roots = allRoots();
+    for (var i = 0; i < roots.length; i++) {
+      var fid = roots[i].getAttribute("data-candidate-root") ||
+        document.body.getAttribute("data-fixture-id");
+      var state = readJson(ANGLES_PREFIX + fid);
+      if (state.chosen) { applyAngleChoice(roots[i], state.chosen); }
+    }
+  }
+
   // --- local checkmarks, keyed per candidate root ---
 
   function toggleCheck(item) {
@@ -3625,6 +4075,12 @@ _INLINE_JS = """
     if (!el.closest) { return; }
     if (el.closest("[data-gate-enter]")) { enterWorkbench(); return; }
     if (el.closest("[data-session-reset]")) { resetSession(); return; }
+    var drawerOpen = el.closest("[data-drawer-open]");
+    if (drawerOpen) { openDrawer(drawerOpen); return; }
+    var drawerClose = el.closest("[data-drawer-close]");
+    if (drawerClose) { closeDrawer(drawerClose); return; }
+    var angleBtn = el.closest("[data-select-angle]");
+    if (angleBtn) { selectAngle(angleBtn); return; }
     var resetBtn = el.closest("[data-draft-reset]");
     if (resetBtn) { resetDraftSection(resetBtn); return; }
     var copyButton = el.closest("[data-copy-button]");
@@ -3652,6 +4108,7 @@ _INLINE_JS = """
 
   restoreChecks();
   restoreDrafts();
+  restoreAngles();
   initSession();
   var roots = allRoots();
   for (var i = 0; i < roots.length; i++) { restoreTabs(roots[i]); }

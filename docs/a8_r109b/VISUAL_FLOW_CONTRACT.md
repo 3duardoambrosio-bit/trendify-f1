@@ -214,6 +214,57 @@ Marker alignment: `recommended_first_angle` is the official marker for the
 risk-adjusted first recommended angle. The shorter `recommended_angle` name
 is not part of the contract and is never emitted as a marker attribute.
 
+## 5f. Premium surface / operator power pass (A8-R109B-R6)
+
+R6 raises visual density, hierarchy, and authority without touching the data
+contract: same fixtures, same ViewModel, same determinism, same boundaries
+(no live writes, no spend, no network, localStorage only).
+
+**Economics as a cockpit.** `money_cockpit` / `kpi_strip` becomes a hero KPI
+band (margin per unit, breakeven CPA, post-reserve buffer, each with an
+over/under-floor state chip) plus a secondary tile row (price, cost, shipping,
+fees, local floor). The margin waterfall (`margin_waterfall`) is dominant:
+headline sentence, per-row percent of price, tone gradients, and a visual
+floor marker (`wf-floor`) at the local margin floor. Guardrails become an
+executive `guardrail_console` (floor tile, buffer tile, max theoretical
+first-test loss from the testing-plan boundary text, and the "no avanzar si
+margen bajo piso" rule). The sensitivity grid renders as a static local
+simulator (`data-sim="local_static_simulator"`: state lamps, result bars vs
+base margin) and declares itself fixture-derived with no engine recompute.
+
+**Pipeline as an operational board.** Each selector card gains an honest
+stage track (`pipeline_stage_track`, presentation-only ranks over the
+contract-derived stage), compact score/money stats, driver/blocker chips,
+and a next-action strip; the recommended candidate is visually featured
+(`data-candidate-kind="recommended"`).
+
+**Shopify Studio power.** A publish-gap console (`publish_gap_console`)
+makes "que falta para publicar" dominant: big gap count + chips for
+`missing_inputs` (risk) and `image_checklist` (warn). The listing preview
+gains storefront chrome (`data-preview="storefront_preview"`, window bar
+labeled "vista de tienda - borrador local - no publicado") and a claim-guard
+trust row with the guard summary.
+
+**Marketing hierarchy.** The risk-adjusted P1 angle renders as the dominant
+hero (`dominant_angle`), P2 as the visible challenger (`challenger_angle`) —
+rank is the existing local risk heuristic, never performance data. Hooks
+become a leaderboard (`hook_leaderboard`) explicitly labeled "ranking = orden
+del pack, nunca rendimiento". The rewrite queue is actionable
+(`rewrite_action_row`): per-surface copy button for the claim-safe version
+(`rw_q_<copy_key>` / `rw_main_<copy_key>` targets) plus a local "revisado"
+check persisted with the normal `data-local-check` mechanism. Lab tabs carry
+honest counters (list lengths from the pack).
+
+**Operator controls wired.** The Evidence Drawer buttons
+(`data-drawer-open` / `data-drawer-close`) and the "Usar este angulo (local)"
+buttons (`data-select-angle`) now have inline JS handlers; the chosen angle
+persists per candidate in `localStorage` (`r109b_angles_<fid>`) and only
+toggles the local ELEGIDO chip — it never reorders the engine ranking.
+
+**State protections (R6).** Blocked products get no publish-gap console, no
+storefront preview, and no actionable rewrite copy targets; empty shortlist
+gets no cockpit guardrails, simulator, marketing hierarchy, or gap console.
+
 ## 6. Stable markers
 
 Generated HTML exposes: `operator_workbench_visual` (body `data-renderer`),

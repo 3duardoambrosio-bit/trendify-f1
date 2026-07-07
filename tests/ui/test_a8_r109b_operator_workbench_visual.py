@@ -630,6 +630,104 @@ def test_marketing_main_keeps_commercial_support_summary() -> None:
     assert "NO SOPORTADO: fallback generico" not in main_stage
 
 
+# --- 3h. R6 premium surface / operator power pass (A8-R109B-R6) --------------------
+
+R6_PREMIUM_SURFACE_MARKERS = (
+    # economics cockpit
+    "money_cockpit",
+    "kpi_strip",
+    "margin_waterfall",
+    "guardrail_console",
+    "local_static_simulator",
+    "sensitivity_grid",
+    # pipeline operational board
+    "pipeline_stage_track",
+    # shopify power surfaces
+    "publish_gap_console",
+    "storefront_preview",
+    # marketing hierarchy
+    "dominant_angle",
+    "challenger_angle",
+    "hook_leaderboard",
+    "rewrite_action_row",
+)
+
+
+def test_recommended_premium_surface_power_pass() -> None:
+    document = _render("recommended")
+
+    for marker in R6_PREMIUM_SURFACE_MARKERS:
+        assert marker in document, f"missing R6 premium surface marker: {marker}"
+
+    # Economics reads like a cockpit: hero KPI band, floor marker on the
+    # waterfall, executive guardrail tiles, and a static local simulator that
+    # declares itself local (no engine recompute, no market data).
+    assert 'class="kpi-hero"' in document
+    assert 'class="wf-floor"' in document
+    assert "Guardrail console" in document
+    assert "Perdida maxima teorica del primer test" in document
+    assert "Simulador local de margen" in document
+    assert "sin recalculo del motor" in document
+
+    # Pipeline: featured recommended card + stage-track segments per candidate.
+    assert 'data-candidate-kind="recommended"' in document
+    assert 'class="st-seg' in document
+
+    # Shopify: publish gaps named from the contract, storefront-chrome preview
+    # explicitly labeled as a local, unpublished draft.
+    assert "pendientes antes de publicar" in document
+    assert 'class="gap-count"' in document
+    assert 'class="lp-chrome"' in document
+    assert "no publicado" in document
+
+    # Marketing: dominant/challenger hierarchy, leaderboard honest about pack
+    # order, actionable rewrite queue (copy claim-safe version + local check),
+    # denser tabs with honest counters.
+    assert "ANGULO DOMINANTE - P1" in document
+    assert "CHALLENGER - P2" in document
+    assert "nunca rendimiento" in document
+    assert 'data-copy-target="rw_q_headlines"' in document
+    assert 'data-local-check="rewrite_headlines"' in document
+    assert '<span class="tab-count">' in document
+
+
+def test_r6_operator_controls_are_wired_locally() -> None:
+    # The evidence drawer and angle-choice buttons must have matching handlers
+    # in the inline script (local-only interactions; still zero network).
+    document = _render("recommended")
+    assert "data-drawer-open" in document
+    assert "data-evidence-drawer" in document
+    assert "data-select-angle" in document
+    for js_hook in (
+        '[data-drawer-open]',
+        '[data-drawer-close]',
+        '[data-select-angle]',
+        "r109b_angles_",
+    ):
+        assert js_hook in document, f"missing local JS wiring: {js_hook}"
+
+
+def test_r6_keeps_state_protections() -> None:
+    blocked = _render("blocked")
+    # A blocked product never gets sell-prep power surfaces or actionable
+    # rewrite copy targets.
+    assert "publish_gap_console" not in blocked
+    assert "storefront_preview" not in blocked
+    assert 'data-marker="rewrite_action_row"' not in blocked
+    assert 'data-copy-target="rw_q_' not in blocked
+    assert 'data-copy-target="rw_main_' not in blocked
+
+    empty = _render("empty_shortlist")
+    # An empty shortlist invents no cockpit guardrails, simulator, marketing
+    # hierarchy, or publish-gap console.
+    assert "guardrail_console" not in empty
+    assert "local_static_simulator" not in empty
+    assert "dominant_angle" not in empty
+    assert "hook_leaderboard" not in empty
+    assert "publish_gap_console" not in empty
+    assert "storefront_preview" not in empty
+
+
 # --- 4. blocked: queue/safety dominate; no prepare CTA ---------------------------
 
 def test_blocked_state_dominates_without_prepare_cta() -> None:
