@@ -126,6 +126,56 @@ def test_intake_candidates_stay_honest_in_workspace(tmp_path: Path) -> None:
         assert "claim_guard" not in fixture
 
 
+# --- 1b. provenance copy: CSV local, never frozen fixture ----------------------
+
+# Copy the local-catalog workspace must NOT inherit from the R109B fixture flow.
+_FIXTURE_COPY_FORBIDDEN = (
+    "FIXTURE LOCAL - OFFLINE",
+    "Datos de fixture congelado",
+    "fixture: a8_r110",
+    "Pipeline de candidatos (solo fixture)",
+    "Candidatos embebidos del fixture congelado",
+    "mismo fixture, mismo output",
+)
+
+# Copy the local-catalog workspace MUST communicate instead.
+_CSV_LOCAL_COPY_REQUIRED = (
+    "CSV LOCAL - OFFLINE",
+    "operator_local_catalog_import",
+    "Datos importados desde CSV local",
+    "Candidatos importados desde CSV local",
+    "sin discovery en vivo",
+    "sin escrituras",
+    "sin red",
+)
+
+
+def test_local_catalog_workspace_speaks_csv_local_not_fixture(tmp_path: Path) -> None:
+    summary = intake.build_workspace_from_csv(NOMINAL_CSV, tmp_path)
+    document = Path(summary["workspace_path"]).read_text(encoding="utf-8")
+
+    for bad in _FIXTURE_COPY_FORBIDDEN:
+        assert bad not in document, f"leftover fixture copy in R110 workspace: {bad!r}"
+
+    for required in _CSV_LOCAL_COPY_REQUIRED:
+        assert required in document, f"missing CSV-local copy in R110 workspace: {required!r}"
+
+    # At least one accented/plain "catalogo CSV local" chain label must survive.
+    assert ("Catálogo CSV local" in document) or ("catalogo CSV local" in document)
+
+
+def test_frozen_fixtures_keep_fixture_copy() -> None:
+    """The conditional switch must not bleed into the R109A/R109B fixtures:
+    a non-catalog source_kind still renders the frozen-fixture wording."""
+    view_model = wb_vm.build_view_model_from_path(
+        R109A_FIXTURE_DIR / "recommended.json"
+    )
+    document = wb_visual.render_visual_html(view_model)
+    assert "FIXTURE LOCAL - OFFLINE" in document
+    assert "CSV LOCAL - OFFLINE" not in document
+    assert "Pipeline de candidatos (solo fixture)" in document
+
+
 # --- 2. incomplete rows -> INPUT_LOW, nothing invented -------------------------
 
 
