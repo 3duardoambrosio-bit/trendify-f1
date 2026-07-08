@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from infra.idempotency import execute_once
+from infra.idempotency import STATUS_FAILED, execute_once, read_state
 from synapse.config.thresholds import (
     AUTOPAUSE_RATIO,
     DEFAULT_DAILY_SPEND_CAP_MXN,
@@ -379,14 +379,39 @@ class MetaSafeClient:
         payload["status"] = "PAUSED"
 
         budget_mxn = _coerce_decimal(payload.get("budget_mxn")) or Decimal("0")
-        cs_result = _allow_mock_module_unavailable(
-            _check_capital_shield(budget_mxn, correlation_id),
-            is_live=self._is_live,
+
+        # Spend gates run only for genuinely new attempts (or retries of a
+        # FAILED one). _check_capital_shield debits the vault via
+        # request_spend, so replays of the same idempotency_key must never
+        # re-run it: duplicates / in-flight / conflicting attempts are
+        # answered by execute_once and the governed-ledger recovery below
+        # without touching the vault again.
+        prior_status = str(
+            read_state(idempotency_key, db_path=self._idempotency_db_path).get("status") or ""
         )
-        sm_result = _allow_mock_module_unavailable(
-            _check_safety_middleware(budget_mxn, correlation_id),
-            is_live=self._is_live,
-        )
+        gates_required = prior_status in ("MISSING", STATUS_FAILED)
+
+        cs_result: Dict[str, Any] = {
+            "gate": "capital_shield",
+            "allowed": True,
+            "reason": f"skipped_replay:{prior_status}",
+            "correlation_id": correlation_id,
+        }
+        sm_result: Dict[str, Any] = {
+            "gate": "safety_middleware",
+            "allowed": True,
+            "reason": f"skipped_replay:{prior_status}",
+            "correlation_id": correlation_id,
+        }
+        if gates_required:
+            cs_result = _allow_mock_module_unavailable(
+                _check_capital_shield(budget_mxn, correlation_id),
+                is_live=self._is_live,
+            )
+            sm_result = _allow_mock_module_unavailable(
+                _check_safety_middleware(budget_mxn, correlation_id),
+                is_live=self._is_live,
+            )
 
         if not cs_result["allowed"] or not sm_result["allowed"]:
             blocked_by = []

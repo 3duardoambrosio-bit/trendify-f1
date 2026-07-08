@@ -1,6 +1,6 @@
 import json
 
-from synapse.ledger_ndjson import append_event, build_event, read_events
+from synapse.ledger_ndjson import append_event, build_event, cmd_validate, main, read_events
 
 
 def test_ledger_writes_valid_ndjson(tmp_path):
@@ -36,3 +36,35 @@ def test_ledger_writes_valid_ndjson(tmp_path):
     rows = read_events(p)
     assert len(rows) == 1
     assert rows[0]["kind"] == "DECISION_MADE"
+
+def test_validate_cli_clean_ledger_returns_zero(tmp_path):
+    p = tmp_path / "events.ndjson"
+    append_event(
+        build_event(kind="DECISION_MADE", payload={"entity_id": "r004"}),
+        path=p,
+    )
+
+    assert cmd_validate(p) == 0
+    assert main(["--path", str(p), "validate"]) == 0
+
+
+def test_validate_cli_missing_ledger_is_clean_and_readonly(tmp_path):
+    p = tmp_path / "missing.ndjson"
+
+    assert cmd_validate(p) == 0
+    # Validation is read-only: it must never create or repair the ledger.
+    assert not p.exists()
+
+
+def test_validate_cli_detects_corrupt_lines(tmp_path):
+    p = tmp_path / "events.ndjson"
+    append_event(
+        build_event(kind="DECISION_MADE", payload={"entity_id": "r004"}),
+        path=p,
+    )
+    with p.open("a", encoding="utf-8") as handle:
+        handle.write("{not valid json\n")
+        handle.write(json.dumps({"kind": "X"}) + "\n")  # missing payload dict
+
+    rc = main(["--path", str(p), "validate"])
+    assert rc == 2

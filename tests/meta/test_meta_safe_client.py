@@ -83,6 +83,46 @@ class TestIdempotency:
         attempt_events = [e for e in events if e["event_type"] == "meta.create_campaign.attempt"]
         assert len(attempt_events) == 1
 
+    def test_duplicate_key_never_reruns_spend_gates(self, tmp_path: Path) -> None:
+        client = _make_client(tmp_path, live=False)
+
+        with patch(
+            "synapse.meta.safe_client._check_capital_shield",
+            return_value={
+                "gate": "capital_shield",
+                "allowed": True,
+                "reason": "approved",
+                "correlation_id": "corr-idem-gate",
+            },
+        ) as mock_cs, patch(
+            "synapse.meta.safe_client._check_safety_middleware",
+            return_value={
+                "gate": "safety_middleware",
+                "allowed": True,
+                "reason": "approved",
+                "correlation_id": "corr-idem-gate",
+            },
+        ) as mock_sm:
+            r1 = client.create_campaign_safe(
+                payload={"name": "Camp Gate", "budget_mxn": "50"},
+                idempotency_key="idem-gate-1",
+                correlation_id="corr-g1",
+            )
+            r2 = client.create_campaign_safe(
+                payload={"name": "Camp Gate", "budget_mxn": "50"},
+                idempotency_key="idem-gate-1",
+                correlation_id="corr-g2",
+            )
+
+        assert r1["ok"] is True
+        assert r2["ok"] is True
+        assert r2["mode"] == "cached"
+        # The capital shield debits the vault (request_spend): a replay of the
+        # same idempotency_key must be answered from the idempotency store
+        # without running the spend gates (and the vault) again.
+        assert mock_cs.call_count == 1
+        assert mock_sm.call_count == 1
+
     def test_same_key_different_payload_returns_conflict(self, tmp_path: Path) -> None:
         client = _make_client(tmp_path, live=False)
 
