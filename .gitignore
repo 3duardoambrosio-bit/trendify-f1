@@ -201,4 +201,6 @@ out/forecast/*.md
 !tests/fixtures/
 !tests/fixtures/**/
 !tests/fixtures/**/*.json
+# A8-R110: deterministic catalog CSV test fixtures must also survive clean clones.
+!tests/fixtures/**/*.csv
 # END A8-R72 CLEAN CLONE FIXTURE EXCEPTIONS

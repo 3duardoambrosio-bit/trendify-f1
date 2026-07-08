@@ -1,0 +1,7 @@
+product_id,title,supplier,category,supplier_price_mxn,shipping_cost_mxn,sale_price_mxn,payment_fee_mxn,source_url,notes
+cat-100,Difusor de Aromas Portatil,Proveedor MX Alfa,hogar,110.00,52.00,329.00,13.00,,
+cat-101,Mini Aspiradora de Escritorio,Proveedor MX Beta,oficina,89.00,45.00,,,URLMARKER_dropi_producto_101,Falta definir precio de venta
+cat-102,Cargador Triple Invalido,Proveedor MX Beta,electronica,-50.00,40.00,299.00,,,
+cat-103,,Proveedor MX Gamma,hogar,70.00,35.00,199.00,,,
+cat-100,Difusor Duplicado,Proveedor MX Alfa,hogar,110.00,52.00,329.00,,,
+cat-104,Gadget fetch(promo) Sospechoso,Proveedor MX Gamma,electronica,60.00,30.00,189.00,,,
