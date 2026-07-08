@@ -21,9 +21,25 @@ if ([string]::IsNullOrWhiteSpace($ZipPath)) {
   $ZipPath = "C:\Temp\trendify_FULL_AUDIT_BUNDLE_$headForZip.zip"
 }
 
+# Python resolution, cross-platform: Windows venv, then POSIX venv (Linux CI
+# runners), then whatever python is on PATH (GitHub setup-python installs no
+# repo venv). Same interpreter contract; only the lookup is platform-aware.
 $py = Join-Path $Repo "venv\Scripts\python.exe"
 if (-not (Test-Path $py)) {
-  throw "PYTHON_NOT_FOUND=$py"
+  $pyPosix = Join-Path $Repo "venv/bin/python"
+  if (Test-Path $pyPosix) {
+    $py = $pyPosix
+  } else {
+    $pyCmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $pyCmd) {
+      $pyCmd = Get-Command python3 -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $pyCmd) {
+      $py = $pyCmd.Source
+    } else {
+      throw "PYTHON_NOT_FOUND=$py"
+    }
+  }
 }
 
 $env:PYTHONNOUSERSITE = "1"

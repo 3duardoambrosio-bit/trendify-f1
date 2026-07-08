@@ -8,6 +8,11 @@ jobs:
   f1:
     name: f1
     runs-on: ubuntu-latest
+    env:
+      # Deterministic pytest startup: same contract as the local canonical
+      # runner (scripts/run_pytest_stable.ps1) and enforced by
+      # tests/ops/test_windows_platform_cache_guard.py.
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
