@@ -1,7 +1,16 @@
-"""ops_tick — Level 4 (NASA Power-of-Ten Grade).
+# V3GAP:auto_pause_zero_stock
+
+"""ops_tick Level 4 (NASA Power-of-Ten Grade).
 
 Orchestrates the Phase-1 loop end-to-end via subprocess calls.
 No direct money-path logic; delegates to specialised modules.
+
+S19: Added reconcile pre-flight gate + alert emission.
+S20: Added inventory pre-flight gate (fail-closed in write mode).
+S22: In no-import + readonly mode, skip downstream creative steps that
+depend on runner/import artifacts, avoiding false FAIL in scheduler mode.
+S24: Reconcile pre-flight can merge an optional refund sidecar ledger and
+treat refund bridge events as net-negative amounts through refund-aware reconcile.
 """
 
 from __future__ import annotations
@@ -21,11 +30,9 @@ import deal
 
 from synapse.infra.cli_logging import cli_print
 
-_MARKER = "OPS_TICK_2026-01-13_V3_SAFE_NOIMPORT_SKIP_RUNNER"
+_MARKER = "OPS_TICK_2026-03-09_V7_REFUND_AWARE_RECONCILE"
 _LEDGER_REL = Path("data/ledger/events.ndjson")
 
-
-# ── Value Objects ─────────────────────────────────────────
 
 @dataclass(frozen=True, slots=True)
 class TickConfig:
@@ -49,8 +56,6 @@ class StepResult:
     stderr_tail: str
 
 
-# ── Private Helpers ───────────────────────────────────────
-
 def _utc_now_z() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -71,8 +76,11 @@ def _run(
     if env_overrides:
         env.update(env_overrides)
     p = subprocess.run(
-        cmd, capture_output=True, text=True,
-        env=env, cwd=str(Path.cwd()),
+        cmd,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(Path.cwd()),
     )
     out = (p.stdout or "").strip()
     err = (p.stderr or "").strip()
@@ -86,8 +94,10 @@ def _run(
 
 def _skip_step(name: str, reason: str) -> StepResult:
     return StepResult(
-        cmd=f"<SKIP> {name}", returncode=0,
-        stdout_tail=reason, stderr_tail="",
+        cmd=f"<SKIP> {name}",
+        returncode=0,
+        stdout_tail=reason,
+        stderr_tail="",
     )
 
 
@@ -118,27 +128,55 @@ def _execute_steps(config: TickConfig) -> List[StepResult]:
     py = sys.executable
     steps: List[StepResult] = []
 
+    readonly_no_import = config.no_import and config.effective_readonly
+
     if config.prune:
         steps.append(_run([py, "-m", "synapse.phase1_ready", "--prune"], env))
 
     steps.append(_run([py, "-m", "synapse.ledger_ndjson", "validate"], env))
 
     if not config.no_import:
-        steps.append(_run([
-            py, "-m", "synapse.ad_results_import",
-            "--csv", config.csv,
-            "--platform", config.platform,
-            "--product-id", config.product_id,
-        ], env))
+        steps.append(
+            _run(
+                [
+                    py,
+                    "-m",
+                    "synapse.ad_results_import",
+                    "--csv",
+                    config.csv,
+                    "--platform",
+                    config.platform,
+                    "--product-id",
+                    config.product_id,
+                ],
+                env,
+            )
+        )
 
-    if config.no_import and config.effective_readonly:
+    if readonly_no_import:
         steps.append(_skip_step("synapse.runner", "no-import + readonly"))
     else:
         steps.append(_run([py, "-m", "synapse.runner"], env))
 
     steps.append(_run([py, "-m", "synapse.post_learning"], env))
-    steps.append(_run([py, "-m", "synapse.creative_queue"], env))
-    steps.append(_run([py, "-m", "synapse.creative_briefs"], env))
+
+    if readonly_no_import:
+        steps.append(
+            _skip_step(
+                "synapse.creative_queue",
+                "no-import + readonly => skip downstream creative queue",
+            )
+        )
+        steps.append(
+            _skip_step(
+                "synapse.creative_briefs",
+                "no-import + readonly => skip downstream creative briefs",
+            )
+        )
+    else:
+        steps.append(_run([py, "-m", "synapse.creative_queue"], env))
+        steps.append(_run([py, "-m", "synapse.creative_briefs"], env))
+
     return steps
 
 
@@ -151,6 +189,15 @@ def _compute_status(
             return "FAIL"
     if checks.get("readonly_invariant_ok") is False:
         return "FAIL"
+
+    reconcile = checks.get("reconcile_preflight") or {}
+    if reconcile.get("blocked") is True:
+        return "FAIL"
+
+    inventory = checks.get("inventory_preflight") or {}
+    if inventory.get("blocked") is True:
+        return "FAIL"
+
     return "OK"
 
 
@@ -177,47 +224,356 @@ def _persist_report(report: Dict[str, Any]) -> None:
     out_path = Path("data/run/ops_tick.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2,
-                   sort_keys=True, default=str),
+        json.dumps(
+            report,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            default=str,
+        ),
         encoding="utf-8",
     )
-    cli_print(json.dumps(
-        report, ensure_ascii=False, indent=2,
-        sort_keys=True, default=str,
-    ))
-
-
-# ── Public Entry Point ────────────────────────────────────
-
-@deal.pre(
-    lambda argv=None: argv is None or isinstance(argv, list),
-    message="argv must be None or list",
-)
-@deal.post(
-    lambda result: result in (0, 2),
-    message="main must return 0 (OK) or 2 (FAIL)",
-)
-def main(argv: Optional[List[str]] = None) -> int:
-    """Run Phase-1 loop end-to-end."""
-    config = _parse_tick_config(argv)
-    repo = Path.cwd()
-    ledger_path = repo / _LEDGER_REL
-
-    hash_before = _sha256(ledger_path) if ledger_path.exists() else None
-    steps = _execute_steps(config)
-    checks = _readonly_checks(
-        ledger_path, hash_before, config.effective_readonly,
+    cli_print(
+        json.dumps(
+            report,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            default=str,
+        )
     )
+
+
+def _emit_alert(text: str) -> None:
+    try:
+        from synapse.infra.alert_wiring import get_alert_sink
+
+        sink = get_alert_sink()
+        sink.send(text)
+    except Exception:
+        pass
+
+
+def _load_inventory_any(path: str) -> Any:
+    p = Path(path)
+    txt = p.read_text(encoding="utf-8-sig")
+    lines = [ln for ln in txt.splitlines() if ln.strip()]
+
+    if p.suffix.lower() in (".ndjson", ".jsonl"):
+        return [json.loads(ln) for ln in lines]
+
+    if len(lines) >= 2 and not txt.lstrip().startswith("[") and not txt.lstrip().startswith("{"):
+        return [json.loads(ln) for ln in lines]
+
+    try:
+        return json.loads(txt)
+    except json.JSONDecodeError:
+        if len(lines) >= 1:
+            return [json.loads(ln) for ln in lines]
+        raise
+
+
+def _extract_inventory_rows(payload: Any) -> List[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)]
+
+    if isinstance(payload, dict):
+        for key in ("products", "items", "data", "objects", "top"):
+            val = payload.get(key)
+            if isinstance(val, list):
+                return [x for x in val if isinstance(x, dict)]
+        return [payload]
+
+    raise ValueError("unsupported_inventory_shape")
+
+
+def _coerce_stock(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        return None
+    s = str(value).strip()
+    if s == "":
+        return None
+    if s.lstrip("-").isdigit():
+        return int(s)
+    try:
+        f = float(s)
+        if f.is_integer():
+            return int(f)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return None
+
+
+def _inventory_row_matches(row: Dict[str, Any], product_id: str) -> bool:
+    pid = str(product_id).strip()
+    for key in ("source_product_id", "product_id", "id", "sku"):
+        if key in row and row[key] is not None:
+            if str(row[key]).strip() == pid:
+                return True
+    return False
+
+
+def _inventory_preflight(product_id: str, effective_readonly: bool) -> Dict[str, Any]:
+    """
+    Inventory gate.
+
+    Env:
+      SYNAPSE_INVENTORY_CATALOG = path to JSON / NDJSON inventory snapshot
+
+    Rules:
+    - readonly + no env => skipped
+    - write mode + no env => BLOCKED
+    - product missing => BLOCKED
+    - stock missing => BLOCKED
+    - stock <= 0 => BLOCKED
+    - stock > 0 => PASS
+    """
+    catalog_path = os.environ.get("SYNAPSE_INVENTORY_CATALOG", "").strip()
+
+    if not catalog_path:
+        if effective_readonly:
+            return {
+                "gate": "inventory",
+                "status": "skipped",
+                "reason": "env_var_not_set",
+                "blocked": False,
+            }
+
+        result = {
+            "gate": "inventory",
+            "status": "BLOCKED",
+            "reason": "env_var_not_set",
+            "blocked": True,
+            "product_id": str(product_id),
+        }
+        _emit_alert(
+            f"INVENTORY BLOCKED product_id={product_id} reason=env_var_not_set"
+        )
+        return result
+
+    try:
+        payload = _load_inventory_any(catalog_path)
+        rows = _extract_inventory_rows(payload)
+    except (OSError, UnicodeError, ValueError, TypeError) as e:
+        result = {
+            "gate": "inventory",
+            "status": "BLOCKED",
+            "reason": f"inventory_load_error:{type(e).__name__}",
+            "blocked": True,
+            "product_id": str(product_id),
+            "catalog_path": catalog_path,
+        }
+        _emit_alert(
+            f"INVENTORY BLOCKED product_id={product_id} "
+            f"reason=inventory_load_error catalog={catalog_path}"
+        )
+        return result
+
+    target: Optional[Dict[str, Any]] = None
+    for row in rows:
+        if _inventory_row_matches(row, product_id):
+            target = row
+            break
+
+    if target is None:
+        result = {
+            "gate": "inventory",
+            "status": "BLOCKED",
+            "reason": "product_not_found",
+            "blocked": True,
+            "product_id": str(product_id),
+            "catalog_path": catalog_path,
+        }
+        _emit_alert(
+            f"INVENTORY BLOCKED product_id={product_id} reason=product_not_found"
+        )
+        return result
+
+    stock = _coerce_stock(target.get("stock"))
+    if stock is None:
+        result = {
+            "gate": "inventory",
+            "status": "BLOCKED",
+            "reason": "stock_missing_or_invalid",
+            "blocked": True,
+            "product_id": str(product_id),
+            "catalog_path": catalog_path,
+        }
+        _emit_alert(
+            f"INVENTORY BLOCKED product_id={product_id} reason=stock_missing_or_invalid"
+        )
+        return result
+
+    if stock <= 0:
+        result = {
+            "gate": "inventory",
+            "status": "BLOCKED",
+            "reason": "out_of_stock",
+            "blocked": True,
+            "product_id": str(product_id),
+            "stock": stock,
+            "catalog_path": catalog_path,
+        }
+        _emit_alert(
+            f"INVENTORY BLOCKED product_id={product_id} reason=out_of_stock stock={stock}"
+        )
+        return result
+
+    return {
+        "gate": "inventory",
+        "status": "PASS",
+        "reason": "stock_available",
+        "blocked": False,
+        "product_id": str(product_id),
+        "stock": stock,
+        "catalog_path": catalog_path,
+    }
+
+
+def _payload_to_list(payload: Any) -> List[Any]:
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        return list(payload)
+    if isinstance(payload, dict) and isinstance(payload.get("entries"), list):
+        return list(payload["entries"])
+    return [payload]
+
+
+def _merge_reconcile_ledgers(primary_payload: Any, refund_payload: Any) -> List[Any]:
+    merged = []
+    merged.extend(_payload_to_list(primary_payload))
+    merged.extend(_payload_to_list(refund_payload))
+    return merged
+
+
+def _reconcile_preflight() -> Dict[str, Any]:
+    """
+    Pre-flight reconcile gate.
+
+    Env:
+      SYNAPSE_RECONCILE_ORDERS
+      SYNAPSE_RECONCILE_LEDGER
+      SYNAPSE_RECONCILE_REFUND_LEDGER (optional sidecar)
+
+    If both ORDERS + LEDGER set, runs Shopify↔Ledger reconciliation.
+    If optional REFUND_LEDGER is set, it is merged into the ledger payload before reconcile.
+    """
+    orders_path = os.environ.get("SYNAPSE_RECONCILE_ORDERS", "").strip()
+    ledger_path = os.environ.get("SYNAPSE_RECONCILE_LEDGER", "").strip()
+    refund_ledger_path = os.environ.get("SYNAPSE_RECONCILE_REFUND_LEDGER", "").strip()
+
+    if not orders_path or not ledger_path:
+        return {
+            "gate": "reconcile",
+            "status": "skipped",
+            "reason": "env_vars_not_set",
+            "blocked": False,
+        }
+
+    try:
+        from synapse.infra.shopify_ledger_reconcile import (
+            ReconcileConfig,
+            load_json_any,
+            load_ledger_any,
+            reconcile_shopify_vs_ledger,
+        )
+
+        shop = load_json_any(orders_path)
+        led = load_ledger_any(ledger_path)
+
+        if refund_ledger_path:
+            refund_led = load_ledger_any(refund_ledger_path)
+            led = _merge_reconcile_ledgers(led, refund_led)
+
+        r = reconcile_shopify_vs_ledger(
+            shop,
+            led,
+            ReconcileConfig(require_shopify_paid_only=True),
+        )
+
+        result = {
+            "gate": "reconcile",
+            "status": "BLOCKED" if r.blocked else "PASS",
+            "reason": "drift_detected" if r.blocked else "matched",
+            "blocked": bool(r.blocked),
+            "missing_count": int(r.missing_count),
+            "mismatch_count": int(r.mismatch_count),
+            "extra_count": int(r.extra_count),
+            "refund_ledger_merged": bool(refund_ledger_path),
+        }
+
+        if r.blocked:
+            _emit_alert(
+                "RECONCILE BLOCKED "
+                f"missing={r.missing_count} mismatch={r.mismatch_count} extra={r.extra_count}"
+            )
+
+        return result
+
+    except (OSError, UnicodeError, ValueError, TypeError) as e:
+        result = {
+            "gate": "reconcile",
+            "status": "ERROR",
+            "reason": f"exception:{type(e).__name__}",
+            "blocked": True,
+            "refund_ledger_merged": bool(refund_ledger_path),
+        }
+        _emit_alert(
+            f"RECONCILE BLOCKED reason=exception type={type(e).__name__}"
+        )
+        return result
+
+
+@deal.pre(lambda argv=None: argv is None or isinstance(argv, list))
+@deal.post(lambda result: result in (0, 2))
+def main(argv: Optional[List[str]] = None) -> int:
+    config = _parse_tick_config(argv)
+
+    ledger_path = _LEDGER_REL
+    hash_before: Optional[str] = _sha256(ledger_path) if ledger_path.exists() else None
+
+    checks: Dict[str, Any] = {}
+
+    inventory_gate = _inventory_preflight(
+        product_id=config.product_id,
+        effective_readonly=config.effective_readonly,
+    )
+    checks["inventory_preflight"] = inventory_gate
+
+    reconcile_gate = _reconcile_preflight()
+    checks["reconcile_preflight"] = reconcile_gate
+
+    steps: List[StepResult] = []
+
+    if not inventory_gate.get("blocked") and not reconcile_gate.get("blocked"):
+        steps = _execute_steps(config)
+
+    checks.update(
+        _readonly_checks(
+            ledger_path=ledger_path,
+            hash_before=hash_before,
+            effective_readonly=config.effective_readonly,
+        )
+    )
+
     status = _compute_status(steps, checks)
 
-    report: Dict[str, Any] = {
+    report = {
         "marker": _MARKER,
-        "ts": _utc_now_z(),
-        "repo": str(repo),
-        "inputs": asdict(config),
+        "ts_utc": _utc_now_z(),
+        "status": status,
+        "config": asdict(config),
         "checks": checks,
         "steps": [asdict(s) for s in steps],
-        "status": status,
     }
 
     _persist_report(report)

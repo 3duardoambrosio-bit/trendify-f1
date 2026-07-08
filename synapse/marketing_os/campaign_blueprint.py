@@ -1,3 +1,5 @@
+# V3GAP:optimization_event_ladder
+
 # synapse/marketing_os/campaign_blueprint.py
 """
 Campaign Blueprint - Planes ejecutables por plataforma.

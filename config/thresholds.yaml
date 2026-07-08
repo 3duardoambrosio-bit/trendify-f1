@@ -1,0 +1,11 @@
+orchestrator:
+  budget_floor: "30"
+  launch_max: "100"
+  launch_fraction: "0.30"
+  scale_fraction: "0.50"
+  kill_roas_below: "1.0"
+  kill_min_spend: "50"
+  kill_min_days: 2
+  scale_roas_at_or_above: "2.0"
+  rotate_outperform_ratio: "2.0"
+  max_unreconciled: 3

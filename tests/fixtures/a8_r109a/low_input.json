@@ -1,0 +1,183 @@
+{
+  "fixture_id": "a8_r109a_low_input",
+  "source_kind": "frozen_local_fixture",
+  "scenario": "low_input",
+  "product": {
+    "product_id": "dropi-mx-73044",
+    "name": "Lampara de Luna 3D",
+    "category": "hogar_y_decoracion",
+    "supplier": "Dropi MX (fixture)",
+    "market": "MX",
+    "status": "candidate"
+  },
+  "decision": {
+    "outcome": "REVIEW_REQUIRED",
+    "permission_gate": "PASS_WITH_CAVEATS",
+    "reason": "Economia aceptable, pero el brief del operador es pobre: el copy resultante es generico y de baja confianza.",
+    "reason_codes": ["INPUT_LOW_RICHNESS", "MARGIN_OK"],
+    "caveats": [
+      "R105.3: brief rico produce copy experto; brief pobre produce copy generico. Enriquecer el brief antes de confiar en el copy."
+    ]
+  },
+  "economics": {
+    "currency": "MXN",
+    "price_mxn": 499.0,
+    "compare_at_price_mxn": 649.0,
+    "product_cost_mxn": 176.0,
+    "shipping_cost_mxn": 72.0,
+    "payment_fee_mxn": 20.0,
+    "contribution_margin_mxn": 231.0,
+    "contribution_margin_percent": 46.3,
+    "breakeven_cpa_mxn": 231.0,
+    "notes": "Numeros locales del fixture; sin datos reales de mercado."
+  },
+  "scores": {
+    "opportunity_score": 7.1,
+    "threshold": 7.0,
+    "demand_signal": 7.2,
+    "competition_pressure": 6.9,
+    "logistics_risk": 4.4,
+    "claim_risk": 3.0
+  },
+  "operator_input": {
+    "target_audience": "Gente que quiere decorar su cuarto.",
+    "pain_points": [],
+    "desires": [],
+    "objections": [],
+    "differentiators": [],
+    "tone_of_voice": "Bonito.",
+    "market_context": "",
+    "customer_language": [],
+    "proof_elements": [],
+    "competitor_notes": ""
+  },
+  "claim_guard": {
+    "allowed_claims": [
+      "Lampara decorativa con textura lunar impresa en 3D.",
+      "Luz calida y fria segun especificacion del fabricante."
+    ],
+    "risky_claims": [
+      "\"Mejora tu sueno\": claim de bienestar; no usar sin evidencia."
+    ],
+    "prohibited_claims": [
+      "Beneficios terapeuticos o de salud del uso de la lampara."
+    ],
+    "safe_wording": [
+      "Describir como decorativa; citar modos de luz como especificacion del fabricante."
+    ],
+    "claim_guard_summary": "Riesgo bajo si se mantiene como producto decorativo; no cruzar a claims de bienestar."
+  },
+  "shopify": {
+    "title": "Lampara de Luna 3D",
+    "subtitle": "Decoracion con textura lunar",
+    "short_description": "Lampara decorativa con textura lunar impresa en 3D y modos de luz calida y fria.",
+    "long_description": "Lampara decorativa con relieve lunar impreso en 3D. Incluye modos de luz calida y fria segun especificacion del fabricante. Brief del operador pendiente de enriquecer: la descripcion es generica.",
+    "bullets": [
+      "Textura lunar impresa en 3D.",
+      "Modos de luz calida y fria.",
+      "Base incluida."
+    ],
+    "benefits": [
+      "Ambiente decorativo para recamara o sala."
+    ],
+    "specifications": [
+      {"name": "Diametro", "value": "15 cm"},
+      {"name": "Alimentacion", "value": "Recargable via USB"}
+    ],
+    "faq": [
+      {
+        "q": "Cuanto dura la bateria?",
+        "a": "Segun especificacion del fabricante, hasta 8 horas por carga."
+      }
+    ],
+    "seo_title": "Lampara de Luna 3D | Decoracion para recamara",
+    "seo_meta_description": "Lampara decorativa con textura lunar 3D, luz calida y fria, recargable.",
+    "handle": "lampara-de-luna-3d",
+    "tags": ["lampara", "decoracion", "luna", "recamara"],
+    "category": "Hogar y Decoracion > Iluminacion",
+    "shipping_note": "Envio nacional estandar; tiempos y costos se confirman con el proveedor antes de publicar.",
+    "refund_claim_note": "Politica de devolucion de 30 dias por defecto; confirmar con el proveedor antes de publicar.",
+    "claim_safe_disclaimer": "Producto decorativo. Duracion de bateria segun especificacion del fabricante.",
+    "image_checklist": [
+      "Foto principal encendida en recamara real.",
+      "Comparacion de luz calida y fria."
+    ],
+    "publish_checklist": [
+      "Enriquecer el brief del operador antes de publicar.",
+      "Confirmar stock y costo con el proveedor Dropi."
+    ],
+    "missing_inputs": [
+      "brief_operador_enriquecido",
+      "fotos_reales_producto"
+    ]
+  },
+  "marketing": {
+    "strategy_summary": "",
+    "core_angle": "",
+    "why_this_angle": "",
+    "buyer_profile": "",
+    "hooks": [],
+    "headlines": [],
+    "primary_texts": [],
+    "short_ads": [],
+    "long_ads": [],
+    "captions": [],
+    "ugc_scripts": [],
+    "video_scripts": [],
+    "image_ad_concepts": [],
+    "channel_packs": [],
+    "testing_plan": {}
+  },
+  "learning": {
+    "hypotheses": [
+      "Con un brief enriquecido, el angulo decorativo-emocional puede sostener CTR competitivo."
+    ],
+    "evidence_needed": [
+      "Brief del operador enriquecido (audiencia, dolores, lenguaje del cliente).",
+      "CPM y CTR reales de Meta MX."
+    ],
+    "first_sale_signals": [
+      "Primera venta registrada por el operador."
+    ],
+    "risk_signals": [
+      "Copy generico con CTR bajo sostenido."
+    ],
+    "continue_if": [
+      "Brief enriquecido y CPA observado debajo del breakeven."
+    ],
+    "review_if": [
+      "El brief sigue pobre despues de la primera iteracion."
+    ],
+    "kill_if": [
+      "CPA sostenido por encima del breakeven tras enriquecer el brief."
+    ],
+    "operator_observations_schema": {
+      "fields": [
+        "fecha_observacion",
+        "canal",
+        "gasto_reportado_mxn",
+        "ventas_observadas",
+        "nota_operador"
+      ]
+    }
+  },
+  "blocked": [],
+  "operator_actions": [
+    {
+      "action_id": "confirm_supplier_stock",
+      "label": "Confirmar stock y costo con el proveedor Dropi.",
+      "kind": "verify_supplier",
+      "target": "shopify_pack.publish_checklist",
+      "notes": "Requerido antes de cualquier publicacion futura."
+    }
+  ],
+  "evidence": {
+    "notes": [
+      "Fixture congelado A8-R109A; caso de brief pobre (R105.3 operacionalizado).",
+      "El copy generado debe declararse generico y de baja confianza."
+    ],
+    "artifacts": [
+      "tests/fixtures/a8_r109a/low_input.json"
+    ]
+  }
+}

@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
 def _run_cockpit(*args: str) -> subprocess.CompletedProcess:
+    repo_root = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["meta_live_api"] = "false"
+    env["SYNAPSE_FLAG_META_LIVE_API"] = "false"
+    env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
         [sys.executable, "-m", "synapse.cli.cockpit", *args],
-        capture_output=True, text=True, timeout=30,
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
 
 
@@ -88,3 +98,12 @@ def test_all_json_mode():
     assert obj["mode"] == "all"
     assert "summary" in obj["checks"]
     assert obj["checks"]["summary"]["overall"] in ("GREEN", "YELLOW", "RED")
+
+def test_all_default_uses_events_ledger_green():
+    r = _run_cockpit("all", "--json")
+    assert r.returncode == 0
+    obj = json.loads(r.stdout)
+    assert obj["mode"] == "all"
+    assert obj["checks"]["ledger"]["available"] is True
+    assert obj["checks"]["summary"]["overall"] == "GREEN"
+    assert obj["checks"]["ledger"]["path"].replace("\\", "/") == "data/ledger/events.ndjson"

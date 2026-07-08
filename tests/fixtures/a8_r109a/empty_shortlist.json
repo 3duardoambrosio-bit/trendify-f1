@@ -1,0 +1,77 @@
+{
+  "fixture_id": "a8_r109a_empty_shortlist",
+  "source_kind": "frozen_local_fixture",
+  "scenario": "empty_shortlist",
+  "product": null,
+  "decision": {
+    "outcome": "NO_CANDIDATE",
+    "permission_gate": "N/A",
+    "reason": "La shortlist esta vacia: no hay producto recomendado que preparar.",
+    "reason_codes": ["EMPTY_SHORTLIST"],
+    "caveats": [
+      "No generar copy de producto mientras la shortlist este vacia."
+    ]
+  },
+  "economics": {
+    "currency": "MXN",
+    "notes": "Sin economia: no hay producto seleccionado."
+  },
+  "scores": {},
+  "operator_input": {
+    "target_audience": "",
+    "pain_points": [],
+    "desires": [],
+    "objections": [],
+    "differentiators": [],
+    "tone_of_voice": "",
+    "market_context": "",
+    "customer_language": [],
+    "proof_elements": [],
+    "competitor_notes": ""
+  },
+  "claim_guard": {
+    "allowed_claims": [],
+    "risky_claims": [],
+    "prohibited_claims": [],
+    "safe_wording": [],
+    "claim_guard_summary": "Sin producto: no hay claims que evaluar."
+  },
+  "shopify": null,
+  "marketing": null,
+  "learning": {
+    "hypotheses": [],
+    "evidence_needed": [
+      "Shortlist con al menos un candidato evaluado."
+    ],
+    "first_sale_signals": [],
+    "risk_signals": [],
+    "continue_if": [],
+    "review_if": [],
+    "kill_if": [],
+    "operator_observations_schema": {
+      "fields": [
+        "fecha_observacion",
+        "nota_operador"
+      ]
+    }
+  },
+  "blocked": [],
+  "operator_actions": [
+    {
+      "action_id": "build_shortlist",
+      "label": "Importar el catalogo Dropi y correr la evaluacion local para generar una shortlist.",
+      "kind": "build_shortlist",
+      "target": "shortlist",
+      "notes": "Siguiente paso: sin shortlist no hay producto que preparar ni copy que generar."
+    }
+  ],
+  "evidence": {
+    "notes": [
+      "Fixture congelado A8-R109A; caso de shortlist vacia.",
+      "El ViewModel conserva provenance, safety y evidencia aunque no exista producto."
+    ],
+    "artifacts": [
+      "tests/fixtures/a8_r109a/empty_shortlist.json"
+    ]
+  }
+}

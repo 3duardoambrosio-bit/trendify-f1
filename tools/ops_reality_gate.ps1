@@ -1,4 +1,8 @@
-param([switch]$Strict)
+param(
+  [switch]$Strict,
+  [string[]]$Gap = @(),
+  [string[]]$Session = @()
+)
 
 $ErrorActionPreference="Stop"
 Write-Host "=== OPS REALITY GATE (v3 tag coverage) ==="
@@ -18,8 +22,23 @@ $j.sessions.psobject.Properties | ForEach-Object {
   }
 }
 
-$codeRoots = @("synapse","ops","infra")
-$testRoots = @("tests")
+$selected = @($all)
+
+if ($Session.Count -gt 0) {
+  $selected = @($selected | Where-Object { $_.session -in $Session })
+}
+
+if ($Gap.Count -gt 0) {
+  $selected = @($selected | Where-Object { $_.gap -in $Gap })
+}
+
+if (($Session.Count -gt 0 -or $Gap.Count -gt 0) -and $selected.Count -eq 0) {
+  Write-Error "No gaps matched the requested scope."
+  exit 4
+}
+
+$codeRoots = @("synapse","ops","infra","vault")
+$testRoots = @("tests","ops\tests")
 
 function Count-Hits([string[]]$roots, [string]$needle) {
   $files = @()
@@ -31,7 +50,7 @@ function Count-Hits([string[]]$roots, [string]$needle) {
 }
 
 $missing = @()
-foreach ($row in $all) {
+foreach ($row in $selected) {
   $tag = "V3GAP:$($row.gap)"
   $c = Count-Hits $codeRoots $tag
   $t = Count-Hits $testRoots $tag
@@ -40,7 +59,9 @@ foreach ($row in $all) {
   }
 }
 
-"total_gaps_considered=$($all.Count)"
+"scope_sessions=$($Session.Count)"
+"scope_gaps=$($Gap.Count)"
+"total_gaps_considered=$($selected.Count)"
 "missing_gaps=$($missing.Count)"
 
 if ($missing.Count -gt 0) {

@@ -1,0 +1,86 @@
+[
+  {
+    "name": "Rechargeable Electric Lint Remover",
+    "target_buyer": "people who want clothes, sofas, and outfits to look cleaner fast",
+    "pain_or_desire": "clothes looking old, fuzzy, cheap, or neglected even when they are clean",
+    "estimated_margin_pct": 55,
+    "wow_factor": 6,
+    "problem_intensity": 7,
+    "content_potential": 8,
+    "supplier_risk": 3,
+    "competition_risk": 5,
+    "complexity_risk": 2
+  },
+  {
+    "name": "Magnetic Cable Organizer Kit",
+    "target_buyer": "desk setup, gaming setup, student, and home office buyers",
+    "pain_or_desire": "messy cables making a desk look chaotic, cheap, and uncomfortable",
+    "estimated_margin_pct": 55,
+    "wow_factor": 5,
+    "problem_intensity": 6,
+    "content_potential": 7,
+    "supplier_risk": 2,
+    "competition_risk": 5,
+    "complexity_risk": 1
+  },
+  {
+    "name": "Rechargeable Motion Sensor Closet Light",
+    "target_buyer": "home organization buyers and renters",
+    "pain_or_desire": "dark closets, cabinets, and corners without wiring or installation",
+    "estimated_margin_pct": 50,
+    "wow_factor": 6,
+    "problem_intensity": 8,
+    "content_potential": 8,
+    "supplier_risk": 3,
+    "competition_risk": 6,
+    "complexity_risk": 2
+  },
+  {
+    "name": "Portable Mini Thermal Label Printer",
+    "target_buyer": "small online sellers, students, and organization buyers",
+    "pain_or_desire": "printing labels and notes fast without a bulky printer",
+    "estimated_margin_pct": 45,
+    "wow_factor": 7,
+    "problem_intensity": 7,
+    "content_potential": 8,
+    "supplier_risk": 4,
+    "competition_risk": 6,
+    "complexity_risk": 3
+  },
+  {
+    "name": "LED Monitor Light Bar",
+    "target_buyer": "students, gamers, and desk setup buyers",
+    "pain_or_desire": "eye strain and ugly desk lighting during study, gaming, or work",
+    "estimated_margin_pct": 50,
+    "wow_factor": 5,
+    "problem_intensity": 7,
+    "content_potential": 7,
+    "supplier_risk": 3,
+    "competition_risk": 6,
+    "complexity_risk": 2
+  },
+  {
+    "name": "3-in-1 Magnetic Charging Stand",
+    "target_buyer": "Apple ecosystem and desk setup buyers",
+    "pain_or_desire": "charging devices in a messy, slow, cable-heavy way",
+    "estimated_margin_pct": 45,
+    "wow_factor": 7,
+    "problem_intensity": 7,
+    "content_potential": 7,
+    "supplier_risk": 5,
+    "competition_risk": 8,
+    "complexity_risk": 5
+  },
+  {
+    "name": "Portable Car Vacuum Cleaner",
+    "target_buyer": "car owners, rideshare drivers, and clean-car buyers",
+    "pain_or_desire": "dust, crumbs, and dirt making a car feel dirty every day",
+    "estimated_margin_pct": 45,
+    "wow_factor": 6,
+    "problem_intensity": 7,
+    "content_potential": 8,
+    "supplier_risk": 5,
+    "competition_risk": 7,
+    "complexity_risk": 4
+  }
+]

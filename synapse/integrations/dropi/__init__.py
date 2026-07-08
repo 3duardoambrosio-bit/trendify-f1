@@ -1,4 +1,4 @@
-﻿# synapse/integrations/dropi/__init__.py
+# synapse/integrations/dropi/__init__.py
 from .order_forwarder import (
     DropiOrderForwarder,
     DropiOrderForwarderConfig,

@@ -1,0 +1,13 @@
+{
+    "schema_version":  "1.0",
+    "fixture_id":  "a8_r36_invalid_empty_batch",
+    "source_id":  "a8_r36_invalid_empty_batch",
+    "source_type":  "local_fixture",
+    "local_only_execution":  true,
+    "manual_selection_used":  false,
+    "manual_champion_provided":  false,
+    "network_access_allowed":  false,
+    "candidates":  [
+
+                   ]
+}

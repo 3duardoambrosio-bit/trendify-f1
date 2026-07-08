@@ -1,3 +1,5 @@
+# V3GAP:capital_shield_available_cash
+
 from __future__ import annotations
 
 import logging
@@ -53,18 +55,32 @@ class CapitalShieldV2:
         self._budget_type = default_budget_type
 
     @staticmethod
-    def _is_success(result: Any) -> bool:
+    def _classify_result(result: Any) -> BudgetDecision:
         """
-        Interpreta la respuesta del vault de forma robusta:
-        - Si tiene .is_ok() → usamos eso.
-        - Si no, usamos truthiness normal (bool(result)).
+        Clasifica el resultado del vault preservando semántica útil:
+        - approved            → autorización real
+        - insufficient_budget → rechazo normal de presupuesto
+        - vault_error         → falla/corrupción operativa del vault
         """
         if hasattr(result, "is_ok"):
             try:
-                return bool(result.is_ok())
+                if bool(result.is_ok()):
+                    return "approved"
             except Exception:
-                return False
-        return bool(result)
+                return "vault_error"
+        else:
+            try:
+                if bool(result):
+                    return "approved"
+            except Exception:
+                return "vault_error"
+
+        raw_reason = str(getattr(result, "reason", "") or "").strip().upper()
+
+        if "CORRUPTED" in raw_reason or raw_reason.startswith("VAULT_"):
+            return "vault_error"
+
+        return "insufficient_budget"
 
     def decide_for_product(
         self,
@@ -108,10 +124,18 @@ class CapitalShieldV2:
                 reason="vault_error",
             )
 
-        if self._is_success(result):
+        outcome = self._classify_result(result)
+
+        if outcome == "approved":
             return CapitalDecision(
                 allocated=amount,
                 reason="approved",
+            )
+
+        if outcome == "vault_error":
+            return CapitalDecision(
+                allocated=Decimal("0"),
+                reason="vault_error",
             )
 
         return CapitalDecision(

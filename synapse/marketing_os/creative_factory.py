@@ -11,7 +11,7 @@ Genera contenido de marketing ejecutable:
 - Objection matrix
 
 Diversidad real: ángulo × trigger × formato
-Quality Filter aplicado a TODO.
+Quality Filter aplicado a todo el lote.
 """
 
 from __future__ import annotations

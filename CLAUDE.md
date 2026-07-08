@@ -1,4 +1,4 @@
-﻿# SYNAPSE / TrendifyHub  Claude Code Operating Manual (F1 / ACERO, NO HUMO)
+# SYNAPSE / TrendifyHub  Claude Code Operating Manual (F1 / ACERO, NO HUMO)
 
 ## 0) Regla madre
 - NO improvises. NO dejes el repo sucio. NO declares done sin evidencia numérica.

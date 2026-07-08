@@ -1,1 +1,1 @@
-﻿# synapse/integrations/__init__.py
+# synapse/integrations/__init__.py

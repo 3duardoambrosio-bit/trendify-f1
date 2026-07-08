@@ -1,4 +1,4 @@
-﻿---
+---
 name: f1-snapshot
 description: Corre evidence snapshot y verifica gates numéricos (5/5) antes de declarar GREEN.
 disable-model-invocation: true

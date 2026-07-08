@@ -1,4 +1,4 @@
-﻿import json, os, argparse
+import json, os, argparse
 from typing import Any, Dict, List, Optional
 
 def is_inf(x: Any) -> bool:

@@ -1,0 +1,1676 @@
+{
+  "audit_gates": {
+    "deterministic_rules_required": true,
+    "min_anti_generic_rules_per_framework": 1,
+    "min_source_anchors_per_framework": 1,
+    "required_fields": [
+      "name",
+      "purpose",
+      "accepted_inputs",
+      "required_outputs",
+      "preconditions",
+      "decision_rules",
+      "rejection_rules",
+      "trace_fields",
+      "source_anchors",
+      "conversion_target",
+      "anti_generic_rules",
+      "determinism",
+      "worked_example"
+    ],
+    "required_framework_count": 15,
+    "tie_break_and_fallback_required": true,
+    "worked_example_required_per_framework": true,
+    "zero_missing_required_fields": true
+  },
+  "does_not_certify_market_performance": true,
+  "does_not_certify_marketing_expert_engine": true,
+  "frameworks": [
+    {
+      "accepted_inputs": [
+        "product_category",
+        "product_facts",
+        "price_band",
+        "margin_profile",
+        "known_use_cases",
+        "channel"
+      ],
+      "anti_generic_rules": [
+        "Generic if persona lacks product fact, job, or buying situation.",
+        "Generic if persona is only age/gender/income without purchase context."
+      ],
+      "conversion_target": "AudienceRule",
+      "decision_rules": [
+        {
+          "id": "AUD-001",
+          "priority": 80,
+          "then": "select persona tied to that situation, not a demographic stereotype",
+          "when": "product facts imply a concrete use situation"
+        },
+        {
+          "id": "AUD-002",
+          "priority": 70,
+          "then": "prefer audience with higher purchase intent and lower education burden",
+          "when": "margin or CAC constraints are tight"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "AudiencePersona",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Choose a specific buyer segment/persona from product facts, JTBD, and commercial constraints.",
+      "rejection_rules": [
+        "Reject audience if it could apply to every product in the category.",
+        "Reject pure demographic persona without job/use-case evidence."
+      ],
+      "required_outputs": [
+        "audience_segment",
+        "persona_hypothesis",
+        "buyer_job",
+        "specificity_score"
+      ],
+      "source_anchors": [
+        "HBS/STP family: segmentation, target selection, positioning.",
+        "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "channel": "Meta",
+          "price_band": "low-mid",
+          "product_category": "pet",
+          "product_facts": [
+            "portable water bowl",
+            "leak resistant"
+          ]
+        },
+        "output": {
+          "audience_segment": "dog owners who walk/travel with pets",
+          "buyer_job": "keep dog hydrated outside home without mess",
+          "specificity_score": 0.82
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "AudiencePersona",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "AUD-001"
+          ],
+          "source_anchors_used": [
+            "HBS/STP family: segmentation, target selection, positioning."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "product_category",
+        "problem_visibility",
+        "market_familiarity",
+        "proof_available"
+      ],
+      "anti_generic_rules": [
+        "Generic if awareness state does not change hook, proof, CTA, or offer."
+      ],
+      "conversion_target": "BuyerStateRule",
+      "decision_rules": [
+        {
+          "id": "BSA-001",
+          "priority": 70,
+          "then": "use direct problem-solution framing",
+          "when": "buyer knows the problem and product type"
+        },
+        {
+          "id": "BSA-002",
+          "priority": 65,
+          "then": "use situation-first framing and softer CTA",
+          "when": "problem is latent or shame/friction sensitive"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "BuyerStateAwareness",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Classify buyer awareness/friction state so messaging matches how much education and proof is needed.",
+      "rejection_rules": [
+        "Reject buyer state if no evidence supports awareness level.",
+        "Reject high-directness CTA when proof is weak and buyer state is cold."
+      ],
+      "required_outputs": [
+        "buyer_state",
+        "education_depth",
+        "proof_depth",
+        "message_directness"
+      ],
+      "source_anchors": [
+        "Buyer-state/direct-response awareness logic.",
+        "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "market_familiarity": "medium",
+          "problem_visibility": "high",
+          "proof_available": [
+            "demo photo"
+          ]
+        },
+        "output": {
+          "buyer_state": "problem-aware",
+          "education_depth": "medium",
+          "message_directness": "direct",
+          "proof_depth": "demo-required"
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "BuyerStateAwareness",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "BSA-001"
+          ],
+          "source_anchors_used": [
+            "Buyer-state/direct-response awareness logic."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "title",
+        "description",
+        "category",
+        "supplier_cost",
+        "landed_cost",
+        "sale_price",
+        "attributes",
+        "available_media"
+      ],
+      "anti_generic_rules": [
+        "Generic if output uses category clichés instead of extracted product facts."
+      ],
+      "conversion_target": "ProductFactRule",
+      "decision_rules": [
+        {
+          "id": "PFX-001",
+          "priority": 90,
+          "then": "allow it as product_facts_used",
+          "when": "fact exists in source data"
+        },
+        {
+          "id": "PFX-002",
+          "priority": 80,
+          "then": "mark as hypothesis and require proof",
+          "when": "benefit is inferred but not proven"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "ProductFactExtraction",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Extract marketing-usable facts from product/evaluation data without inventing claims.",
+      "rejection_rules": [
+        "Reject unsupported medical, guaranteed, absolute, or performance claims.",
+        "Reject benefit if it is not traceable to source data or proof."
+      ],
+      "required_outputs": [
+        "facts_allowed",
+        "facts_missing",
+        "claim_limits",
+        "proof_gaps"
+      ],
+      "source_anchors": [
+        "Claim substantiation and risk-control logic.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "attributes": [
+            "foldable",
+            "leak resistant"
+          ],
+          "available_media": [
+            "photo"
+          ],
+          "title": "Portable Leak Resistant Pet Bowl"
+        },
+        "output": {
+          "claim_limits": [
+            "do not claim vet-approved"
+          ],
+          "facts_allowed": [
+            "foldable",
+            "leak resistant"
+          ],
+          "proof_gaps": [
+            "needs real use demo"
+          ]
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "ProductFactExtraction",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "PFX-001"
+          ],
+          "source_anchors_used": [
+            "Claim substantiation and risk-control logic."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "buyer_job",
+        "product_facts",
+        "price_band",
+        "competitive_alternatives"
+      ],
+      "anti_generic_rules": [
+        "Generic if positioning could be pasted onto any similar SKU."
+      ],
+      "conversion_target": "PositioningRule",
+      "decision_rules": [
+        {
+          "id": "POS-001",
+          "priority": 80,
+          "then": "position around job completion not category label",
+          "when": "product solves a specific job with concrete facts"
+        },
+        {
+          "id": "POS-002",
+          "priority": 70,
+          "then": "position around convenience/proof/value, not cheapness",
+          "when": "price is not lowest"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "ValuePropositionPositioning",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Define why this product should be chosen by the selected segment versus alternatives.",
+      "rejection_rules": [
+        "Reject positioning if it says only best/high-quality/amazing without concrete tradeoff."
+      ],
+      "required_outputs": [
+        "positioning_statement",
+        "primary_value",
+        "tradeoff",
+        "reason_to_choose"
+      ],
+      "source_anchors": [
+        "HBS/STP family: segmentation, target selection, positioning.",
+        "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "buyer_job": "hydrate dog during walks",
+          "competitive_alternatives": [
+            "regular bottle",
+            "bulky bowl"
+          ],
+          "product_facts": [
+            "foldable",
+            "leak resistant"
+          ]
+        },
+        "output": {
+          "positioning_statement": "A compact walk/travel hydration helper for dog owners who want less mess outside home.",
+          "primary_value": "portable mess reduction"
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "ValuePropositionPositioning",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "POS-001"
+          ],
+          "source_anchors_used": [
+            "HBS/STP family: segmentation, target selection, positioning."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "buyer_state",
+        "product_facts",
+        "proof_available",
+        "claim_risk",
+        "channel",
+        "margin_profile"
+      ],
+      "anti_generic_rules": [
+        "Generic if angle can apply to all products in category without changing.",
+        "Generic if angle ignores buyer state, proof, or channel."
+      ],
+      "conversion_target": "AngleRule",
+      "decision_rules": [
+        {
+          "id": "ANG-001",
+          "priority": 90,
+          "then": "use demonstration/use-case angle",
+          "when": "specific use-case fact and demo proof exist"
+        },
+        {
+          "id": "ANG-002",
+          "priority": 85,
+          "then": "use low-claim situational angle",
+          "when": "proof is weak or claim risk high"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "AngleSelection",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Select the advertising angle from product facts, buyer state, proof, claim risk, channel, and economics.",
+      "rejection_rules": [
+        "Reject angle if it relies on unsupported transformation or guaranteed result.",
+        "Reject category-only angle if a product-specific fact is available."
+      ],
+      "required_outputs": [
+        "angle_type",
+        "mechanism",
+        "proof_required",
+        "angle_trace"
+      ],
+      "source_anchors": [
+        "HBS/STP family: segmentation, target selection, positioning.",
+        "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+        "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity.",
+        "Claim substantiation and risk-control logic.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "buyer_state": "problem-aware",
+          "claim_risk": "low",
+          "product_facts": [
+            "foldable",
+            "leak resistant"
+          ],
+          "proof_available": [
+            "demo photo"
+          ]
+        },
+        "output": {
+          "angle_type": "situational demonstration",
+          "mechanism": "show less-mess hydration during walks",
+          "proof_required": [
+            "short demo"
+          ]
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "AngleSelection",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "ANG-001"
+          ],
+          "source_anchors_used": [
+            "HBS/STP family: segmentation, target selection, positioning."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "objections",
+        "sale_price",
+        "margin_profile",
+        "proof_available",
+        "fulfillment_constraints"
+      ],
+      "anti_generic_rules": [
+        "Generic if offer is just buy now / limited time without product-specific value."
+      ],
+      "conversion_target": "OfferRule",
+      "decision_rules": [
+        {
+          "id": "OFF-001",
+          "priority": 80,
+          "then": "offer promise must reduce that friction with a product fact",
+          "when": "buyer objection is convenience/friction"
+        },
+        {
+          "id": "OFF-002",
+          "priority": 75,
+          "then": "avoid discount-dependent offer unless explicitly allowed",
+          "when": "margin is tight"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "OfferConstruction",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Construct a safe offer promise matched to segment objection, economics, proof, and operator constraints.",
+      "rejection_rules": [
+        "Reject offer if it promises unsupported outcomes.",
+        "Reject discount offer if margin guard would fail."
+      ],
+      "required_outputs": [
+        "offer_promise",
+        "offer_mechanism",
+        "risk_reversal",
+        "offer_limits"
+      ],
+      "source_anchors": [
+        "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+        "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "margin_profile": "acceptable",
+          "objections": [
+            "will it leak?",
+            "is it bulky?"
+          ],
+          "proof_available": [
+            "demo photo"
+          ]
+        },
+        "output": {
+          "offer_mechanism": "foldable leak-resistant design",
+          "offer_promise": "portable hydration without carrying a bulky bowl",
+          "risk_reversal": "operator review required for guarantee wording"
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "OfferConstruction",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "OFF-001"
+          ],
+          "source_anchors_used": [
+            "HBR/JTBD family: customer job, context, functional/social/emotional motivation."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "angle_type",
+        "product_facts",
+        "buyer_state",
+        "objection",
+        "proof_required",
+        "channel"
+      ],
+      "anti_generic_rules": [
+        "Generic if hook could run for any product after replacing the noun."
+      ],
+      "conversion_target": "HookRule",
+      "decision_rules": [
+        {
+          "id": "HOK-001",
+          "priority": 90,
+          "then": "hook should make the proof visible in first frame/line",
+          "when": "demo proof exists"
+        },
+        {
+          "id": "HOK-002",
+          "priority": 80,
+          "then": "hook should answer that objection without overclaiming",
+          "when": "objection is concrete"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "HookConstruction",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Create hooks tied to a product fact, buyer state, objection, proof need, and channel constraint.",
+      "rejection_rules": [
+        "Reject hook if it lacks product fact or buyer situation.",
+        "Reject hook if it requires proof not available."
+      ],
+      "required_outputs": [
+        "hook_text",
+        "hook_type",
+        "visual_prompt",
+        "required_proof"
+      ],
+      "source_anchors": [
+        "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity.",
+        "Buyer-state/direct-response awareness logic.",
+        "Channel-specific creative constraint logic.",
+        "Claim substantiation and risk-control logic."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "angle_type": "situational demonstration",
+          "channel": "Meta",
+          "objection": "bulky",
+          "product_facts": [
+            "foldable"
+          ]
+        },
+        "output": {
+          "hook_text": "No cargues un bowl gigante para una caminata corta.",
+          "hook_type": "objection-led",
+          "visual_prompt": "show bulky alternative vs foldable bowl"
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "HookConstruction",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "HOK-001"
+          ],
+          "source_anchors_used": [
+            "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "buyer_state",
+        "price_band",
+        "product_facts",
+        "common_objections",
+        "proof_available"
+      ],
+      "anti_generic_rules": [
+        "Generic if objections are generic trust/price only without segment/product specificity."
+      ],
+      "conversion_target": "ObjectionRule",
+      "decision_rules": [
+        {
+          "id": "OBJ-001",
+          "priority": 85,
+          "then": "require demo/detail proof before claim",
+          "when": "objection is product quality"
+        },
+        {
+          "id": "OBJ-002",
+          "priority": 70,
+          "then": "answer with job/value tradeoff, not unsupported superiority",
+          "when": "objection is price"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "ObjectionHandling",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Map buyer objections to proof, copy angle, and operator review requirements.",
+      "rejection_rules": [
+        "Reject objection response that creates an unsupported claim."
+      ],
+      "required_outputs": [
+        "objection_map",
+        "response_strategy",
+        "proof_needed",
+        "operator_review_flags"
+      ],
+      "source_anchors": [
+        "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+        "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity.",
+        "Claim substantiation and risk-control logic."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "common_objections": [
+            "will it leak?",
+            "will my dog use it?"
+          ],
+          "proof_available": [
+            "photo"
+          ]
+        },
+        "output": {
+          "objection_map": [
+            {
+              "objection": "will it leak?",
+              "response_strategy": "show leak-resistant use demo"
+            }
+          ],
+          "operator_review_flags": [
+            "need real demo before strong claim"
+          ]
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "ObjectionHandling",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "OBJ-001"
+          ],
+          "source_anchors_used": [
+            "HBR/JTBD family: customer job, context, functional/social/emotional motivation."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "claim",
+        "product_facts",
+        "available_media",
+        "risk_level",
+        "channel"
+      ],
+      "anti_generic_rules": [
+        "Generic if proof request is only 'add testimonial' without matching claim."
+      ],
+      "conversion_target": "ProofRequirementRule",
+      "decision_rules": [
+        {
+          "id": "PRF-001",
+          "priority": 90,
+          "then": "require source data or visual evidence",
+          "when": "claim is factual/product attribute"
+        },
+        {
+          "id": "PRF-002",
+          "priority": 95,
+          "then": "require stronger proof or reject",
+          "when": "claim implies result/performance"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "ProofRequirement",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Define what proof is required before a claim, hook, or offer can be used.",
+      "rejection_rules": [
+        "Reject claim if proof_required is not met."
+      ],
+      "required_outputs": [
+        "proof_required",
+        "proof_available",
+        "proof_gap",
+        "claim_status"
+      ],
+      "source_anchors": [
+        "Claim substantiation and risk-control logic.",
+        "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "available_media": [
+            "photo"
+          ],
+          "claim": "leak resistant",
+          "risk_level": "medium"
+        },
+        "output": {
+          "claim_status": "needs_operator_review",
+          "proof_available": [
+            "photo"
+          ],
+          "proof_gap": [
+            "video demo"
+          ],
+          "proof_required": [
+            "water/leak demo"
+          ]
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "ProofRequirement",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "PRF-001"
+          ],
+          "source_anchors_used": [
+            "Claim substantiation and risk-control logic."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "claim_text",
+        "category",
+        "proof_available",
+        "regulated_risk",
+        "channel"
+      ],
+      "anti_generic_rules": [
+        "Generic if claim risk classification does not cite the exact claim text."
+      ],
+      "conversion_target": "ClaimRiskRule",
+      "decision_rules": [
+        {
+          "id": "CLR-001",
+          "priority": 100,
+          "then": "reject or require explicit proof and operator review",
+          "when": "claim is absolute/guaranteed/medical"
+        },
+        {
+          "id": "CLR-002",
+          "priority": 80,
+          "then": "allow with trace",
+          "when": "claim is attribute-level and proof exists"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "ClaimRisk",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Classify and constrain claims before output reaches operator or channel package.",
+      "rejection_rules": [
+        "Reject medical, guaranteed, impossible, or unprovable claims."
+      ],
+      "required_outputs": [
+        "risk_level",
+        "claims_allowed",
+        "claims_rejected",
+        "safe_rewrite"
+      ],
+      "source_anchors": [
+        "Claim substantiation and risk-control logic.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend.",
+        "Channel-specific creative constraint logic."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "category": "pet",
+          "claim_text": "never leaks",
+          "proof_available": [
+            "photo"
+          ]
+        },
+        "output": {
+          "claims_allowed": [
+            "leak-resistant design"
+          ],
+          "claims_rejected": [
+            "never leaks"
+          ],
+          "risk_level": "high",
+          "safe_rewrite": "designed to help reduce spills"
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "ClaimRisk",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "CLR-001"
+          ],
+          "source_anchors_used": [
+            "Claim substantiation and risk-control logic."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "channel",
+        "creative_format",
+        "claim_risk",
+        "proof_available",
+        "buyer_state"
+      ],
+      "anti_generic_rules": [
+        "Generic if channel choice does not change format, proof, CTA, or claim limits."
+      ],
+      "conversion_target": "ChannelConstraintRule",
+      "decision_rules": [
+        {
+          "id": "CHN-001",
+          "priority": 80,
+          "then": "prefer visual demo and avoid unsupported before/after claims",
+          "when": "channel is Meta and proof is visual"
+        },
+        {
+          "id": "CHN-002",
+          "priority": 85,
+          "then": "route risky claim to operator review",
+          "when": "channel proof is weak"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "ChannelConstraint",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Apply channel-specific constraints before hooks/offers are considered usable.",
+      "rejection_rules": [
+        "Reject channel output that requires unavailable asset or prohibited claim."
+      ],
+      "required_outputs": [
+        "format_constraints",
+        "copy_constraints",
+        "proof_constraints",
+        "review_required"
+      ],
+      "source_anchors": [
+        "Channel-specific creative constraint logic.",
+        "Claim substantiation and risk-control logic.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "channel": "Meta",
+          "claim_risk": "medium",
+          "creative_format": "short video",
+          "proof_available": [
+            "photo"
+          ]
+        },
+        "output": {
+          "copy_constraints": [
+            "no absolute claims"
+          ],
+          "format_constraints": [
+            "first-frame visual proof"
+          ],
+          "review_required": true
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "ChannelConstraint",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "CHN-001"
+          ],
+          "source_anchors_used": [
+            "Channel-specific creative constraint logic."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "buyer_state",
+        "offer",
+        "channel",
+        "friction_level",
+        "proof_status"
+      ],
+      "anti_generic_rules": [
+        "Generic if CTA is only buy now without awareness/friction logic."
+      ],
+      "conversion_target": "CTARule",
+      "decision_rules": [
+        {
+          "id": "CTA-001",
+          "priority": 75,
+          "then": "use direct product CTA",
+          "when": "buyer is problem-aware and proof is adequate"
+        },
+        {
+          "id": "CTA-002",
+          "priority": 85,
+          "then": "use softer CTA and operator review",
+          "when": "proof is incomplete"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "CTA",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Select a CTA matched to buyer state, friction, channel, and operator constraints.",
+      "rejection_rules": [
+        "Reject urgency-only CTA if not supported by offer or inventory reality."
+      ],
+      "required_outputs": [
+        "cta_text",
+        "cta_type",
+        "friction_match",
+        "review_required"
+      ],
+      "source_anchors": [
+        "Buyer-state/direct-response awareness logic.",
+        "Channel-specific creative constraint logic.",
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "buyer_state": "problem-aware",
+          "friction_level": "medium",
+          "proof_status": "partial"
+        },
+        "output": {
+          "cta_text": "Revisa si te sirve para tus paseos diarios",
+          "cta_type": "soft-direct",
+          "friction_match": "medium",
+          "review_required": false
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "CTA",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "CTA-001"
+          ],
+          "source_anchors_used": [
+            "Buyer-state/direct-response awareness logic."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "candidate_output",
+        "product_facts_used",
+        "trace",
+        "framework_outputs"
+      ],
+      "anti_generic_rules": [
+        "Generic if reusable across unrelated products without changing facts, proof, or objection."
+      ],
+      "conversion_target": "AntiGenericRule",
+      "decision_rules": [
+        {
+          "id": "AGR-001",
+          "priority": 100,
+          "then": "reject as generic",
+          "when": "output lacks product_facts_used"
+        },
+        {
+          "id": "AGR-002",
+          "priority": 95,
+          "then": "reject as unauditable",
+          "when": "trace lacks rule ids"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "AntiGenericRejection",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Provide universal rejection logic against vague, interchangeable marketing output.",
+      "rejection_rules": [
+        "Reject any marketing decision with no product facts.",
+        "Reject any marketing decision with no rule trace."
+      ],
+      "required_outputs": [
+        "generic_score",
+        "rejection_reasons",
+        "rewrite_required"
+      ],
+      "source_anchors": [
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend.",
+        "Claim substantiation and risk-control logic.",
+        "HBS/STP family: segmentation, target selection, positioning."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "candidate_output": "Perfect for everyone who wants convenience",
+          "product_facts_used": [],
+          "trace": {}
+        },
+        "output": {
+          "generic_score": 0.97,
+          "rejection_reasons": [
+            "no product facts",
+            "no trace"
+          ],
+          "rewrite_required": true
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "AntiGenericRejection",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "AGR-001"
+          ],
+          "source_anchors_used": [
+            "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "framework_outputs",
+        "rule_applications",
+        "source_anchors",
+        "operator_review_flags"
+      ],
+      "anti_generic_rules": [
+        "Generic if trace explains outcome with vague rationale instead of rule ids and facts."
+      ],
+      "conversion_target": "MarketingDecisionTrace",
+      "decision_rules": [
+        {
+          "id": "TRC-001",
+          "priority": 100,
+          "then": "trace must include framework, rule id, product facts, and source anchor",
+          "when": "a decision is emitted"
+        },
+        {
+          "id": "TRC-002",
+          "priority": 95,
+          "then": "trace must record fallback_used and reason",
+          "when": "fallback is used"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "DecisionTrace",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Make every marketing decision auditable by recording rule ids, facts, sources, rejections, and fallback.",
+      "rejection_rules": [
+        "Reject trace if any emitted decision lacks rule_ids_applied."
+      ],
+      "required_outputs": [
+        "decision_trace",
+        "trace_completeness",
+        "audit_warnings"
+      ],
+      "source_anchors": [
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "framework_outputs": [
+            "angle",
+            "hook"
+          ],
+          "rule_applications": [
+            "ANG-001",
+            "HOK-001"
+          ],
+          "source_anchors": [
+            "JTBD"
+          ]
+        },
+        "output": {
+          "audit_warnings": [],
+          "decision_trace": {
+            "rule_ids_applied": [
+              "ANG-001",
+              "HOK-001"
+            ]
+          },
+          "trace_completeness": "complete"
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "DecisionTrace",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "TRC-001"
+          ],
+          "source_anchors_used": [
+            "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+          ]
+        }
+      }
+    },
+    {
+      "accepted_inputs": [
+        "claims_rejected",
+        "proof_gaps",
+        "channel_constraints",
+        "spend_status",
+        "live_flags"
+      ],
+      "anti_generic_rules": [
+        "Generic if operator review says only 'check this' without exact risk/proof/action."
+      ],
+      "conversion_target": "OperatorReviewRule",
+      "decision_rules": [
+        {
+          "id": "OPR-001",
+          "priority": 100,
+          "then": "require operator review before package approval",
+          "when": "claim risk or proof gap exists"
+        },
+        {
+          "id": "OPR-002",
+          "priority": 100,
+          "then": "block until dedicated guard audit exists",
+          "when": "live flag/spend path is requested"
+        }
+      ],
+      "determinism": {
+        "fallback_policy": "If no safe specific rule matches, reject generic output and route to operator_review_required.",
+        "overlap_policy": "If multiple rules match, select by tie_break_order and record tie_break_applied.",
+        "required": true,
+        "tie_break_order": [
+          "hard safety/rejection rule",
+          "highest product-fact specificity",
+          "highest buyer-state fit",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "name": "OperatorReview",
+      "preconditions": [
+        "Input must come from local SYNAPSE product/evaluation/brief context.",
+        "No live Meta, Shopify, Dropi, spend, order, or fulfillment action is allowed.",
+        "If required evidence is missing, output must include a traceable rejection or operator review note."
+      ],
+      "purpose": "Define what the operator must review before any external use or future live path.",
+      "rejection_rules": [
+        "Reject automatic external action.",
+        "Reject review note if it does not cite blocked reason."
+      ],
+      "required_outputs": [
+        "operator_review_notes",
+        "approval_required",
+        "blocked_actions"
+      ],
+      "source_anchors": [
+        "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend.",
+        "Claim substantiation and risk-control logic.",
+        "Channel-specific creative constraint logic."
+      ],
+      "trace_fields": [
+        "framework",
+        "rule_ids_applied",
+        "product_facts_used",
+        "source_anchors_used",
+        "rejections",
+        "tie_break_applied",
+        "fallback_used",
+        "operator_review_required"
+      ],
+      "worked_example": {
+        "input": {
+          "claims_rejected": [
+            "never leaks"
+          ],
+          "live_flags": {
+            "meta": false
+          },
+          "proof_gaps": [
+            "video demo"
+          ]
+        },
+        "output": {
+          "approval_required": true,
+          "blocked_actions": [
+            "Meta live spend"
+          ],
+          "operator_review_notes": [
+            "Do not use absolute leak claim without proof"
+          ]
+        },
+        "rule_application": [
+          "select matching rule by accepted inputs",
+          "apply rejection rules before generation",
+          "apply deterministic tie_break_order if more than one rule matches",
+          "emit output plus trace"
+        ],
+        "trace": {
+          "fallback_used": false,
+          "framework": "OperatorReview",
+          "operator_review_required": false,
+          "rule_ids_applied": [
+            "OPR-001"
+          ],
+          "source_anchors_used": [
+            "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+          ]
+        }
+      }
+    }
+  ],
+  "future_sequence": [
+    "A8-R101 executable rule contract",
+    "A8-R102 loader and validator",
+    "A8-R103 Atlas/methodology-grounded marketing decision engine",
+    "A8-R104 external marketing expert audit",
+    "Meta publisher guard audit before any Meta-live/spend path"
+  ],
+  "island": "A8-R100I1",
+  "replaces": "This spec is designed to replace _category_angle as the primary future decision path, but does not implement that engine yet.",
+  "safety": {
+    "fulfillment": false,
+    "live_dropi": false,
+    "live_meta": false,
+    "live_shopify": false,
+    "live_write": false,
+    "operator_en_control": true,
+    "orders": false,
+    "real_spend": false
+  },
+  "schema_version": "synapse.marketing_methodology.v1",
+  "source_anchor_families": {
+    "awareness": "Buyer-state/direct-response awareness logic.",
+    "channel": "Channel-specific creative constraint logic.",
+    "claims": "Claim substantiation and risk-control logic.",
+    "jtbd": "HBR/JTBD family: customer job, context, functional/social/emotional motivation.",
+    "persuasion": "Cialdini/influence family: social proof, authority, scarcity, consistency, reciprocity, liking/unity.",
+    "stp": "HBS/STP family: segmentation, target selection, positioning.",
+    "synapse": "SYNAPSE internal economics/safety: margin, CAC, proof, operator-en-control, no live spend."
+  },
+  "status": "draft_for_external_audit",
+  "title": "Marketing Methodology Spec / Expert Playbook V1",
+  "type": "methodology_spec_no_engine_no_loader"
+}

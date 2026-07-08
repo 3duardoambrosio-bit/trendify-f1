@@ -38,28 +38,80 @@ class SpendPolicyV1:
 
         # Si Vault ya dijo NO por una razón específica, se respeta (ACERO: razón más concreta gana)
         if not v.allowed:
-            self._emit("SPEND_DENIED", {"reason": v.reason, "pool": pool, "product_id": product_id, "amount": str(amount), **context})
-            return PolicyDecision(False, v.reason, v.reason, cashflow_ok=self.cashflow.can_spend(amount))
+            cashflow_ok = self.cashflow.can_spend(amount)
+            self._emit(
+                "SPEND_DENIED",
+                {
+                    "reason": v.reason,
+                    "vault_reason": v.reason,
+                    "cashflow_ok": cashflow_ok,
+                    "pool": pool,
+                    "product_id": product_id,
+                    "amount": str(amount),
+                    **context,
+                },
+            )
+            return PolicyDecision(False, v.reason, v.reason, cashflow_ok=cashflow_ok)
 
         # Vault permite → ahora sí Cashflow gate (protección contra insolvencia)
         if not self.cashflow.can_spend(amount):
             # rollback v1: reinyectar gasto aprobado (ACERO: no dejamos estado inconsistente)
             # Nota: esto mantiene Vault como autoridad pero evita "gasto fantasma"
             self._rollback_vault(pool=pool, amount=amount, product_id=product_id)
-            self._emit("SPEND_DENIED", {"reason": "CASHFLOW_GUARD", "pool": pool, "product_id": product_id, "amount": str(amount), **context})
+            self._emit(
+                "SPEND_ROLLED_BACK",
+                {
+                    "reason": "CASHFLOW_GUARD_ROLLBACK",
+                    "vault_reason": v.reason,
+                    "cashflow_ok": False,
+                    "pool": pool,
+                    "product_id": product_id,
+                    "amount": str(amount),
+                    **context,
+                },
+            )
+            self._emit(
+                "SPEND_DENIED",
+                {
+                    "reason": "CASHFLOW_GUARD",
+                    "vault_reason": v.reason,
+                    "cashflow_ok": False,
+                    "pool": pool,
+                    "product_id": product_id,
+                    "amount": str(amount),
+                    **context,
+                },
+            )
             return PolicyDecision(False, "CASHFLOW_GUARD", v.reason, cashflow_ok=False)
 
-        self._emit("SPEND_APPROVED", {"pool": pool, "product_id": product_id, "amount": str(amount), **context})
+        self._emit(
+            "SPEND_APPROVED",
+            {
+                "reason": "APPROVED",
+                "vault_reason": v.reason,
+                "cashflow_ok": True,
+                "pool": pool,
+                "product_id": product_id,
+                "amount": str(amount),
+                **context,
+            },
+        )
         return PolicyDecision(True, "APPROVED", v.reason, cashflow_ok=True)
 
     def _rollback_vault(self, *, pool: str, amount: Decimal, product_id: str) -> None:
         # rollback mínimo: des-spend en el pool (v1 no tiene ledger transaccional completo aún)
         p = self.vault.pools()[pool]
-        p.spent -= amount
+        new_spent = p.spent - amount
+        p.spent = new_spent if new_spent > Decimal("0") else Decimal("0")
+
         if pool == "learning":
-            # revertir tracking por producto
+            # revertir tracking por producto sin permitir negativos
             spent = self.vault._learning_spent_by_product.get(product_id, Decimal("0"))
-            self.vault._learning_spent_by_product[product_id] = (spent - amount)
+            new_product_spent = spent - amount
+            if new_product_spent > Decimal("0"):
+                self.vault._learning_spent_by_product[product_id] = new_product_spent
+            else:
+                self.vault._learning_spent_by_product.pop(product_id, None)
 
     def _emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         if self.ledger is None:

@@ -31,6 +31,19 @@ if ($Cmd -eq "rollback") {
 if (-not (Test-Path "scripts\gate_f1.ps1")) { Die "NO scripts\gate_f1.ps1" }
 
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gate_f1.ps1 -Mode $Cmd
-$ec = $LASTEXITCODE
+$a8r43lLastCommandSucceeded = $?
+$a8r43lLastExitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+if ($null -eq $a8r43lLastExitCodeVar -or $null -eq $a8r43lLastExitCodeVar.Value) {
+    if ($a8r43lLastCommandSucceeded) {
+        $ec = 0
+    }
+    else {
+        $ec = 1
+    }
+}
+else {
+    $ec = [int]$a8r43lLastExitCodeVar.Value
+}
+# A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
 "GATE_EXITCODE={0}" -f $ec
 exit $ec

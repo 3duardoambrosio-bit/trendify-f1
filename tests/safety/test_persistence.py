@@ -1,4 +1,4 @@
-﻿"""Tests for KillSwitch and CircuitBreaker persistence across restarts."""
+"""Tests for KillSwitch and CircuitBreaker persistence across restarts."""
 from pathlib import Path
 from datetime import datetime, timezone
 

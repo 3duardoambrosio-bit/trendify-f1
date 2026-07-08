@@ -1,4 +1,4 @@
-﻿# synapse/integrations/dropi/order_forwarder.py
+# synapse/integrations/dropi/order_forwarder.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +7,8 @@ import json
 import time
 import urllib.request
 import urllib.error
+
+from infra.network_guard import enforce_url_policy
 
 
 class CircuitOpenError(RuntimeError):
@@ -36,6 +38,8 @@ class DropiOrderForwarderConfig:
     circuit_cooldown_seconds: int = 30
     idempotency_ttl_seconds: int = 24 * 3600
     user_agent: str = "synapse-dropi-forwarder/1.0"
+    dry_run: bool = True
+    live_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,7 @@ class ForwardResult:
     response_text: str
     replayed: bool
     idempotency_key: str
+    dry_run: bool = False
 
 
 class InMemoryIdempotencyStore:
@@ -77,7 +82,7 @@ def _json_dumps(data: Any) -> bytes:
 
 def build_dropi_payload_from_shopify(order: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Payload agnóstico (porque Dropi API real puede variar).
+    Payload agnÃ³stico (porque Dropi API real puede variar).
     Lo importante en F1: external_id + items + shipping + totals.
     """
     customer = order.get("customer") or {}
@@ -125,6 +130,7 @@ class UrllibTransport:
         body: bytes,
         timeout_seconds: int,
     ) -> Tuple[int, bytes]:
+        enforce_url_policy(url)
         req = urllib.request.Request(url=url, data=body, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
@@ -166,10 +172,28 @@ class DropiOrderForwarder:
                     fn(key, value)
                 return
 
+    def _live_write_enabled(self) -> bool:
+        return bool(self._cfg.live_enabled) and not bool(self._cfg.dry_run)
+
     def forward_shopify_order(self, order: Dict[str, Any], *, idempotency_key: str) -> ForwardResult:
         now = time.time()
         if now < self._circuit_open_until:
             raise CircuitOpenError(f"circuit_open_until={self._circuit_open_until:.0f}")
+
+        if not self._live_write_enabled():
+            return ForwardResult(
+                ok=False,
+                status_code=0,
+                response_text=(
+                    "DROPI_ORDER_FORWARDER_BLOCKED: "
+                    f"dry_run={self._cfg.dry_run} "
+                    f"live_enabled={self._cfg.live_enabled} "
+                    "transport_not_called"
+                ),
+                replayed=False,
+                idempotency_key=idempotency_key,
+                dry_run=True,
+            )
 
         cached = self._store_get(idempotency_key)
         if cached is not None:
@@ -182,6 +206,7 @@ class DropiOrderForwarder:
             )
 
         url = self._cfg.base_url.rstrip("/") + "/orders"
+        enforce_url_policy(url)
         payload = self._payload_builder(order)
         body = _json_dumps(payload)
 

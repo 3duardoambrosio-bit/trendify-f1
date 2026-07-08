@@ -1,24 +1,39 @@
+# V3GAP:D-04_spend_pacing_alert
+
 from __future__ import annotations
-
-from datetime import timezone
-
-from infra.time_utils import now_utc
-
 
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Optional
-import json
-import datetime
 import logging
 
-from ops.safety_middleware import check_safety_before_spend
+from infra.idempotency import (
+    DEFAULT_DB_PATH as DEFAULT_IDEMPOTENCY_DB_PATH,
+    STATUS_COMPLETED,
+    STATUS_CONFLICT,
+    STATUS_DUPLICATE,
+    STATUS_IN_FLIGHT,
+    execute_once,
+)
+from ops.safety_middleware import (
+    build_layer0_descriptor,
+    check_safety_before_spend,
+)
+from synapse.infra.time_utc import build_clock_stamp
+from synapse.ledger_ndjson import append_event
 from synapse.safety.killswitch import KillSwitch
 from synapse.safety.circuit import CircuitBreaker
-from infra.idempotency_manager import IdempotencyManager
 
 logger = logging.getLogger(__name__)
+
+_LAYER0_THRESHOLD_KEYS = (
+    "spend_envelope_daily_per_campaign",
+    "heartbeat_degraded_after",
+    "heartbeat_minimal_risk_after",
+    "kill_switch_scope_default",
+    "kill_switch_global_authority",
+)
 
 
 @dataclass(frozen=True)
@@ -45,18 +60,40 @@ class SpendGatewayDecision:
     def success(self) -> bool:
         return self.allowed
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "allowed": self.allowed,
+            "reason": self.reason,
+            "amount": str(self.amount),
+            "pool": self.pool,
+            "product_id": self.product_id,
+            "day": self.day,
+            "meta": self.meta,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Dict[str, Any]) -> "SpendGatewayDecision":
+        return cls(
+            allowed=bool(value.get("allowed", False)),
+            reason=str(value.get("reason", "DENIED")),
+            amount=Decimal(str(value.get("amount", "0"))),
+            pool=str(value.get("pool", "operational")),
+            product_id=str(value.get("product_id", "")),
+            day=int(value.get("day", 1)),
+            meta=dict(value.get("meta", {})),
+        )
+
 
 class SpendGateway:
     """
-    Test-driven contract:
+    Contract:
     - RESERVE: siempre bloqueado, reason == "RESERVE_PROTECTED"
     - LEARNING caps:
         day1  -> "CAP_LEARNING_DAY1"
         total -> "CAP_LEARNING_TOTAL"
-    - Ledger: SIEMPRE escribe NDJSON con schema:
-        {"event_type": "...", "payload": {...}}
-      (para que ledger.iter_events() lo vea igual que los tests)
-    - Vault v1: request_spend(req) (usa req.budget)
+    - Ledger: un solo write path NDJSON vía synapse.ledger_ndjson.append_event
+    - Idempotency: SQLite-backed execute_once() es la autoridad
+    - ODD: enforced para el money-path con defaults explícitos
     """
 
     def __init__(
@@ -67,16 +104,45 @@ class SpendGateway:
         caps: Optional[ProductCaps] = None,
         killswitch: Optional[KillSwitch] = None,
         circuit_breaker: Optional[CircuitBreaker] = None,
-        idempotency_manager: Optional[IdempotencyManager] = None,
+        idempotency_manager: Optional[Any] = None,  # compat: no usado; SQLite es autoridad
+        idempotency_db_path: Optional[str | Path] = None,
     ):
         self.vault = vault
         self.ledger = ledger
         self.caps = caps or ProductCaps()
         self._killswitch = killswitch
         self._circuit_breaker = circuit_breaker
-        self._idempotency = idempotency_manager
+        self._idempotency_legacy = idempotency_manager
+        self._idempotency_db_path = Path(idempotency_db_path) if idempotency_db_path is not None else DEFAULT_IDEMPOTENCY_DB_PATH
         self._learn_total_by_product: Dict[str, Decimal] = {}
         self._learn_day1_by_product: Dict[str, Decimal] = {}
+
+    @staticmethod
+    def layer0_mapping() -> Dict[str, Any]:
+        return build_layer0_descriptor(
+            component="spend_gateway_v1",
+            channel="meta",
+            scope="per_channel",
+            threshold_keys=_LAYER0_THRESHOLD_KEYS,
+        )
+
+    def _layer0_meta(self, *, operation_id: str, pool: str, product_id: str, channel: str) -> Dict[str, Any]:
+        base = build_layer0_descriptor(
+            component="spend_gateway_v1",
+            channel=channel or "meta",
+            operation_id=operation_id,
+            scope="per_channel",
+            threshold_keys=_LAYER0_THRESHOLD_KEYS,
+        )
+        base.update(
+            {
+                "product_id": str(product_id or ""),
+                "budget_pool": str(pool or ""),
+                "channel": str(channel or "meta"),
+                "shield_strategy": "money_path_unified",
+            }
+        )
+        return base
 
     def _get(self, obj: Any, keys: tuple[str, ...], default=None):
         for k in keys:
@@ -105,33 +171,24 @@ class SpendGateway:
             return Path(p)
         return None
 
-    def _append_ndjson(self, row: Dict[str, Any]) -> None:
+    def _log_event(self, event_type: str, payload: Dict[str, Any]) -> None:
         path = self._ledger_path()
         if path is None:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(row, ensure_ascii=False, default=str)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
 
-    def _log_event(self, event_type: str, payload: Dict[str, Any]) -> None:
+        stamp = build_clock_stamp()
         row = {
-            "ts": datetime.datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z"),
+            "ts": stamp.ingest_time,
             "event_type": event_type,
+            "kind": event_type,
             "payload": payload,
+            "clock_source_id": stamp.clock_source_id,
+            "clock_skew_estimate": stamp.clock_skew_estimate,
+            "clock_unreliable": stamp.clock_unreliable,
+            "policy_version": "v1",
+            "payload_schema_version": "spend_gateway_v1",
         }
-        # IMPORTANT: siempre dejamos nuestra lÃ­nea AL FINAL, para que rows[-1] sea esta.
-        try:
-            l = self.ledger
-            if l is not None:
-                for m in ("log_event", "append_event", "append", "write", "emit", "log", "record"):
-                    if hasattr(l, m):
-                        try:
-                            getattr(l, m)(row)
-                        except Exception:
-                            pass
-        finally:
-            self._append_ndjson(row)
+        append_event(row, path=path)
 
     def _allowed_from(self, dec: Any) -> bool:
         for k in ("allowed", "ok", "success", "passed", "is_ok"):
@@ -149,8 +206,13 @@ class SpendGateway:
                     return v.strip()
         return "OK" if allowed else "DENIED"
 
-    def request(self, req: Any, *, idempotency_key: str) -> SpendGatewayDecision:
-        # Vault v1 usa req.budget
+    @staticmethod
+    def _normalize_minutes(value: Any, *, default: int) -> int:
+        if value is None or value == "":
+            return int(default)
+        return int(value)
+
+    def request(self, req: Any, *, idempotency_key: Optional[str] = None) -> SpendGatewayDecision:
         budget_obj = self._get(req, ("budget", "budget_type", "pool", "bucket", "type"), default="operational")
         pool = self._pool_from_budget(budget_obj)
 
@@ -161,63 +223,83 @@ class SpendGateway:
         product_id = self._get(req, ("product_id", "product", "pid", "sku", "id"), default="")
         day = int(self._get(req, ("day",), default=1))
         req_id = self._get(req, ("request_id", "rid", "id", "ref"), default="")
+        channel = str(self._get(req, ("channel", "platform", "network", "source"), default="meta") or "meta")
+        country = str(self._get(req, ("country", "market", "geo", "country_code"), default="MX") or "MX")
+        currency = str(self._get(req, ("currency",), default="MXN") or "MXN")
+        data_freshness_minutes = self._normalize_minutes(self._get(req, ("data_freshness_minutes",), default=0), default=0)
+        tracking_freshness_minutes = self._normalize_minutes(self._get(req, ("tracking_freshness_minutes",), default=0), default=0)
+        heartbeat_age_minutes = self._normalize_minutes(self._get(req, ("heartbeat_age_minutes",), default=0), default=0)
 
-        # --- Idempotency check (P0-003) ---
-        idem_key = idempotency_key
-        if idem_key is None:
-            # Auto-generate from request attributes
-            idem_key = f"spend_{pool}_{product_id}_{req_id}_{amount}_{day}"
-        if self._idempotency is not None and self._idempotency.is_processed(idem_key):
-            cached = self._idempotency.get_result(idem_key)
-            if cached is not None:
-                logger.info("idempotency_hit", idem_key)
-                return cached
+        op_id = str(req_id) or str(idempotency_key or "")
+        layer0_meta = self._layer0_meta(operation_id=op_id, pool=pool, product_id=str(product_id), channel=channel)
 
-        # --- Safety checks (P0-005) ---
-        safety_result = check_safety_before_spend(
-            operation_id=str(req_id) or idem_key,
-            amount=amount,
-            killswitch=self._killswitch,
-            circuit_breaker=self._circuit_breaker,
-        )
-        if safety_result.is_err():
-            reason = safety_result.error
-            payload = {
-                "reason": reason,
-                "request_id": str(req_id),
-                "product_id": str(product_id),
-                "amount": str(amount),
-                "day": day,
-            }
-            self._log_event("SPEND_BLOCKED_SAFETY", payload)
-            decision = SpendGatewayDecision(False, reason, amount, pool, product_id, day, {})
-            if self._idempotency is not None:
-                self._idempotency.store_result(idem_key, decision)
-            return decision
+        idem_key = str(idempotency_key or f"spend_{pool}_{product_id}_{req_id}_{amount}_{day}")
 
-        # RESERVE SIEMPRE bloqueado
-        if pool == "reserve":
-            payload = {
-                "reason": "RESERVE_PROTECTED",
-                "request_id": str(req_id),
-                "product_id": str(product_id),
-                "amount": str(amount),
-                "day": day,
-            }
-            self._log_event("SPEND_DENIED", payload)
-            decision = SpendGatewayDecision(False, "RESERVE_PROTECTED", amount, pool, product_id, day, {})
-            if self._idempotency is not None:
-                self._idempotency.store_result(idem_key, decision)
-            return decision
+        operation_payload = {
+            "request_id": str(req_id),
+            "product_id": str(product_id),
+            "amount": str(amount),
+            "day": day,
+            "pool": pool,
+            "channel": channel,
+            "country": country,
+            "currency": currency,
+            "data_freshness_minutes": data_freshness_minutes,
+            "tracking_freshness_minutes": tracking_freshness_minutes,
+            "heartbeat_age_minutes": heartbeat_age_minutes,
+        }
 
-        # Caps learning
-        if pool == "learning":
-            total_so_far = self._learn_total_by_product.get(product_id, Decimal("0"))
-            day1_so_far = self._learn_day1_by_product.get(product_id, Decimal("0"))
+        def _perform(payload: Dict[str, Any]) -> Dict[str, Any]:
+            safety_result = check_safety_before_spend(
+                operation_id=op_id,
+                amount=amount,
+                killswitch=self._killswitch,
+                circuit_breaker=self._circuit_breaker,
+                enforce_odd=True,
+                channel=channel,
+                country=country,
+                currency=currency,
+                data_freshness_minutes=data_freshness_minutes,
+                tracking_freshness_minutes=tracking_freshness_minutes,
+                heartbeat_age_minutes=heartbeat_age_minutes,
+            )
+            if safety_result.is_err():
+                reason = safety_result.error
+                event_payload = {
+                    "reason": reason,
+                    "request_id": str(req_id),
+                    "product_id": str(product_id),
+                    "amount": str(amount),
+                    "day": day,
+                    "channel": channel,
+                    "country": country,
+                    "currency": currency,
+                    "layer0": layer0_meta,
+                }
+                self._log_event("SPEND_BLOCKED_SAFETY", event_payload)
+                return SpendGatewayDecision(False, reason, amount, pool, str(product_id), day, {"layer0": layer0_meta}).to_dict()
 
-            if self.caps.max_day1_learning is not None and day == 1:
-                if day1_so_far + amount > self.caps.max_day1_learning:
-                    payload = {
+            if pool == "reserve":
+                event_payload = {
+                    "reason": "RESERVE_PROTECTED",
+                    "request_id": str(req_id),
+                    "product_id": str(product_id),
+                    "amount": str(amount),
+                    "day": day,
+                    "channel": channel,
+                    "country": country,
+                    "currency": currency,
+                    "layer0": layer0_meta,
+                }
+                self._log_event("SPEND_DENIED", event_payload)
+                return SpendGatewayDecision(False, "RESERVE_PROTECTED", amount, pool, str(product_id), day, {"layer0": layer0_meta}).to_dict()
+
+            if pool == "learning":
+                total_so_far = self._learn_total_by_product.get(product_id, Decimal("0"))
+                day1_so_far = self._learn_day1_by_product.get(product_id, Decimal("0"))
+
+                if self.caps.max_day1_learning is not None and day == 1 and day1_so_far + amount > self.caps.max_day1_learning:
+                    event_payload = {
                         "reason": "CAP_LEARNING_DAY1",
                         "request_id": str(req_id),
                         "product_id": str(product_id),
@@ -225,16 +307,16 @@ class SpendGateway:
                         "day": day,
                         "cap": str(self.caps.max_day1_learning),
                         "so_far": str(day1_so_far),
+                        "channel": channel,
+                        "country": country,
+                        "currency": currency,
+                        "layer0": layer0_meta,
                     }
-                    self._log_event("SPEND_DENIED", payload)
-                    decision = SpendGatewayDecision(False, "CAP_LEARNING_DAY1", amount, pool, product_id, day, {"cap": str(self.caps.max_day1_learning), "so_far": str(day1_so_far)})
-                    if self._idempotency is not None:
-                        self._idempotency.store_result(idem_key, decision)
-                    return decision
+                    self._log_event("SPEND_DENIED", event_payload)
+                    return SpendGatewayDecision(False, "CAP_LEARNING_DAY1", amount, pool, str(product_id), day, {"cap": str(self.caps.max_day1_learning), "so_far": str(day1_so_far), "layer0": layer0_meta}).to_dict()
 
-            if self.caps.max_total_learning is not None:
-                if total_so_far + amount > self.caps.max_total_learning:
-                    payload = {
+                if self.caps.max_total_learning is not None and total_so_far + amount > self.caps.max_total_learning:
+                    event_payload = {
                         "reason": "CAP_LEARNING_TOTAL",
                         "request_id": str(req_id),
                         "product_id": str(product_id),
@@ -242,43 +324,137 @@ class SpendGateway:
                         "day": day,
                         "cap": str(self.caps.max_total_learning),
                         "so_far": str(total_so_far),
+                        "channel": channel,
+                        "country": country,
+                        "currency": currency,
+                        "layer0": layer0_meta,
                     }
-                    self._log_event("SPEND_DENIED", payload)
-                    decision = SpendGatewayDecision(False, "CAP_LEARNING_TOTAL", amount, pool, product_id, day, {"cap": str(self.caps.max_total_learning), "so_far": str(total_so_far)})
-                    if self._idempotency is not None:
-                        self._idempotency.store_result(idem_key, decision)
-                    return decision
+                    self._log_event("SPEND_DENIED", event_payload)
+                    return SpendGatewayDecision(False, "CAP_LEARNING_TOTAL", amount, pool, str(product_id), day, {"cap": str(self.caps.max_total_learning), "so_far": str(total_so_far), "layer0": layer0_meta}).to_dict()
 
-        # Delegar al vault (v1: request_spend(req))
-        dec = self.vault.request_spend(req)
-        allowed = self._allowed_from(dec)
-        reason = self._reason_from(dec, allowed)
+            try:
+                dec = self.vault.request_spend(req)
+            except Exception as e:
+                if self._circuit_breaker is not None:
+                    self._circuit_breaker.record_failure()
 
-        # log approval/denial del vault tambiÃ©n
-        payload = {
-            "reason": str(reason),
+                reason = f"VAULT_REQUEST_ERROR:{e.__class__.__name__}:{e}"
+                event_payload = {
+                    "reason": reason,
+                    "request_id": str(req_id),
+                    "product_id": str(product_id),
+                    "amount": str(amount),
+                    "day": day,
+                    "pool": pool,
+                    "channel": channel,
+                    "country": country,
+                    "currency": currency,
+                    "layer0": layer0_meta,
+                }
+                self._log_event("SPEND_ERROR", event_payload)
+                return SpendGatewayDecision(
+                    False,
+                    reason,
+                    amount,
+                    pool,
+                    str(product_id),
+                    day,
+                    {
+                        "layer0": layer0_meta,
+                        "error_type": e.__class__.__name__,
+                    },
+                ).to_dict()
+
+            if self._circuit_breaker is not None:
+                self._circuit_breaker.record_success()
+
+            allowed = self._allowed_from(dec)
+            reason = self._reason_from(dec, allowed)
+
+            event_payload = {
+                "reason": str(reason),
+                "request_id": str(req_id),
+                "product_id": str(product_id),
+                "amount": str(amount),
+                "day": day,
+                "pool": pool,
+                "channel": channel,
+                "country": country,
+                "currency": currency,
+                "layer0": layer0_meta,
+            }
+            self._log_event("SPEND_APPROVED" if allowed else "SPEND_DENIED", event_payload)
+
+            if allowed and pool == "learning":
+                self._learn_total_by_product[product_id] = self._learn_total_by_product.get(product_id, Decimal("0")) + amount
+                if day == 1:
+                    self._learn_day1_by_product[product_id] = self._learn_day1_by_product.get(product_id, Decimal("0")) + amount
+
+            return SpendGatewayDecision(allowed, str(reason), amount, pool, str(product_id), day, {"layer0": layer0_meta}).to_dict()
+
+        result = execute_once(idem_key, operation_payload, _perform, db_path=self._idempotency_db_path)
+        status = result["status"]
+
+        if status in {STATUS_COMPLETED, STATUS_DUPLICATE}:
+            return SpendGatewayDecision.from_dict(result["response"])
+        if status == STATUS_CONFLICT:
+            event_payload = {
+                "reason": "IDEMPOTENCY_CONFLICT",
+                "request_id": str(req_id),
+                "product_id": str(product_id),
+                "amount": str(amount),
+                "day": day,
+                "pool": pool,
+                "channel": channel,
+                "country": country,
+                "currency": currency,
+                "layer0": layer0_meta,
+            }
+            self._log_event("SPEND_DENIED", event_payload)
+            return SpendGatewayDecision(False, "IDEMPOTENCY_CONFLICT", amount, pool, str(product_id), day, {"layer0": layer0_meta})
+        if status == STATUS_IN_FLIGHT:
+            event_payload = {
+                "reason": "IDEMPOTENCY_IN_FLIGHT",
+                "request_id": str(req_id),
+                "product_id": str(product_id),
+                "amount": str(amount),
+                "day": day,
+                "pool": pool,
+                "channel": channel,
+                "country": country,
+                "currency": currency,
+                "layer0": layer0_meta,
+            }
+            self._log_event("SPEND_DENIED", event_payload)
+            return SpendGatewayDecision(False, "IDEMPOTENCY_IN_FLIGHT", amount, pool, str(product_id), day, {"layer0": layer0_meta})
+
+        event_payload = {
+            "reason": "IDEMPOTENCY_UNEXPECTED_STATUS",
+            "idempotency_status": str(status),
             "request_id": str(req_id),
             "product_id": str(product_id),
             "amount": str(amount),
             "day": day,
             "pool": pool,
+            "channel": channel,
+            "country": country,
+            "currency": currency,
+            "layer0": layer0_meta,
         }
-        self._log_event("SPEND_APPROVED" if allowed else "SPEND_DENIED", payload)
+        self._log_event("SPEND_DENIED", event_payload)
+        return SpendGatewayDecision(
+            False,
+            "IDEMPOTENCY_UNEXPECTED_STATUS",
+            amount,
+            pool,
+            str(product_id),
+            day,
+            {
+                "layer0": layer0_meta,
+                "idempotency_status": str(status),
+            },
+        )
 
-        if allowed and pool == "learning":
-            self._learn_total_by_product[product_id] = self._learn_total_by_product.get(product_id, Decimal("0")) + amount
-            if day == 1:
-                self._learn_day1_by_product[product_id] = self._learn_day1_by_product.get(product_id, Decimal("0")) + amount
-
-        decision = SpendGatewayDecision(allowed, str(reason), amount, pool, product_id, day, {})
-
-        # --- Store idempotency result (P0-003) ---
-        if self._idempotency is not None:
-            self._idempotency.store_result(idem_key, decision)
-
-        return decision
-
-    # compat helper
     def request_spend(self, *, amount: Decimal, bucket: str):
         class _Req:
             def __init__(self, amount, bucket):
@@ -287,5 +463,11 @@ class SpendGateway:
                 self.budget_type = bucket
                 self.product_id = ""
                 self.day = 1
-        return self.request(_Req(amount, bucket))
+                self.channel = "meta"
+                self.country = "MX"
+                self.currency = "MXN"
+                self.data_freshness_minutes = 0
+                self.tracking_freshness_minutes = 0
+                self.heartbeat_age_minutes = 0
 
+        return self.request(_Req(amount, bucket), idempotency_key=None)

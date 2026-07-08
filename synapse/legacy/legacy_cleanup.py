@@ -18,6 +18,11 @@ CLI:
 
 Principio:
 - ACERO, NO HUMO: reporte accionable, no poesía.
+
+High-integrity:
+- El evento LEGACY_CLEANUP_REPORTED se escribe en el ledger canónico.
+- NO depende de synapse.infra.ledger.
+- El write path ya no falla silenciosamente.
 """
 
 from __future__ import annotations
@@ -29,8 +34,12 @@ import hashlib
 import importlib
 import json
 from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
+from uuid import uuid4
+
+from synapse.ledger_ndjson import append_event, build_event
 
 
 # ---------------------------
@@ -141,16 +150,17 @@ def _json_load(path: Path) -> Dict[str, Any]:
 
 
 def _input_hash_for(repo_root: Path) -> str:
-    # Hash = config + hashes de archivos target (si existen)
     parts: Dict[str, Any] = {"targets": [asdict(t) for t in LEGACY_TARGETS], "files": []}
     for t in LEGACY_TARGETS:
         p = repo_root / Path(t.rel_path)
-        parts["files"].append({
-            "rel_path": t.rel_path,
-            "exists": p.exists(),
-            "size": p.stat().st_size if p.exists() else 0,
-            "hash": _file_sha256(p) if p.exists() else "",
-        })
+        parts["files"].append(
+            {
+                "rel_path": t.rel_path,
+                "exists": p.exists(),
+                "size": p.stat().st_size if p.exists() else 0,
+                "hash": _file_sha256(p) if p.exists() else "",
+            }
+        )
     blob = json.dumps(parts, ensure_ascii=False, sort_keys=True).encode("utf-8", errors="replace")
     return "sha256:" + hashlib.sha256(blob).hexdigest()
 
@@ -164,8 +174,6 @@ def _try_import(module: str) -> Tuple[bool, str]:
 
 
 def _detect_duplicates(repo_root: Path) -> List[str]:
-    # Heurística simple: archivos que parecen versiones del mismo concepto
-    # Ej: quality_gate.py vs quality_gate_v2.py
     dups: List[str] = []
     p1 = repo_root / "synapse" / "quality_gate.py"
     p2 = repo_root / "synapse" / "quality_gate_v2.py"
@@ -175,25 +183,51 @@ def _detect_duplicates(repo_root: Path) -> List[str]:
 
 
 # ---------------------------
-# Ledger (best effort)
+# Ledger (canonical)
 # ---------------------------
 
-def _get_ledger(repo_root: Path):
+def _get_ledger_path(repo_root: Path) -> Path:
+    return repo_root / "runtime" / "ledger" / "events.ndjson"
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _build_event_record(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        from synapse.infra.ledger import Ledger  # type: ignore
-        return Ledger(str(repo_root / "data" / "ledger"))
-    except Exception:
-        return None
+        record = build_event(
+            event_type=event_type,
+            entity_type="system",
+            entity_id="legacy_cleanup",
+            payload=payload,
+            wave_id="",
+            event_id=None,
+            event_time=None,
+        )
+        if not isinstance(record, dict):
+            raise TypeError("build_event_must_return_dict")
+        return record
+    except TypeError:
+        return {
+            "event_id": f"legacy_cleanup-{uuid4().hex[:12]}",
+            "event_type": event_type,
+            "entity_type": "system",
+            "entity_id": "legacy_cleanup",
+            "payload": payload,
+            "wave_id": "",
+            "event_time": _utc_now_iso(),
+        }
 
 
-def _ledger_write(ledger_obj: Any, event_type: str, payload: Dict[str, Any]) -> None:
-    if ledger_obj is None:
-        return
-    if hasattr(ledger_obj, "write"):
-        try:
-            ledger_obj.write(event_type=event_type, entity_type="system", entity_id="legacy_cleanup", payload=payload)
-        except (AttributeError):
-            return
+def _ledger_write(ledger_path: Path, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(ledger_path, Path):
+        raise TypeError("legacy_cleanup_ledger_path_required")
+    record = _build_event_record(event_type=event_type, payload=payload)
+    persisted = append_event(record, path=ledger_path)
+    if not isinstance(persisted, dict):
+        raise TypeError("append_event_must_return_dict")
+    return persisted
 
 
 # ---------------------------
@@ -218,7 +252,7 @@ class LegacyCleanupRunner:
             prev = _json_load(state_path)
             if prev.get("input_hash") == inp_hash and report_json.exists():
                 cached = _json_load(report_json)
-                return LegacyCleanupReport(**cached)  # type: ignore
+                return LegacyCleanupReport(**cached)  # type: ignore[arg-type]
 
         module_reports: List[LegacyModuleReport] = []
         for t in LEGACY_TARGETS:
@@ -254,7 +288,6 @@ class LegacyCleanupRunner:
         duplicates = _detect_duplicates(self.repo_root)
 
         recommendations: List[str] = []
-        # Reglas accionables (sin borrar nada)
         if any((m.exists and not m.import_ok) for m in module_reports):
             recommendations.append("⚠️ Hay legacy que existe pero NO importa — riesgo de runtime. Arreglar imports o aislar.")
         if any((m.action == "DELETE_AFTER_MIGRATION" and m.exists) for m in module_reports):
@@ -280,14 +313,18 @@ class LegacyCleanupRunner:
             _md_write(report_md, md)
             _json_write(state_path, {"input_hash": inp_hash, "dry_run": True})
 
-        ledger = _get_ledger(self.repo_root)
-        _ledger_write(ledger, "LEGACY_CLEANUP_REPORTED", {
-            "input_hash": inp_hash,
-            "modules": len(report.modules),
-            "dry_run": dry_run,
-            "report_json": str(report_json),
-            "report_md": str(report_md),
-        })
+        ledger_path = _get_ledger_path(self.repo_root)
+        _ledger_write(
+            ledger_path,
+            "LEGACY_CLEANUP_REPORTED",
+            {
+                "input_hash": inp_hash,
+                "modules": len(report.modules),
+                "dry_run": dry_run,
+                "report_json": str(report_json),
+                "report_md": str(report_md),
+            },
+        )
 
         return report
 

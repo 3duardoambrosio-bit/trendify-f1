@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from synapse.ledger_ndjson import read_events
 from synapse.pulse.market_pulse import MarketPulseRunner, validate_signal
 
 
@@ -178,3 +179,45 @@ def test_dry_run_does_not_write_json_memo(tmp_path: Path):
     assert memo.status in ("SUFFICIENT_EVIDENCE", "INSUFFICIENT_EVIDENCE")
     assert (out_dir / "market_pulse_latest.md").exists()
     assert not (out_dir / "market_pulse_latest.json").exists()
+
+
+def test_market_pulse_writes_canonical_ledger_event(tmp_path: Path):
+    repo = tmp_path
+    inp = repo / "data" / "evidence" / "pulse" / "signals.json"
+    out_dir = repo / "data" / "pulse"
+
+    _write_json(inp, {
+        "schema_version": "1.0.0",
+        "signals": [
+            {
+                "signal_id": "s1",
+                "source_type": "news",
+                "evidence_url": "https://example.com/n1",
+                "headline": "Nota 1",
+                "description": "Evidencia directa.",
+                "confidence": 0.6,
+            },
+            {
+                "signal_id": "s2",
+                "source_type": "news",
+                "evidence_url": "https://example.com/n2",
+                "headline": "Nota 2",
+                "description": "Evidencia directa.",
+                "confidence": 0.6,
+            },
+        ]
+    })
+
+    r = MarketPulseRunner(repo)
+    memo = r.run(input_path=inp, out_dir=out_dir, force=True, dry_run=False)
+
+    ledger_path = repo / "runtime" / "ledger" / "events.ndjson"
+    assert ledger_path.exists()
+
+    rows = read_events(ledger_path)
+    assert any(
+        row.get("entity_id") == "market_pulse"
+        and row.get("event_type") == "MARKET_PULSE_RECORDED"
+        and row.get("payload", {}).get("input_hash") == memo.input_hash
+        for row in rows
+    )

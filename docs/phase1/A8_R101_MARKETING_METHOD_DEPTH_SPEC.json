@@ -1,0 +1,4633 @@
+{
+  "adversarial_scenarios": [
+    {
+      "id": "ADV-001",
+      "must_trigger": [
+        "fallback",
+        "operator_review_required"
+      ],
+      "name": "poor_product_data"
+    },
+    {
+      "id": "ADV-002",
+      "must_trigger": [
+        "proof_gap",
+        "lower_claim_or_reject"
+      ],
+      "name": "insufficient_proof"
+    },
+    {
+      "id": "ADV-003",
+      "must_trigger": [
+        "claim_rejected",
+        "safe_rewrite"
+      ],
+      "name": "risky_claim"
+    },
+    {
+      "id": "ADV-004",
+      "must_trigger": [
+        "reject_discount_offer",
+        "operator_review_required"
+      ],
+      "name": "tight_margin_discount_offer"
+    },
+    {
+      "id": "ADV-005",
+      "must_trigger": [
+        "tie_break_applied"
+      ],
+      "name": "competing_rules"
+    },
+    {
+      "id": "ADV-006",
+      "must_trigger": [
+        "channel_constraint",
+        "operator_review_required"
+      ],
+      "name": "meta_weak_proof"
+    },
+    {
+      "id": "ADV-007",
+      "must_trigger": [
+        "generic_rejected"
+      ],
+      "name": "pretty_but_generic_hook"
+    },
+    {
+      "id": "ADV-008",
+      "must_trigger": [
+        "cta_softened_or_rejected"
+      ],
+      "name": "cold_buyer_aggressive_cta"
+    }
+  ],
+  "base_schema_version": "synapse.marketing_methodology.v1",
+  "base_spec": "docs/phase1/A8_R100_MARKETING_METHOD_SPEC.json",
+  "depth_gates": {
+    "adversarial_scenarios_min": 8,
+    "framework_count": 15,
+    "global_anti_generic_gates_min": 8,
+    "min_rule_counts": {
+      "AngleSelection": 8,
+      "AntiGenericRejection": 4,
+      "AudiencePersona": 5,
+      "BuyerStateAwareness": 5,
+      "CTA": 5,
+      "ChannelConstraint": 5,
+      "ClaimRisk": 6,
+      "DecisionTrace": 4,
+      "HookConstruction": 8,
+      "ObjectionHandling": 6,
+      "OfferConstruction": 6,
+      "OperatorReview": 4,
+      "ProductFactExtraction": 5,
+      "ProofRequirement": 6,
+      "ValuePropositionPositioning": 5
+    },
+    "no_code_conversion": true,
+    "no_engine": true,
+    "no_loader": true,
+    "per_rule_source_anchor_required": true,
+    "per_rule_trace_fields_required": true,
+    "route_examples_required": [
+      "acceptance",
+      "rejection",
+      "fallback"
+    ]
+  },
+  "does_not_certify_market_performance": true,
+  "does_not_certify_marketing_expert_engine": true,
+  "frameworks": [
+    {
+      "accepted_inputs": [
+        "product_category",
+        "product_facts",
+        "price_band",
+        "margin_profile",
+        "known_use_cases",
+        "channel"
+      ],
+      "conversion_target": "AudienceRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "AUD-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AUD-D001",
+          "name": "use-case persona",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "AUD-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "JTBD",
+          "source_logic": "job/context/motivation logic",
+          "then": "select persona by job/use-case instead of demographic stereotype",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "product facts reveal a concrete use case"
+        },
+        {
+          "anti_generic_gate": "AUD-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AUD-D002",
+          "name": "intent persona",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "AUD-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "prefer high-intent segment with low education burden",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "CAC or margin requires efficient acquisition"
+        },
+        {
+          "anti_generic_gate": "AUD-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AUD-D003",
+          "name": "friction persona",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "AUD-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "STP",
+          "source_logic": "segmentation-targeting-positioning logic",
+          "then": "select persona around friction to remove",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer friction is visible in product context"
+        },
+        {
+          "anti_generic_gate": "AUD-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AUD-D004",
+          "name": "occasion persona",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "AUD-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "JTBD",
+          "source_logic": "job/context/motivation logic",
+          "then": "target the occasion and trigger context",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "product is used in a recurring occasion"
+        },
+        {
+          "anti_generic_gate": "AUD-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AUD-D005",
+          "name": "exclusion persona",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "AUD-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject broad audience and route operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "segment lacks proof or purchase context"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 5,
+      "name": "AudiencePersona",
+      "purpose": "Choose a specific buyer segment/persona from product facts, JTBD, and commercial constraints.",
+      "required_outputs": [
+        "audience_segment",
+        "persona_hypothesis",
+        "buyer_job",
+        "specificity_score"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "select persona by job/use-case instead of demographic stereotype",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "AUD-D001",
+          "expected_trace": {
+            "framework": "AudiencePersona",
+            "rule_id": "AUD-D001",
+            "source_anchor": "JTBD"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "AudiencePersona",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "AudiencePersona"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "product_category",
+        "problem_visibility",
+        "market_familiarity",
+        "proof_available"
+      ],
+      "conversion_target": "BuyerStateRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "BSA-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "BSA-D001",
+          "name": "problem-aware",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "BSA-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "AWARENESS",
+          "source_logic": "buyer-state/awareness logic",
+          "then": "use direct problem-solution framing",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer knows the problem"
+        },
+        {
+          "anti_generic_gate": "BSA-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "BSA-D002",
+          "name": "solution-aware",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "BSA-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "AWARENESS",
+          "source_logic": "buyer-state/awareness logic",
+          "then": "show differentiating mechanism and proof",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer knows solutions but not this SKU"
+        },
+        {
+          "anti_generic_gate": "BSA-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "BSA-D003",
+          "name": "unaware/latent",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "BSA-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "AWARENESS",
+          "source_logic": "buyer-state/awareness logic",
+          "then": "use situation-first hook and soft CTA",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "problem is not explicit"
+        },
+        {
+          "anti_generic_gate": "BSA-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "BSA-D004",
+          "name": "skeptical",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "BSA-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "increase proof depth and lower claim intensity",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim risk or category distrust is high"
+        },
+        {
+          "anti_generic_gate": "BSA-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "BSA-D005",
+          "name": "urgent",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "BSA-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "DIRECT_RESPONSE",
+          "source_logic": "offer/response/friction logic",
+          "then": "use friction-removal offer and direct CTA if proof allows",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "use case is time/friction sensitive"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 5,
+      "name": "BuyerStateAwareness",
+      "purpose": "Classify buyer awareness/friction state so messaging matches how much education and proof is needed.",
+      "required_outputs": [
+        "buyer_state",
+        "education_depth",
+        "proof_depth",
+        "message_directness"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "use direct problem-solution framing",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "BSA-D001",
+          "expected_trace": {
+            "framework": "BuyerStateAwareness",
+            "rule_id": "BSA-D001",
+            "source_anchor": "AWARENESS"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "BuyerStateAwareness",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "BuyerStateAwareness"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "title",
+        "description",
+        "category",
+        "supplier_cost",
+        "landed_cost",
+        "sale_price",
+        "attributes",
+        "available_media"
+      ],
+      "conversion_target": "ProductFactRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "PFX-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PFX-D001",
+          "name": "source fact",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "PFX-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "allow as product_facts_used",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "attribute appears in source data"
+        },
+        {
+          "anti_generic_gate": "PFX-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PFX-D002",
+          "name": "inferred benefit",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "PFX-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "mark as hypothesis and require proof",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "benefit is inferred from attributes"
+        },
+        {
+          "anti_generic_gate": "PFX-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PFX-D003",
+          "name": "visual proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "PFX-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "PERSUASION",
+          "source_logic": "influence and proof logic",
+          "then": "allow stronger visual hook with trace",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "media demonstrates an attribute"
+        },
+        {
+          "anti_generic_gate": "PFX-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PFX-D004",
+          "name": "missing proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "PFX-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "reject or operator-review the claim",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim lacks evidence"
+        },
+        {
+          "anti_generic_gate": "PFX-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PFX-D005",
+          "name": "economic fact",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "PFX-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "include economics in offer constraints",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "margin/CAC affects offer"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 5,
+      "name": "ProductFactExtraction",
+      "purpose": "Extract marketing-usable facts from product/evaluation data without inventing claims.",
+      "required_outputs": [
+        "facts_allowed",
+        "facts_missing",
+        "claim_limits",
+        "proof_gaps"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "allow as product_facts_used",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "PFX-D001",
+          "expected_trace": {
+            "framework": "ProductFactExtraction",
+            "rule_id": "PFX-D001",
+            "source_anchor": "CLAIMS"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "ProductFactExtraction",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "ProductFactExtraction"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "buyer_job",
+        "product_facts",
+        "price_band",
+        "competitive_alternatives"
+      ],
+      "conversion_target": "PositioningRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "POS-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "POS-D001",
+          "name": "job positioning",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "POS-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "JTBD",
+          "source_logic": "job/context/motivation logic",
+          "then": "position around job completion",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "job-to-be-done is concrete"
+        },
+        {
+          "anti_generic_gate": "POS-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "POS-D002",
+          "name": "alternative tradeoff",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "POS-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "STP",
+          "source_logic": "segmentation-targeting-positioning logic",
+          "then": "position against tradeoff using product fact",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "known alternative is bulky/slow/risky"
+        },
+        {
+          "anti_generic_gate": "POS-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "POS-D003",
+          "name": "premium defense",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "POS-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "DIRECT_RESPONSE",
+          "source_logic": "offer/response/friction logic",
+          "then": "position around proof/value not cheapness",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "price is not lowest"
+        },
+        {
+          "anti_generic_gate": "POS-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "POS-D004",
+          "name": "risk constrained",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "POS-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "position with safe mechanism and proof requirement",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim risk is medium/high"
+        },
+        {
+          "anti_generic_gate": "POS-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "POS-D005",
+          "name": "category rejection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "POS-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject as generic",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "positioning is category-only"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 5,
+      "name": "ValuePropositionPositioning",
+      "purpose": "Define why this product should be chosen by the selected segment versus alternatives.",
+      "required_outputs": [
+        "positioning_statement",
+        "primary_value",
+        "tradeoff",
+        "reason_to_choose"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "position around job completion",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "POS-D001",
+          "expected_trace": {
+            "framework": "ValuePropositionPositioning",
+            "rule_id": "POS-D001",
+            "source_anchor": "JTBD"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "ValuePropositionPositioning",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "ValuePropositionPositioning"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "buyer_state",
+        "product_facts",
+        "proof_available",
+        "claim_risk",
+        "channel",
+        "margin_profile"
+      ],
+      "conversion_target": "AngleRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "ANG-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D001",
+          "name": "demo angle",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "ANG-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "PERSUASION",
+          "source_logic": "influence and proof logic",
+          "then": "select demonstration/use-case angle",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "specific use-case fact and demo proof exist"
+        },
+        {
+          "anti_generic_gate": "ANG-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D002",
+          "name": "low-claim situational",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "ANG-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "select low-claim situational angle",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "proof is weak or claim risk high"
+        },
+        {
+          "anti_generic_gate": "ANG-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D003",
+          "name": "objection-led",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "ANG-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "DIRECT_RESPONSE",
+          "source_logic": "offer/response/friction logic",
+          "then": "select angle that resolves objection",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "dominant objection is concrete"
+        },
+        {
+          "anti_generic_gate": "ANG-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D004",
+          "name": "before-friction-not-after-claim",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "ANG-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "frame current friction not guaranteed after-state",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "transformation proof is absent"
+        },
+        {
+          "anti_generic_gate": "ANG-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D005",
+          "name": "economic-fit",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "ANG-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "select high-intent/direct angle",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "CAC/margin tight"
+        },
+        {
+          "anti_generic_gate": "ANG-D006 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D006",
+          "name": "social-proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 94,
+          "rejection_signal": "ANG-D006_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "PERSUASION",
+          "source_logic": "influence and proof logic",
+          "then": "select proof-led angle",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "safe proof/social evidence exists"
+        },
+        {
+          "anti_generic_gate": "ANG-D007 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D007",
+          "name": "channel-fit",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 93,
+          "rejection_signal": "ANG-D007_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "select visual-first angle",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "channel format has first-frame constraint"
+        },
+        {
+          "anti_generic_gate": "ANG-D008 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "ANG-D008",
+          "name": "reject-category-only",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 92,
+          "rejection_signal": "ANG-D008_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject category-only angle",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "specific product fact exists"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 8,
+      "name": "AngleSelection",
+      "purpose": "Select the advertising angle from product facts, buyer state, proof, claim risk, channel, and economics.",
+      "required_outputs": [
+        "angle_type",
+        "mechanism",
+        "proof_required",
+        "angle_trace"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "select demonstration/use-case angle",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "ANG-D001",
+          "expected_trace": {
+            "framework": "AngleSelection",
+            "rule_id": "ANG-D001",
+            "source_anchor": "PERSUASION"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "AngleSelection",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "AngleSelection"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "objections",
+        "sale_price",
+        "margin_profile",
+        "proof_available",
+        "fulfillment_constraints"
+      ],
+      "conversion_target": "OfferRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "OFF-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OFF-D001",
+          "name": "friction offer",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "OFF-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "DIRECT_RESPONSE",
+          "source_logic": "offer/response/friction logic",
+          "then": "promise friction reduction via product fact",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "objection is convenience/friction"
+        },
+        {
+          "anti_generic_gate": "OFF-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OFF-D002",
+          "name": "margin-safe",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "OFF-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "avoid discount-dependent offer",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "margin is tight"
+        },
+        {
+          "anti_generic_gate": "OFF-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OFF-D003",
+          "name": "proof-limited",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "OFF-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "soften offer claim and require operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "proof is partial"
+        },
+        {
+          "anti_generic_gate": "OFF-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OFF-D004",
+          "name": "bundle/value",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "OFF-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "suggest value bundle only if margin allows",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "AOV target needs lift"
+        },
+        {
+          "anti_generic_gate": "OFF-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OFF-D005",
+          "name": "risk-reversal",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "OFF-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "PERSUASION",
+          "source_logic": "influence and proof logic",
+          "then": "add safe risk-reversal language requiring operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer distrust visible"
+        },
+        {
+          "anti_generic_gate": "OFF-D006 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OFF-D006",
+          "name": "reject-empty-urgency",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 94,
+          "rejection_signal": "OFF-D006_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "reject scarcity/limited-time offer",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "urgency lacks real basis"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 6,
+      "name": "OfferConstruction",
+      "purpose": "Construct a safe offer promise matched to segment objection, economics, proof, and operator constraints.",
+      "required_outputs": [
+        "offer_promise",
+        "offer_mechanism",
+        "risk_reversal",
+        "offer_limits"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "promise friction reduction via product fact",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "OFF-D001",
+          "expected_trace": {
+            "framework": "OfferConstruction",
+            "rule_id": "OFF-D001",
+            "source_anchor": "DIRECT_RESPONSE"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "OfferConstruction",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "OfferConstruction"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "angle_type",
+        "product_facts",
+        "buyer_state",
+        "objection",
+        "proof_required",
+        "channel"
+      ],
+      "conversion_target": "HookRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "HOK-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D001",
+          "name": "visual proof hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "HOK-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "make proof visible in first frame/line",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "demo proof exists"
+        },
+        {
+          "anti_generic_gate": "HOK-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D002",
+          "name": "objection hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "HOK-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "DIRECT_RESPONSE",
+          "source_logic": "offer/response/friction logic",
+          "then": "answer objection without overclaiming",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "objection is concrete"
+        },
+        {
+          "anti_generic_gate": "HOK-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D003",
+          "name": "situation hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "HOK-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "AWARENESS",
+          "source_logic": "buyer-state/awareness logic",
+          "then": "lead with recognizable situation",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer state is latent"
+        },
+        {
+          "anti_generic_gate": "HOK-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D004",
+          "name": "mechanism hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "HOK-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "JTBD",
+          "source_logic": "job/context/motivation logic",
+          "then": "name mechanism and show product fact",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "mechanism is concrete"
+        },
+        {
+          "anti_generic_gate": "HOK-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D005",
+          "name": "proof-gap hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "HOK-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "avoid strong claim and ask lower-risk curiosity",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "proof is incomplete"
+        },
+        {
+          "anti_generic_gate": "HOK-D006 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D006",
+          "name": "economic hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 94,
+          "rejection_signal": "HOK-D006_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "hook around avoided friction/cost/time",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "price requires value defense"
+        },
+        {
+          "anti_generic_gate": "HOK-D007 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D007",
+          "name": "channel-first hook",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 93,
+          "rejection_signal": "HOK-D007_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "force first-frame visual contrast",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "Meta short video format"
+        },
+        {
+          "anti_generic_gate": "HOK-D008 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "HOK-D008",
+          "name": "reject noun-swap",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 92,
+          "rejection_signal": "HOK-D008_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject as generic",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "hook works after swapping product noun"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 8,
+      "name": "HookConstruction",
+      "purpose": "Create hooks tied to a product fact, buyer state, objection, proof need, and channel constraint.",
+      "required_outputs": [
+        "hook_text",
+        "hook_type",
+        "visual_prompt",
+        "required_proof"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "make proof visible in first frame/line",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "HOK-D001",
+          "expected_trace": {
+            "framework": "HookConstruction",
+            "rule_id": "HOK-D001",
+            "source_anchor": "CHANNEL"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "HookConstruction",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "HookConstruction"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "audience_segment",
+        "buyer_state",
+        "price_band",
+        "product_facts",
+        "common_objections",
+        "proof_available"
+      ],
+      "conversion_target": "ObjectionRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "OBJ-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OBJ-D001",
+          "name": "quality objection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "OBJ-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "require demo/detail proof before claim",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "quality objection appears"
+        },
+        {
+          "anti_generic_gate": "OBJ-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OBJ-D002",
+          "name": "price objection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "OBJ-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "DIRECT_RESPONSE",
+          "source_logic": "offer/response/friction logic",
+          "then": "answer with job/value tradeoff",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "price objection appears"
+        },
+        {
+          "anti_generic_gate": "OBJ-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OBJ-D003",
+          "name": "fit objection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "OBJ-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "JTBD",
+          "source_logic": "job/context/motivation logic",
+          "then": "map use-case proof to segment",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer may doubt it fits their use case"
+        },
+        {
+          "anti_generic_gate": "OBJ-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OBJ-D004",
+          "name": "trust objection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "OBJ-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "PERSUASION",
+          "source_logic": "influence and proof logic",
+          "then": "increase proof/review/operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "seller/category trust is weak"
+        },
+        {
+          "anti_generic_gate": "OBJ-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OBJ-D005",
+          "name": "shipping objection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "OBJ-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "route to operator if fulfillment proof missing",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "delivery friction is relevant"
+        },
+        {
+          "anti_generic_gate": "OBJ-D006 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OBJ-D006",
+          "name": "reject generic objection",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 94,
+          "rejection_signal": "OBJ-D006_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject unless tied to product/segment",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "objection list is only price/trust"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 6,
+      "name": "ObjectionHandling",
+      "purpose": "Map buyer objections to proof, copy angle, and operator review requirements.",
+      "required_outputs": [
+        "objection_map",
+        "response_strategy",
+        "proof_needed",
+        "operator_review_flags"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "require demo/detail proof before claim",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "OBJ-D001",
+          "expected_trace": {
+            "framework": "ObjectionHandling",
+            "rule_id": "OBJ-D001",
+            "source_anchor": "CLAIMS"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "ObjectionHandling",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "ObjectionHandling"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "claim",
+        "product_facts",
+        "available_media",
+        "risk_level",
+        "channel"
+      ],
+      "conversion_target": "ProofRequirementRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "PRF-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PRF-D001",
+          "name": "attribute proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "PRF-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "require source data or visual evidence",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim is factual attribute"
+        },
+        {
+          "anti_generic_gate": "PRF-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PRF-D002",
+          "name": "performance proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "PRF-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "require stronger proof or reject",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim implies result/performance"
+        },
+        {
+          "anti_generic_gate": "PRF-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PRF-D003",
+          "name": "social proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "PRF-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "PERSUASION",
+          "source_logic": "influence and proof logic",
+          "then": "require source and scope",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "social proof is cited"
+        },
+        {
+          "anti_generic_gate": "PRF-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PRF-D004",
+          "name": "visual proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "PRF-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "require media asset",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "hook depends on visual mechanism"
+        },
+        {
+          "anti_generic_gate": "PRF-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PRF-D005",
+          "name": "economic proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "PRF-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "require price/margin trace",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "offer implies savings/value"
+        },
+        {
+          "anti_generic_gate": "PRF-D006 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "PRF-D006",
+          "name": "proof fallback",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 94,
+          "rejection_signal": "PRF-D006_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "route to lower-claim wording or operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "proof missing"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 6,
+      "name": "ProofRequirement",
+      "purpose": "Define what proof is required before a claim, hook, or offer can be used.",
+      "required_outputs": [
+        "proof_required",
+        "proof_available",
+        "proof_gap",
+        "claim_status"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "require source data or visual evidence",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "PRF-D001",
+          "expected_trace": {
+            "framework": "ProofRequirement",
+            "rule_id": "PRF-D001",
+            "source_anchor": "CLAIMS"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "ProofRequirement",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "ProofRequirement"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "claim_text",
+        "category",
+        "proof_available",
+        "regulated_risk",
+        "channel"
+      ],
+      "conversion_target": "ClaimRiskRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "CLR-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CLR-D001",
+          "name": "absolute claim",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "CLR-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "reject or require extraordinary proof",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim is absolute/guaranteed"
+        },
+        {
+          "anti_generic_gate": "CLR-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CLR-D002",
+          "name": "attribute claim",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "CLR-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "allow with trace",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim is attribute-level and proof exists"
+        },
+        {
+          "anti_generic_gate": "CLR-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CLR-D003",
+          "name": "medical/safety",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "CLR-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "reject or operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim touches medical/safety outcome"
+        },
+        {
+          "anti_generic_gate": "CLR-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CLR-D004",
+          "name": "comparative claim",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "CLR-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "require explicit comparison proof",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim compares against alternatives"
+        },
+        {
+          "anti_generic_gate": "CLR-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CLR-D005",
+          "name": "soft rewrite",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "CLR-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "emit safe_rewrite",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim risk high but value can be stated safely"
+        },
+        {
+          "anti_generic_gate": "CLR-D006 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CLR-D006",
+          "name": "channel risk",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 94,
+          "rejection_signal": "CLR-D006_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "reject for channel package",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "channel constraints disallow claim style"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 6,
+      "name": "ClaimRisk",
+      "purpose": "Classify and constrain claims before output reaches operator or channel package.",
+      "required_outputs": [
+        "risk_level",
+        "claims_allowed",
+        "claims_rejected",
+        "safe_rewrite"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "reject or require extraordinary proof",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "CLR-D001",
+          "expected_trace": {
+            "framework": "ClaimRisk",
+            "rule_id": "CLR-D001",
+            "source_anchor": "CLAIMS"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "ClaimRisk",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "ClaimRisk"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "channel",
+        "creative_format",
+        "claim_risk",
+        "proof_available",
+        "buyer_state"
+      ],
+      "conversion_target": "ChannelConstraintRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "CHN-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CHN-D001",
+          "name": "Meta visual",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "CHN-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "prefer first-frame visual demo",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "channel is Meta and proof is visual"
+        },
+        {
+          "anti_generic_gate": "CHN-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CHN-D002",
+          "name": "weak proof",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "CHN-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "route risky claim to operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "proof weak on visual channel"
+        },
+        {
+          "anti_generic_gate": "CHN-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CHN-D003",
+          "name": "short copy",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "CHN-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "limit hook to one product fact plus one friction",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "format is short creative"
+        },
+        {
+          "anti_generic_gate": "CHN-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CHN-D004",
+          "name": "landing consistency",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "CHN-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "reject or require rewrite",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "ad claim not supported by destination"
+        },
+        {
+          "anti_generic_gate": "CHN-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CHN-D005",
+          "name": "no live path",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "CHN-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "block until guard audit",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "live/spend path requested"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 5,
+      "name": "ChannelConstraint",
+      "purpose": "Apply channel-specific constraints before hooks/offers are considered usable.",
+      "required_outputs": [
+        "format_constraints",
+        "copy_constraints",
+        "proof_constraints",
+        "review_required"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "prefer first-frame visual demo",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "CHN-D001",
+          "expected_trace": {
+            "framework": "ChannelConstraint",
+            "rule_id": "CHN-D001",
+            "source_anchor": "CHANNEL"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "ChannelConstraint",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "ChannelConstraint"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "buyer_state",
+        "offer",
+        "channel",
+        "friction_level",
+        "proof_status"
+      ],
+      "conversion_target": "CTARule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "CTA-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CTA-D001",
+          "name": "direct CTA",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "CTA-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "AWARENESS",
+          "source_logic": "buyer-state/awareness logic",
+          "then": "use direct product CTA",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "problem-aware and proof adequate"
+        },
+        {
+          "anti_generic_gate": "CTA-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CTA-D002",
+          "name": "soft CTA",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "CTA-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "use softer evaluation CTA",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "proof incomplete or buyer cold"
+        },
+        {
+          "anti_generic_gate": "CTA-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CTA-D003",
+          "name": "friction CTA",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "CTA-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "JTBD",
+          "source_logic": "job/context/motivation logic",
+          "then": "CTA references friction solved",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "buyer friction concrete"
+        },
+        {
+          "anti_generic_gate": "CTA-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CTA-D004",
+          "name": "channel CTA",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "CTA-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "match CTA to channel format",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "channel requires low-friction click"
+        },
+        {
+          "anti_generic_gate": "CTA-D005 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "CTA-D005",
+          "name": "reject urgency CTA",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 95,
+          "rejection_signal": "CTA-D005_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CLAIMS",
+          "source_logic": "claim substantiation and risk control",
+          "then": "reject urgency-only CTA",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "urgency lacks basis"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 5,
+      "name": "CTA",
+      "purpose": "Select a CTA matched to buyer state, friction, channel, and operator constraints.",
+      "required_outputs": [
+        "cta_text",
+        "cta_type",
+        "friction_match",
+        "review_required"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "use direct product CTA",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "CTA-D001",
+          "expected_trace": {
+            "framework": "CTA",
+            "rule_id": "CTA-D001",
+            "source_anchor": "AWARENESS"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "CTA",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "CTA"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "candidate_output",
+        "product_facts_used",
+        "trace",
+        "framework_outputs"
+      ],
+      "conversion_target": "AntiGenericRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "AGR-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AGR-D001",
+          "name": "no facts",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "AGR-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject as generic",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "output lacks product_facts_used"
+        },
+        {
+          "anti_generic_gate": "AGR-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AGR-D002",
+          "name": "no trace",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "AGR-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject as unauditable",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "trace lacks rule ids"
+        },
+        {
+          "anti_generic_gate": "AGR-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AGR-D003",
+          "name": "noun swap",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "AGR-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "STP",
+          "source_logic": "segmentation-targeting-positioning logic",
+          "then": "reject as interchangeable",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "output works after swapping product noun"
+        },
+        {
+          "anti_generic_gate": "AGR-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "AGR-D004",
+          "name": "category-only",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "AGR-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "reject if product fact exists",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "angle/offer/hook only uses category"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 4,
+      "name": "AntiGenericRejection",
+      "purpose": "Provide universal rejection logic against vague, interchangeable marketing output.",
+      "required_outputs": [
+        "generic_score",
+        "rejection_reasons",
+        "rewrite_required"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "reject as generic",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "AntiGenericRejection",
+            "rule_id": "AGR-D001",
+            "source_anchor": "SYNAPSE"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "AntiGenericRejection",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "AntiGenericRejection"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "framework_outputs",
+        "rule_applications",
+        "source_anchors",
+        "operator_review_flags"
+      ],
+      "conversion_target": "MarketingDecisionTrace",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "TRC-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "TRC-D001",
+          "name": "decision trace",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "TRC-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "trace framework/rule/facts/source",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "decision emitted"
+        },
+        {
+          "anti_generic_gate": "TRC-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "TRC-D002",
+          "name": "fallback trace",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "TRC-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "record fallback reason",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "fallback used"
+        },
+        {
+          "anti_generic_gate": "TRC-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "TRC-D003",
+          "name": "rejection trace",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "TRC-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "record rejection reason and blocked field",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "rule rejects output"
+        },
+        {
+          "anti_generic_gate": "TRC-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "TRC-D004",
+          "name": "source trace",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "TRC-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "record source_anchor per rule",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "source anchor used"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 4,
+      "name": "DecisionTrace",
+      "purpose": "Make every marketing decision auditable by recording rule ids, facts, sources, rejections, and fallback.",
+      "required_outputs": [
+        "decision_trace",
+        "trace_completeness",
+        "audit_warnings"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "trace framework/rule/facts/source",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "TRC-D001",
+          "expected_trace": {
+            "framework": "DecisionTrace",
+            "rule_id": "TRC-D001",
+            "source_anchor": "SYNAPSE"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "DecisionTrace",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "DecisionTrace"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    },
+    {
+      "accepted_inputs": [
+        "claims_rejected",
+        "proof_gaps",
+        "channel_constraints",
+        "spend_status",
+        "live_flags"
+      ],
+      "conversion_target": "OperatorReviewRule",
+      "decision_rules": [
+        {
+          "anti_generic_gate": "OPR-D001 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OPR-D001",
+          "name": "claim gap",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 99,
+          "rejection_signal": "OPR-D001_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "require operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "claim risk or proof gap exists"
+        },
+        {
+          "anti_generic_gate": "OPR-D002 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OPR-D002",
+          "name": "live block",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 98,
+          "rejection_signal": "OPR-D002_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "block until guard audit",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "live flag/spend requested"
+        },
+        {
+          "anti_generic_gate": "OPR-D003 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OPR-D003",
+          "name": "margin conflict",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 97,
+          "rejection_signal": "OPR-D003_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "SYNAPSE",
+          "source_logic": "internal economics/safety/operator-en-control logic",
+          "then": "require operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "offer may break margin guard"
+        },
+        {
+          "anti_generic_gate": "OPR-D004 must use a product fact, rule id, source anchor, and trace; otherwise reject as generic.",
+          "deterministic": true,
+          "id": "OPR-D004",
+          "name": "asset gap",
+          "outputs": [
+            "decision",
+            "trace",
+            "rejections",
+            "operator_review_required"
+          ],
+          "priority": 96,
+          "rejection_signal": "OPR-D004_REJECTED",
+          "required_inputs": [
+            "product_facts",
+            "buyer_state",
+            "proof_available",
+            "claim_risk",
+            "channel",
+            "margin_profile"
+          ],
+          "source_anchor": "CHANNEL",
+          "source_logic": "channel-specific creative constraints",
+          "then": "require operator review",
+          "trace_fields": [
+            "framework",
+            "rule_id",
+            "source_anchor",
+            "product_facts_used",
+            "decision",
+            "rejection_signal"
+          ],
+          "when": "creative requires missing proof/asset"
+        }
+      ],
+      "global_determinism": {
+        "fallback_policy": "If no safe specific rule matches, emit fallback/operator_review_required; never emit generic output.",
+        "overlap_policy": "If multiple rules match, choose by tie_break_order and emit tie_break_applied in trace.",
+        "tie_break_order": [
+          "hard rejection/safety rule",
+          "highest priority",
+          "highest source specificity",
+          "highest product-fact specificity",
+          "highest proof availability",
+          "lowest claim risk",
+          "operator review fallback"
+        ]
+      },
+      "inherits_from_r100": true,
+      "min_rule_count": 4,
+      "name": "OperatorReview",
+      "purpose": "Define what the operator must review before any external use or future live path.",
+      "required_outputs": [
+        "operator_review_notes",
+        "approval_required",
+        "blocked_actions"
+      ],
+      "route_examples": [
+        {
+          "expected_output": {
+            "decision": "require operator review",
+            "operator_review_required": false,
+            "status": "accepted"
+          },
+          "expected_rule_id": "OPR-D001",
+          "expected_trace": {
+            "framework": "OperatorReview",
+            "rule_id": "OPR-D001",
+            "source_anchor": "SYNAPSE"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "low",
+            "product_facts": [
+              "foldable",
+              "leak resistant"
+            ],
+            "proof_available": [
+              "demo photo"
+            ]
+          },
+          "type": "acceptance"
+        },
+        {
+          "expected_output": {
+            "operator_review_required": true,
+            "reason": "generic_or_unauditable",
+            "status": "rejected"
+          },
+          "expected_rule_id": "AGR-D001",
+          "expected_trace": {
+            "framework": "OperatorReview",
+            "rejection_signal": "GENERIC_REJECTED"
+          },
+          "input": {
+            "candidate_output": "Perfect for everyone",
+            "product_facts": [],
+            "trace": {}
+          },
+          "type": "rejection"
+        },
+        {
+          "expected_output": {
+            "decision": "operator_review_required",
+            "operator_review_required": true,
+            "status": "fallback"
+          },
+          "expected_trace": {
+            "fallback_reason": "insufficient_specificity_or_proof",
+            "fallback_used": true,
+            "framework": "OperatorReview"
+          },
+          "input": {
+            "channel": "Meta",
+            "claim_risk": "unclear",
+            "product_facts": [
+              "unknown"
+            ],
+            "proof_available": []
+          },
+          "type": "fallback"
+        }
+      ],
+      "trace_requirements": [
+        "framework",
+        "rule_id",
+        "source_anchor",
+        "source_logic",
+        "product_facts_used",
+        "decision",
+        "fallback_used",
+        "operator_review_required"
+      ]
+    }
+  ],
+  "global_anti_generic_gates": [
+    {
+      "id": "GLOBAL-AG-001",
+      "reason": "no product-specific grounding",
+      "reject_if": "product_facts_used is empty"
+    },
+    {
+      "id": "GLOBAL-AG-002",
+      "reason": "unauditable decision",
+      "reject_if": "rule_ids_applied is empty"
+    },
+    {
+      "id": "GLOBAL-AG-003",
+      "reason": "no source/principle grounding",
+      "reject_if": "source_anchor is missing"
+    },
+    {
+      "id": "GLOBAL-AG-004",
+      "reason": "category-only angle",
+      "reject_if": "angle only uses category while product facts exist"
+    },
+    {
+      "id": "GLOBAL-AG-005",
+      "reason": "interchangeable hook",
+      "reject_if": "hook works after swapping product noun"
+    },
+    {
+      "id": "GLOBAL-AG-006",
+      "reason": "generic offer",
+      "reject_if": "offer does not answer a segment objection"
+    },
+    {
+      "id": "GLOBAL-AG-007",
+      "reason": "unsupported claim",
+      "reject_if": "claim lacks proof requirement/status"
+    },
+    {
+      "id": "GLOBAL-AG-008",
+      "reason": "generic CTA",
+      "reject_if": "CTA ignores buyer_state/channel/friction"
+    }
+  ],
+  "island": "A8-R101",
+  "next_sequence": [
+    "A8-R102 executable rule contract / dataclasses / schemas",
+    "A8-R103 loader + validator + adversarial fixtures",
+    "A8-R104 marketing decision engine replacing _category_angle",
+    "A8-R105 external marketing expert audit",
+    "MetaGuard before any live/spend path"
+  ],
+  "safety": {
+    "fulfillment": false,
+    "live_dropi": false,
+    "live_meta": false,
+    "live_shopify": false,
+    "live_write": false,
+    "operator_en_control": true,
+    "orders": false,
+    "real_spend": false
+  },
+  "schema_version": "synapse.marketing_methodology.depth.v1",
+  "source_anchors": {
+    "AWARENESS": "buyer-state/awareness logic",
+    "CHANNEL": "channel-specific creative constraints",
+    "CLAIMS": "claim substantiation and risk control",
+    "DIRECT_RESPONSE": "offer/response/friction logic",
+    "JTBD": "job/context/motivation logic",
+    "PERSUASION": "influence and proof logic",
+    "STP": "segmentation-targeting-positioning logic",
+    "SYNAPSE": "internal economics/safety/operator-en-control logic"
+  },
+  "title": "Marketing Methodology Depth Expansion Spec",
+  "type": "content_depth_spec_no_code_conversion_no_loader_no_engine"
+}

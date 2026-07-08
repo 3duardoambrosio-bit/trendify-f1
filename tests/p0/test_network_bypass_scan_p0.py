@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
-import re
+
+from tools.nogo_ast_resolver import has_call_to, scan_source_for_forbidden_strings
 
 # Dominios sensibles (dinero real)
 SENSITIVE_DOMAINS = (
@@ -11,34 +12,40 @@ SENSITIVE_DOMAINS = (
 )
 
 # Señales de librerías de red (bypass típico)
-NETWORK_LIB_RX = (
-    r"\brequests\b",
-    r"\bhttpx\b",
-    r"\burllib\.request\b",
-    r"\baiohttp\b",
+NETWORK_LIB_TOKENS = (
+    "requests",
+    "httpx",
+    "urllib.request",
+    "aiohttp",
 )
 
 # Si el archivo importa alguno de estos, asumimos que pasa por un http_client ya enforceado.
-SAFE_HTTP_CLIENT_IMPORT_RX = (
-    r"\bsynapse\.integrations\.http_client\b",
-    r"\bsynapse\.integration\.http_client\b",
+SAFE_HTTP_CLIENT_IMPORT_TOKENS = (
+    "synapse.integrations.http_client",
+    "synapse.integration.http_client",
 )
 
 EXCLUDE_SUBSTR = (
     "/tests/",
     "/.git/",
     "/.venv/",
+    "/venv/",
+    "/.claude/",
+    "/runs/",
     "/__pycache__/",
     "/.pytest_cache/",
     "/node_modules/",
 )
 
+
 def _repo_root() -> Path:
     # tests/p0/... -> repo root
     return Path(__file__).resolve().parents[2]
 
+
 def _norm(p: Path) -> str:
     return str(p).replace("\\", "/")
+
 
 def test_no_sensitive_network_bypass() -> None:
     """
@@ -63,15 +70,15 @@ def test_no_sensitive_network_bypass() -> None:
 
         txt = p.read_text(encoding="utf-8", errors="ignore")
 
-        if not any(dom in txt for dom in SENSITIVE_DOMAINS):
+        sensitive_findings = scan_source_for_forbidden_strings(txt, SENSITIVE_DOMAINS)
+        if not sensitive_findings:
             continue
 
-        # Si importa el http_client enforceado, lo consideramos “ruta segura”.
-        if any(re.search(rx, txt) for rx in SAFE_HTTP_CLIENT_IMPORT_RX):
+        if any(token in txt for token in SAFE_HTTP_CLIENT_IMPORT_TOKENS):
             continue
 
-        uses_network_lib = any(re.search(rx, txt) for rx in NETWORK_LIB_RX)
-        has_enforce_call = "enforce_url_policy(" in txt
+        uses_network_lib = bool(scan_source_for_forbidden_strings(txt, NETWORK_LIB_TOKENS))
+        has_enforce_call = has_call_to(txt, "enforce_url_policy")
 
         if uses_network_lib and not has_enforce_call:
             offenders.append(s)

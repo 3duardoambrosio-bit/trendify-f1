@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-__LL_MARKER__ = "LL_PATCH_2026-01-12_SYNTHETIC_GUARD_V4"
+__LL_MARKER__ = "LL_PATCH_2026-01-12_SYNTHETIC_GUARD_V5"
 
 STATE_REL = Path("data/learning/learning_state.json")
 REPORT_REL = Path("data/learning/learning_report.json")
@@ -20,6 +20,9 @@ STATUS_SKIPPED = "SKIPPED"
 STATUS_INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 STATUS_INSUFFICIENT_SPEND = "INSUFFICIENT_SPEND"
 STATUS_INSUFFICIENT_RECORDS = "INSUFFICIENT_RECORDS"
+STATUS_LEDGER_UNREADABLE = "LEDGER_UNREADABLE"
+STATUS_PAYLOAD_SHAPE_DRIFT = "PAYLOAD_SHAPE_DRIFT"
+STATUS_LEARNING_LOOP_LEDGER_FAILED = "LEARNING_LOOP_LEDGER_FAILED"
 
 EV_COMPLETED = "LEARNING_LOOP_COMPLETED"
 EV_SKIPPED = "LEARNING_LOOP_SKIPPED"
@@ -43,20 +46,49 @@ EVIDENCE_KEYS = {
 }
 
 
+class LearningLoopError(Exception):
+    """Base class for high-integrity learning loop failures."""
+
+
+class LedgerReadError(LearningLoopError):
+    """The ledger could not be read safely."""
+
+
+class LedgerWriteError(LearningLoopError):
+    """The loop could not persist its observability event to the ledger."""
+
+
+class PayloadExtractError(LearningLoopError):
+    """The payload shape could not be inspected safely."""
+
+
+class SyntheticCheckError(LearningLoopError):
+    """The synthetic-data safety latch could not classify a payload safely."""
+
+
+@dataclass(frozen=True)
+class LearningLoopConfig:
+    min_records: int = 8
+    min_spend_before_learn: float = 15.0
+    require_evidence: bool = True
+    payload_shape_drift_ratio_threshold: float = 0.5
+    payload_shape_drift_min_drops: int = 3
+
+
+@dataclass(frozen=True)
+class LearningRunResult:
+    status: str
+    input_hash: str
+    state_path: str
+    weights_path: str
+    report_path: str
+
+
 def _utc_now_z() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_utm_content(utm: str | None) -> Dict[str, Any]:
-    """
-    Expected format: Hh0_Adolor_Fhands_V1
-    Mapping:
-      Hh0 -> hook_id="h0"
-      Adolor -> angle="dolor"
-      Fhands -> format="hands"
-      V1 -> version=1
-    If invalid -> {}
-    """
     if not utm or not isinstance(utm, str):
         return {}
     utm = utm.strip()
@@ -93,22 +125,6 @@ def parse_utm(utm: str | None) -> Dict[str, Any]:
     return parse_utm_content(utm)
 
 
-@dataclass(frozen=True)
-class LearningLoopConfig:
-    min_records: int = 8
-    min_spend_before_learn: float = 15.0
-    require_evidence: bool = True
-
-
-@dataclass(frozen=True)
-class LearningRunResult:
-    status: str
-    input_hash: str
-    state_path: str
-    weights_path: str
-    report_path: str
-
-
 def _safe_dumps(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
 
@@ -130,31 +146,50 @@ def _try_json_str(x: Any) -> Any:
         return None
 
 
-def _iter_events(ledger_obj: Any) -> List[Any]:
-    for attr in ("events", "_events", "rows"):
-        if hasattr(ledger_obj, attr):
-            try:
-                ev = getattr(ledger_obj, attr)
-                if callable(ev):
-                    out = ev()
-                    return list(out) if out is not None else []
-                return list(ev) if ev is not None else []
-            except Exception:
-                pass
+def _as_event_list(source: Any) -> List[Any]:
+    if source is None:
+        return []
+    if isinstance(source, list):
+        return list(source)
+    try:
+        return list(source)
+    except TypeError as exc:
+        raise LedgerReadError(f"ledger source is not iterable: {type(source).__name__}") from exc
 
-    for m in ("iter_events", "read_events", "load_events", "get_events", "list_events"):
-        fn = getattr(ledger_obj, m, None)
+
+def _iter_events(ledger_obj: Any) -> List[Any]:
+    missing = object()
+
+    for attr in ("events", "_events", "rows"):
+        try:
+            ev = getattr(ledger_obj, attr, missing)
+        except Exception as exc:
+            raise LedgerReadError(f"ledger attribute '{attr}' is unreadable") from exc
+        if ev is missing:
+            continue
+        try:
+            if callable(ev):
+                return _as_event_list(ev())
+            return _as_event_list(ev)
+        except LedgerReadError:
+            raise
+        except Exception as exc:  # pragma: no cover - guarded by explicit tests below
+            raise LedgerReadError(f"ledger attribute '{attr}' is unreadable") from exc
+
+    for method_name in ("iter_events", "read_events", "load_events", "get_events", "list_events"):
+        fn = getattr(ledger_obj, method_name, None)
         if callable(fn):
             try:
-                out = fn()
-                return list(out) if out is not None else []
-            except Exception:
-                pass
+                return _as_event_list(fn())
+            except LedgerReadError:
+                raise
+            except Exception as exc:
+                raise LedgerReadError(f"ledger method '{method_name}()' failed") from exc
 
     try:
         return list(ledger_obj)
-    except Exception:
-        return []
+    except Exception as exc:
+        raise LedgerReadError("ledger object does not expose a readable event stream") from exc
 
 
 def _extract_payload(e: Any) -> Dict[str, Any]:
@@ -169,12 +204,15 @@ def _extract_payload(e: Any) -> Dict[str, Any]:
                     return parsed
         if any(k in e for k in EVIDENCE_KEYS):
             return e
+        return {}
 
     for k in ("payload", "data", "record", "event", "body"):
         try:
             v = getattr(e, k, None)
-        except Exception:
+        except AttributeError:
             v = None
+        except Exception as exc:
+            raise PayloadExtractError(f"payload attribute access failed for '{k}'") from exc
         if isinstance(v, dict):
             return v
         parsed = _try_json_str(v)
@@ -183,14 +221,16 @@ def _extract_payload(e: Any) -> Dict[str, Any]:
 
     try:
         d = vars(e)
-        if isinstance(d, dict):
-            if isinstance(d.get("payload"), dict):
-                return d["payload"]
-            if any(k in d for k in EVIDENCE_KEYS):
-                return d
-    except Exception:
-        pass
+    except TypeError:
+        return {}
+    except Exception as exc:
+        raise PayloadExtractError("payload vars() inspection failed") from exc
 
+    if isinstance(d, dict):
+        if isinstance(d.get("payload"), dict):
+            return d["payload"]
+        if any(k in d for k in EVIDENCE_KEYS):
+            return d
     return {}
 
 
@@ -208,20 +248,18 @@ def _has_evidence(p: Dict[str, Any]) -> bool:
 
 
 def _is_synthetic(p: Dict[str, Any]) -> bool:
-    """
-    Safety latch: evita que datos fake/seed (smoke tests) contaminen el aprendizaje.
-    - marker: SYNTHETIC* / DEMO*
-    - source: seed/demo/synthetic
-    """
     try:
-        m = str(p.get("marker") or "").strip().upper()
-        if m.startswith("SYNTHETIC") or m.startswith("DEMO"):
+        marker_raw = p.get("marker")
+        marker = str(marker_raw or "").strip().upper()
+        if marker.startswith("SYNTHETIC") or marker.startswith("DEMO"):
             return True
-        src = str(p.get("source") or "").strip().lower()
-        if src in ("seed", "demo", "synthetic"):
+
+        source_raw = p.get("source")
+        source = str(source_raw or "").strip().lower()
+        if source in ("seed", "demo", "synthetic"):
             return True
-    except Exception:
-        return False
+    except Exception as exc:
+        raise SyntheticCheckError("synthetic safety latch could not classify payload") from exc
     return False
 
 
@@ -281,7 +319,14 @@ def _write_json(path: Path, obj: Dict[str, Any]) -> None:
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def _ledger_write(ledger_obj: Any, *, event_type: str, status: str, input_hash: str, total_spend: Optional[float] = None) -> None:
+def _ledger_write(
+    ledger_obj: Any,
+    *,
+    event_type: str,
+    status: str,
+    input_hash: str,
+    total_spend: Optional[float] = None,
+) -> None:
     ev: Dict[str, Any] = {
         "event_type": event_type,
         "timestamp": _utc_now_z(),
@@ -291,164 +336,431 @@ def _ledger_write(ledger_obj: Any, *, event_type: str, status: str, input_hash: 
     if total_spend is not None:
         ev["total_spend"] = float(total_spend)
 
-    for m in ("write", "write_event", "emit", "record", "add_event"):
-        fn = getattr(ledger_obj, m, None)
+    write_fn = getattr(ledger_obj, "write", None)
+    if callable(write_fn):
+        try:
+            write_fn(ev)
+            return
+        except TypeError:
+            try:
+                write_fn(event_type, "learning_loop", input_hash, ev)
+                return
+            except TypeError:
+                pass
+        except Exception as exc:
+            raise LedgerWriteError("ledger write() failed") from exc
+
+    for method_name in ("write_event", "emit", "record", "add_event"):
+        fn = getattr(ledger_obj, method_name, None)
         if callable(fn):
             try:
                 fn(ev)
                 return
-            except Exception:
+            except TypeError:
                 pass
+            except Exception as exc:
+                raise LedgerWriteError(f"ledger {method_name}() failed") from exc
 
-    try:
-        writes = getattr(ledger_obj, "writes", None)
-        if isinstance(writes, list):
-            writes.append(ev)
-    except (AttributeError):
-        pass
+    raise LedgerWriteError("ledger does not expose a supported write contract")
+
+
+def _build_paths(repo: Path) -> Tuple[Path, Path, Path]:
+    state_abs = repo / STATE_REL
+    report_abs = repo / REPORT_REL
+    weights_abs = repo / WEIGHTS_REL
+    state_abs.parent.mkdir(parents=True, exist_ok=True)
+    report_abs.parent.mkdir(parents=True, exist_ok=True)
+    weights_abs.parent.mkdir(parents=True, exist_ok=True)
+    return state_abs, report_abs, weights_abs
+
+
+def _with_common_fields(base: Dict[str, Any], *, status: str, input_hash: str, records_seen: int, records_used: int) -> Dict[str, Any]:
+    out = dict(base)
+    out.update(
+        {
+            "marker": __LL_MARKER__,
+            "generated_at": _utc_now_z(),
+            "status": status,
+            "input_hash": input_hash,
+            "records_seen": int(records_seen),
+            "records_used": int(records_used),
+        }
+    )
+    return out
 
 
 class LearningLoop:
     def __init__(self, repo: Path | str | None = None):
         self.repo = Path(repo) if repo is not None else Path.cwd()
 
-    def run(self, ledger_obj: Any, cfg: LearningLoopConfig = LearningLoopConfig(), force: bool = False, dry_run: bool = False) -> LearningRunResult:
-        state_abs = self.repo / STATE_REL
-        report_abs = self.repo / REPORT_REL
-        weights_abs = self.repo / WEIGHTS_REL
+    def _finalize(
+        self,
+        *,
+        ledger_obj: Any,
+        state_abs: Path,
+        report_abs: Path,
+        weights_abs: Path,
+        status: str,
+        input_hash: str,
+        event_type: str,
+        state_payload: Dict[str, Any],
+        report_payload: Dict[str, Any],
+        total_spend: Optional[float],
+    ) -> LearningRunResult:
+        _write_json(state_abs, state_payload)
+        _write_json(report_abs, report_payload)
 
-        state_path = str(state_abs)
-        report_path = str(report_abs)
-        weights_path = str(weights_abs)
+        try:
+            _ledger_write(
+                ledger_obj,
+                event_type=event_type,
+                status=status,
+                input_hash=input_hash,
+                total_spend=total_spend,
+            )
+            return LearningRunResult(status, input_hash, str(state_abs), str(weights_abs), str(report_abs))
+        except LedgerWriteError as exc:
+            failed_status = STATUS_LEARNING_LOOP_LEDGER_FAILED
+            failed_state = dict(state_payload)
+            failed_report = dict(report_payload)
+            failed_state.update(
+                {
+                    "status": failed_status,
+                    "intended_status": status,
+                    "ledger_write_error": str(exc),
+                    "ledger_write_error_type": type(exc).__name__,
+                }
+            )
+            failed_report.update(
+                {
+                    "status": failed_status,
+                    "intended_status": status,
+                    "ledger_write_error": str(exc),
+                    "ledger_write_error_type": type(exc).__name__,
+                    "ledger_event_type": event_type,
+                }
+            )
+            _write_json(state_abs, failed_state)
+            _write_json(report_abs, failed_report)
+            return LearningRunResult(failed_status, input_hash, str(state_abs), str(weights_abs), str(report_abs))
 
-        state_abs.parent.mkdir(parents=True, exist_ok=True)
-        report_abs.parent.mkdir(parents=True, exist_ok=True)
-        weights_abs.parent.mkdir(parents=True, exist_ok=True)
+    def run(
+        self,
+        ledger_obj: Any,
+        cfg: LearningLoopConfig = LearningLoopConfig(),
+        force: bool = False,
+        dry_run: bool = False,
+    ) -> LearningRunResult:
+        state_abs, report_abs, weights_abs = _build_paths(self.repo)
 
-        events = _iter_events(ledger_obj)
-        payloads_all = [_extract_payload(e) for e in events]
-        payloads_all = [p for p in payloads_all if isinstance(p, dict) and p]
+        try:
+            events = _iter_events(ledger_obj)
+        except LedgerReadError as exc:
+            input_hash = _hash_payloads([])
+            status = STATUS_LEDGER_UNREADABLE
+            state_payload = _with_common_fields({}, status=status, input_hash=input_hash, records_seen=0, records_used=0)
+            state_payload["ledger_read_error"] = str(exc)
+            state_payload["ledger_read_error_type"] = type(exc).__name__
 
-        #  filtro anti-data-fake
-        payloads_all = [p for p in payloads_all if not _is_synthetic(p)]
+            report_payload = _with_common_fields({}, status=status, input_hash=input_hash, records_seen=0, records_used=0)
+            report_payload.update(
+                {
+                    "total_spend": 0.0,
+                    "ledger_read_error": str(exc),
+                    "ledger_read_error_type": type(exc).__name__,
+                }
+            )
+            return self._finalize(
+                ledger_obj=ledger_obj,
+                state_abs=state_abs,
+                report_abs=report_abs,
+                weights_abs=weights_abs,
+                status=status,
+                input_hash=input_hash,
+                event_type=EV_SKIPPED,
+                state_payload=state_payload,
+                report_payload=report_payload,
+                total_spend=0.0,
+            )
 
-        payloads_used = payloads_all
+        payload_candidates_total = len(events)
+        payloads_all: List[Dict[str, Any]] = []
+        payloads_dropped_by_shape = 0
+        payload_extract_errors = 0
+
+        for event in events:
+            try:
+                payload = _extract_payload(event)
+            except PayloadExtractError:
+                payload_extract_errors += 1
+                payloads_dropped_by_shape += 1
+                continue
+            if isinstance(payload, dict) and payload:
+                payloads_all.append(payload)
+            else:
+                payloads_dropped_by_shape += 1
+
+        payload_shape_drift_ratio = 0.0
+        if payload_candidates_total > 0:
+            payload_shape_drift_ratio = payloads_dropped_by_shape / payload_candidates_total
+
+        if (
+            payloads_dropped_by_shape >= int(cfg.payload_shape_drift_min_drops)
+            and payload_shape_drift_ratio >= float(cfg.payload_shape_drift_ratio_threshold)
+        ):
+            input_hash = _hash_payloads([])
+            status = STATUS_PAYLOAD_SHAPE_DRIFT
+            state_payload = _with_common_fields(
+                {
+                    "payload_candidates_total": int(payload_candidates_total),
+                    "payloads_extracted_ok": int(len(payloads_all)),
+                    "payloads_dropped_by_shape": int(payloads_dropped_by_shape),
+                    "payload_extract_errors": int(payload_extract_errors),
+                    "payload_shape_drift_ratio": float(payload_shape_drift_ratio),
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=0,
+            )
+            report_payload = _with_common_fields(
+                {
+                    "payload_candidates_total": int(payload_candidates_total),
+                    "payloads_extracted_ok": int(len(payloads_all)),
+                    "payloads_dropped_by_shape": int(payloads_dropped_by_shape),
+                    "payload_extract_errors": int(payload_extract_errors),
+                    "payload_shape_drift_ratio": float(payload_shape_drift_ratio),
+                    "payload_shape_drift_ratio_threshold": float(cfg.payload_shape_drift_ratio_threshold),
+                    "payload_shape_drift_min_drops": int(cfg.payload_shape_drift_min_drops),
+                    "total_spend": 0.0,
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=0,
+            )
+            return self._finalize(
+                ledger_obj=ledger_obj,
+                state_abs=state_abs,
+                report_abs=report_abs,
+                weights_abs=weights_abs,
+                status=status,
+                input_hash=input_hash,
+                event_type=EV_SKIPPED,
+                state_payload=state_payload,
+                report_payload=report_payload,
+                total_spend=0.0,
+            )
+
+        non_synthetic_payloads: List[Dict[str, Any]] = []
+        synthetic_payloads_filtered = 0
+        synthetic_check_errors = 0
+        for payload in payloads_all:
+            try:
+                if _is_synthetic(payload):
+                    synthetic_payloads_filtered += 1
+                    continue
+            except SyntheticCheckError:
+                synthetic_check_errors += 1
+                continue
+            non_synthetic_payloads.append(payload)
+
+        payloads_used = non_synthetic_payloads
         if cfg.require_evidence:
-            payloads_used = [p for p in payloads_all if _has_evidence(p)]
+            payloads_used = [p for p in non_synthetic_payloads if _has_evidence(p)]
 
         input_hash = _hash_payloads(payloads_used)
+        common_metrics = {
+            "payload_candidates_total": int(payload_candidates_total),
+            "payloads_extracted_ok": int(len(payloads_all)),
+            "payloads_dropped_by_shape": int(payloads_dropped_by_shape),
+            "payload_extract_errors": int(payload_extract_errors),
+            "payload_shape_drift_ratio": float(payload_shape_drift_ratio),
+            "synthetic_payloads_filtered": int(synthetic_payloads_filtered),
+            "synthetic_check_errors": int(synthetic_check_errors),
+        }
 
         if (not force) and state_abs.exists():
             prev = _read_json_dict(state_abs)
-            if prev.get("input_hash") == input_hash and prev.get("status") in (STATUS_COMPLETED, STATUS_COMPLETED_DRY_RUN, STATUS_SKIPPED):
+            if prev.get("input_hash") == input_hash and prev.get("status") in (
+                STATUS_COMPLETED,
+                STATUS_COMPLETED_DRY_RUN,
+                STATUS_SKIPPED,
+            ):
                 status = STATUS_SKIPPED
-                _write_json(state_abs, {
-                    "marker": __LL_MARKER__,
-                    "generated_at": _utc_now_z(),
-                    "status": status,
-                    "input_hash": input_hash,
-                    "records_used": int(prev.get("records_used", 0) or 0),
-                })
-                _write_json(report_abs, {
-                    "marker": __LL_MARKER__,
-                    "generated_at": _utc_now_z(),
-                    "status": status,
-                    "input_hash": input_hash,
-                    "records_used": int(prev.get("records_used", 0) or 0),
-                    "total_spend": 0.0,
-                    "reason": "IDEMPOTENT_SKIP",
-                })
-                _ledger_write(ledger_obj, event_type=EV_SKIPPED, status=status, input_hash=input_hash, total_spend=0.0)
-                return LearningRunResult(status, input_hash, state_path, weights_path, report_path)
+                state_payload = _with_common_fields(
+                    {
+                        **common_metrics,
+                        "reason": "IDEMPOTENT_SKIP",
+                    },
+                    status=status,
+                    input_hash=input_hash,
+                    records_seen=len(events),
+                    records_used=int(prev.get("records_used", 0) or 0),
+                )
+                report_payload = _with_common_fields(
+                    {
+                        **common_metrics,
+                        "reason": "IDEMPOTENT_SKIP",
+                        "total_spend": 0.0,
+                    },
+                    status=status,
+                    input_hash=input_hash,
+                    records_seen=len(events),
+                    records_used=int(prev.get("records_used", 0) or 0),
+                )
+                return self._finalize(
+                    ledger_obj=ledger_obj,
+                    state_abs=state_abs,
+                    report_abs=report_abs,
+                    weights_abs=weights_abs,
+                    status=status,
+                    input_hash=input_hash,
+                    event_type=EV_SKIPPED,
+                    state_payload=state_payload,
+                    report_payload=report_payload,
+                    total_spend=0.0,
+                )
 
-        if cfg.require_evidence:
-            if len(payloads_used) < int(cfg.min_records):
-                status = STATUS_INSUFFICIENT_EVIDENCE
-                _write_json(state_abs, {
-                    "marker": __LL_MARKER__,
-                    "generated_at": _utc_now_z(),
-                    "status": status,
-                    "input_hash": input_hash,
-                    "records_used": int(len(payloads_used)),
-                })
-                _write_json(report_abs, {
-                    "marker": __LL_MARKER__,
-                    "generated_at": _utc_now_z(),
-                    "status": status,
-                    "input_hash": input_hash,
-                    "records_used": int(len(payloads_used)),
-                    "total_spend": 0.0,
+        if cfg.require_evidence and len(payloads_used) < int(cfg.min_records):
+            status = STATUS_INSUFFICIENT_EVIDENCE
+            state_payload = _with_common_fields(
+                {
+                    **common_metrics,
                     "min_records": int(cfg.min_records),
                     "require_evidence": True,
-                })
-                _ledger_write(ledger_obj, event_type=EV_SKIPPED, status=status, input_hash=input_hash, total_spend=0.0)
-                return LearningRunResult(status, input_hash, state_path, weights_path, report_path)
-        else:
-            if len(events) < int(cfg.min_records):
-                status = STATUS_INSUFFICIENT_RECORDS
-                _write_json(state_abs, {
-                    "marker": __LL_MARKER__,
-                    "generated_at": _utc_now_z(),
-                    "status": status,
-                    "input_hash": input_hash,
-                    "records_used": 0,
-                })
-                _write_json(report_abs, {
-                    "marker": __LL_MARKER__,
-                    "generated_at": _utc_now_z(),
-                    "status": status,
-                    "input_hash": input_hash,
-                    "records_used": 0,
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=len(payloads_used),
+            )
+            report_payload = _with_common_fields(
+                {
+                    **common_metrics,
+                    "min_records": int(cfg.min_records),
+                    "require_evidence": True,
                     "total_spend": 0.0,
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=len(payloads_used),
+            )
+            return self._finalize(
+                ledger_obj=ledger_obj,
+                state_abs=state_abs,
+                report_abs=report_abs,
+                weights_abs=weights_abs,
+                status=status,
+                input_hash=input_hash,
+                event_type=EV_SKIPPED,
+                state_payload=state_payload,
+                report_payload=report_payload,
+                total_spend=0.0,
+            )
+
+        if (not cfg.require_evidence) and len(events) < int(cfg.min_records):
+            status = STATUS_INSUFFICIENT_RECORDS
+            state_payload = _with_common_fields(
+                {
+                    **common_metrics,
                     "min_records": int(cfg.min_records),
                     "require_evidence": False,
-                })
-                _ledger_write(ledger_obj, event_type=EV_SKIPPED, status=status, input_hash=input_hash, total_spend=0.0)
-                return LearningRunResult(status, input_hash, state_path, weights_path, report_path)
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=0,
+            )
+            report_payload = _with_common_fields(
+                {
+                    **common_metrics,
+                    "min_records": int(cfg.min_records),
+                    "require_evidence": False,
+                    "total_spend": 0.0,
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=0,
+            )
+            return self._finalize(
+                ledger_obj=ledger_obj,
+                state_abs=state_abs,
+                report_abs=report_abs,
+                weights_abs=weights_abs,
+                status=status,
+                input_hash=input_hash,
+                event_type=EV_SKIPPED,
+                state_payload=state_payload,
+                report_payload=report_payload,
+                total_spend=0.0,
+            )
 
         total_spend = sum(_get_spend(p) for p in payloads_used)
-
         if float(total_spend) < float(cfg.min_spend_before_learn):
             status = STATUS_INSUFFICIENT_SPEND
-            _write_json(state_abs, {
-                "marker": __LL_MARKER__,
-                "generated_at": _utc_now_z(),
-                "status": status,
-                "input_hash": input_hash,
-                "records_used": int(len(payloads_used)),
-            })
-            _write_json(report_abs, {
-                "marker": __LL_MARKER__,
-                "generated_at": _utc_now_z(),
-                "status": status,
-                "input_hash": input_hash,
-                "records_used": int(len(payloads_used)),
-                "total_spend": float(total_spend),
-                "min_spend_before_learn": float(cfg.min_spend_before_learn),
-            })
-            _ledger_write(ledger_obj, event_type=EV_SKIPPED, status=status, input_hash=input_hash, total_spend=float(total_spend))
-            return LearningRunResult(status, input_hash, state_path, weights_path, report_path)
+            state_payload = _with_common_fields(
+                {
+                    **common_metrics,
+                    "min_spend_before_learn": float(cfg.min_spend_before_learn),
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=len(payloads_used),
+            )
+            report_payload = _with_common_fields(
+                {
+                    **common_metrics,
+                    "min_spend_before_learn": float(cfg.min_spend_before_learn),
+                    "total_spend": float(total_spend),
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=len(payloads_used),
+            )
+            return self._finalize(
+                ledger_obj=ledger_obj,
+                state_abs=state_abs,
+                report_abs=report_abs,
+                weights_abs=weights_abs,
+                status=status,
+                input_hash=input_hash,
+                event_type=EV_SKIPPED,
+                state_payload=state_payload,
+                report_payload=report_payload,
+                total_spend=float(total_spend),
+            )
 
         if dry_run:
             status = STATUS_COMPLETED_DRY_RUN
-            _write_json(state_abs, {
-                "marker": __LL_MARKER__,
-                "generated_at": _utc_now_z(),
-                "status": status,
-                "input_hash": input_hash,
-                "records_used": int(len(payloads_used)),
-            })
-            _write_json(report_abs, {
-                "marker": __LL_MARKER__,
-                "generated_at": _utc_now_z(),
-                "status": status,
-                "input_hash": input_hash,
-                "records_used": int(len(payloads_used)),
-                "total_spend": float(total_spend),
-                "dry_run": True,
-            })
-            _ledger_write(ledger_obj, event_type=EV_COMPLETED, status=status, input_hash=input_hash, total_spend=float(total_spend))
-            return LearningRunResult(status, input_hash, state_path, weights_path, report_path)
+            state_payload = _with_common_fields(common_metrics, status=status, input_hash=input_hash, records_seen=len(events), records_used=len(payloads_used))
+            report_payload = _with_common_fields(
+                {
+                    **common_metrics,
+                    "total_spend": float(total_spend),
+                    "dry_run": True,
+                },
+                status=status,
+                input_hash=input_hash,
+                records_seen=len(events),
+                records_used=len(payloads_used),
+            )
+            return self._finalize(
+                ledger_obj=ledger_obj,
+                state_abs=state_abs,
+                report_abs=report_abs,
+                weights_abs=weights_abs,
+                status=status,
+                input_hash=input_hash,
+                event_type=EV_COMPLETED,
+                state_payload=state_payload,
+                report_payload=report_payload,
+                total_spend=float(total_spend),
+            )
 
         roas_vals = [_get_roas(p) for p in payloads_used]
         hook_vals = [_get_hook_rate(p) for p in payloads_used]
@@ -460,7 +772,17 @@ class LearningLoop:
         hooks: Dict[str, Dict[str, float]] = {}
 
         def _acc(bucket: Dict[str, Dict[str, float]], key: str, spend: float, roas: float, hookr: float) -> None:
-            b = bucket.setdefault(key, {"count": 0.0, "spend": 0.0, "roas_sum": 0.0, "roas_n": 0.0, "hook_sum": 0.0, "hook_n": 0.0})
+            b = bucket.setdefault(
+                key,
+                {
+                    "count": 0.0,
+                    "spend": 0.0,
+                    "roas_sum": 0.0,
+                    "roas_n": 0.0,
+                    "hook_sum": 0.0,
+                    "hook_n": 0.0,
+                },
+            )
             b["count"] += 1.0
             b["spend"] += float(spend)
             b["roas_sum"] += float(roas)
@@ -469,21 +791,21 @@ class LearningLoop:
             b["hook_n"] += 1.0
 
         for p in payloads_used:
-            a, f, h = _classify(p)
-            _acc(angles, a, _get_spend(p), _get_roas(p), _get_hook_rate(p))
-            _acc(formats, f, _get_spend(p), _get_roas(p), _get_hook_rate(p))
-            _acc(hooks, h, _get_spend(p), _get_roas(p), _get_hook_rate(p))
+            angle, fmt, hook = _classify(p)
+            _acc(angles, angle, _get_spend(p), _get_roas(p), _get_hook_rate(p))
+            _acc(formats, fmt, _get_spend(p), _get_roas(p), _get_hook_rate(p))
+            _acc(hooks, hook, _get_spend(p), _get_roas(p), _get_hook_rate(p))
 
-        def _finalize(raw: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
+        def _finalize_bucket(raw: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
             out: Dict[str, Any] = {}
-            for k, b in raw.items():
-                roas_m = (b["roas_sum"] / b["roas_n"]) if b["roas_n"] else 0.0
-                hook_m = (b["hook_sum"] / b["hook_n"]) if b["hook_n"] else 0.0
-                out[k] = {
-                    "count": int(b["count"]),
-                    "spend": float(b["spend"]),
-                    "roas_mean": float(roas_m),
-                    "hook_rate_3s_mean": float(hook_m),
+            for key, bucket in raw.items():
+                roas_bucket_mean = (bucket["roas_sum"] / bucket["roas_n"]) if bucket["roas_n"] else 0.0
+                hook_bucket_mean = (bucket["hook_sum"] / bucket["hook_n"]) if bucket["hook_n"] else 0.0
+                out[key] = {
+                    "count": int(bucket["count"]),
+                    "spend": float(bucket["spend"]),
+                    "roas_mean": float(roas_bucket_mean),
+                    "hook_rate_3s_mean": float(hook_bucket_mean),
                 }
             return out
 
@@ -496,35 +818,55 @@ class LearningLoop:
             "total_spend": float(total_spend),
             "roas_mean": float(roas_mean),
             "hook_rate_3s_mean": float(hook_mean),
-            "angles": _finalize(angles),
-            "formats": _finalize(formats),
-            "hooks": _finalize(hooks),
+            "angles": _finalize_bucket(angles),
+            "formats": _finalize_bucket(formats),
+            "hooks": _finalize_bucket(hooks),
         }
         _write_json(weights_abs, weights_obj)
 
         status = STATUS_COMPLETED
-        _write_json(state_abs, {
-            "marker": __LL_MARKER__,
-            "generated_at": _utc_now_z(),
-            "status": status,
-            "input_hash": input_hash,
-            "records_used": int(len(payloads_used)),
-        })
-        _write_json(report_abs, {
-            "marker": __LL_MARKER__,
-            "generated_at": _utc_now_z(),
-            "status": status,
-            "input_hash": input_hash,
-            "records_used": int(len(payloads_used)),
-            "total_spend": float(total_spend),
-            "dry_run": False,
-        })
-        _ledger_write(ledger_obj, event_type=EV_COMPLETED, status=status, input_hash=input_hash, total_spend=float(total_spend))
-        return LearningRunResult(status, input_hash, state_path, weights_path, report_path)
+        state_payload = _with_common_fields(common_metrics, status=status, input_hash=input_hash, records_seen=len(events), records_used=len(payloads_used))
+        report_payload = _with_common_fields(
+            {
+                **common_metrics,
+                "total_spend": float(total_spend),
+                "dry_run": False,
+            },
+            status=status,
+            input_hash=input_hash,
+            records_seen=len(events),
+            records_used=len(payloads_used),
+        )
+        return self._finalize(
+            ledger_obj=ledger_obj,
+            state_abs=state_abs,
+            report_abs=report_abs,
+            weights_abs=weights_abs,
+            status=status,
+            input_hash=input_hash,
+            event_type=EV_COMPLETED,
+            state_payload=state_payload,
+            report_payload=report_payload,
+            total_spend=float(total_spend),
+        )
 
 
 __all__ = [
     "__LL_MARKER__",
+    "STATUS_COMPLETED",
+    "STATUS_COMPLETED_DRY_RUN",
+    "STATUS_SKIPPED",
+    "STATUS_INSUFFICIENT_EVIDENCE",
+    "STATUS_INSUFFICIENT_SPEND",
+    "STATUS_INSUFFICIENT_RECORDS",
+    "STATUS_LEDGER_UNREADABLE",
+    "STATUS_PAYLOAD_SHAPE_DRIFT",
+    "STATUS_LEARNING_LOOP_LEDGER_FAILED",
+    "LearningLoopError",
+    "LedgerReadError",
+    "LedgerWriteError",
+    "PayloadExtractError",
+    "SyntheticCheckError",
     "parse_utm_content",
     "parse_utm",
     "LearningLoop",

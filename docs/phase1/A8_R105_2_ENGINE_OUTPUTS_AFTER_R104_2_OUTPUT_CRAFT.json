@@ -1,0 +1,278 @@
+{
+  "schema_version": "synapse.marketing_expert_audit_outputs.v3",
+  "island": "A8-R105.2",
+  "source_protocol": "A8_R105_MARKETING_EXPERT_AUDIT_PROTOCOL.json",
+  "source_engine": "A8-R104.2",
+  "source_engine_head": "d05fbfb181a24e3aa2b187d9007efb76acbf6c52",
+  "source_engine_subject": "fix(marketing): preserve operator review wording",
+  "case_count": 8,
+  "engine_outputs_are_not_ground_truth": true,
+  "requires_external_expert_scoring": true,
+  "r105_protocol_unchanged": true,
+  "rerun_after": "A8-R104.2",
+  "summary": {
+    "statuses": [
+      "accepted",
+      "blocked"
+    ],
+    "selected_rule_ids": [
+      "AGR-D001",
+      "ANG-D001",
+      "CLR-D003",
+      "OFF-D002"
+    ],
+    "accepted_count": 2,
+    "blocked_count": 6,
+    "all_blocked": false,
+    "all_aud_d001": false,
+    "all_outputs_identical": false,
+    "accepted_outputs_have_hook": true,
+    "accepted_outputs_have_buyer_fit": true,
+    "accepted_outputs_have_objection": true,
+    "accepted_outputs_have_cta": true,
+    "accepted_outputs_have_channel_note": true,
+    "accepted_outputs_have_operator_asset": true,
+    "blocked_outputs_have_operator_review_required": true,
+    "blocked_outputs_hide_raw_trigger_noise": true
+  },
+  "case_outputs": [
+    {
+      "case_id": "R105-CASE-001",
+      "case_name": "Beauty serum with risky anti-aging claim",
+      "category": "beauty serum",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked: do not use the current beauty serum message yet. Primary reason: claim safety: current wording makes or implies a claim that needs proof or review before use. Evidence checked: small 30 ml bottle, hydrating texture. Operator action: remove the risky claim for beauty serum or collect proof strong enough for review. Operator review required. Safe next step: create a proof-safe rewrite for a skeptical buyer on Meta, then review before use.",
+        "blocked": true,
+        "rule_decision_count": 4
+      },
+      "audit_pressure": [
+        "High risk of unsafe cosmetic claims",
+        "Must avoid medical or guaranteed results",
+        "Should prefer proof-safe positioning"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-002",
+      "case_name": "Pet hair remover with clear demo proof",
+      "category": "pet hair remover",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "ANG-D001",
+        "selected_framework": "AngleSelection",
+        "status": "accepted",
+        "triggers": [
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied"
+        ],
+        "operator_review_required": false,
+        "safe_output": "Hook: show pet hair remover solving one concrete problem with manual reusable roller, visible before-after cleaning demo, then prove it with short demo video, before-after images. Buyer fit: Connect the proof to the active pain point and make the next step concrete. Objection handled: buyer may doubt it works, so make the before-after demo the proof. CTA: invite the buyer to watch the proof and compare whether pet hair remover solves the shown problem. Meta note: open with the visual proof in the first frame, then use the CTA after the proof. Operator asset: build the first creative around 'manual reusable roller, visible before-after cleaning demo' as the proof scene, keep the claim narrower than the evidence, and use the CTA only after the proof is visible.",
+        "blocked": false,
+        "rule_decision_count": 1
+      },
+      "audit_pressure": [
+        "Should use concrete demo angle",
+        "Should avoid exaggerated universal claims",
+        "Should produce a specific hook, not generic pet copy"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-003",
+      "case_name": "Kitchen oil sprayer with tight margin",
+      "category": "kitchen oil sprayer",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "OFF-D002",
+        "selected_framework": "OfferConstruction",
+        "status": "blocked",
+        "triggers": [
+          "channel_constraint",
+          "operator_review_required",
+          "cta_softened_or_rejected",
+          "reject_discount_offer"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked: do not use the current kitchen oil sprayer message yet. Primary reason: offer economics: the margin cannot support a broad discount or weak offer. Evidence checked: glass bottle, spray nozzle. Operator action: rebuild the kitchen oil sprayer offer around proof, bundle value, or margin-safe framing. Operator review required. Safe next step: create a proof-safe rewrite for a problem-aware buyer on Meta, then review before use.",
+        "blocked": true,
+        "rule_decision_count": 6
+      },
+      "audit_pressure": [
+        "Should avoid discount-heavy offer because margin is tight",
+        "Should handle clogging objection honestly",
+        "Should avoid health claims beyond proof"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-004",
+      "case_name": "Posture corrector with medical-adjacent risk",
+      "category": "posture corrector",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked: do not use the current posture corrector message yet. Primary reason: claim safety: current wording makes or implies a claim that needs proof or review before use. Evidence checked: elastic back brace, adjustable straps. Operator action: remove the risky claim for posture corrector or collect proof strong enough for review. Operator review required. Safe next step: create a proof-safe rewrite for a pain-aware buyer on Meta, then review before use.",
+        "blocked": true,
+        "rule_decision_count": 4
+      },
+      "audit_pressure": [
+        "Medical-adjacent claims must be rejected or softened",
+        "Operator review should be required",
+        "Should not imply treatment or pain relief guarantee"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-005",
+      "case_name": "LED strip lights generic saturated product",
+      "category": "LED strip lights",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "AGR-D001",
+        "selected_framework": "AntiGenericRejection",
+        "status": "blocked",
+        "triggers": [
+          "proof_gap",
+          "lower_claim_or_reject",
+          "operator_review_required",
+          "channel_constraint",
+          "cta_softened_or_rejected",
+          "fallback",
+          "generic_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked: do not use the current LED strip lights message yet. Primary reason: generic positioning: the message is category-level and does not create a product-specific reason to care. Evidence checked: RGB remote, adhesive backing. Operator action: replace category-only wording with a specific product fact and a visible use case. Operator review required. Safe next step: create a proof-safe rewrite for a cold buyer on Meta, then review before use.",
+        "blocked": true,
+        "rule_decision_count": 6
+      },
+      "audit_pressure": [
+        "Should reject generic saturated angle",
+        "Should require a more specific use case or proof",
+        "Should avoid noun-swap lifestyle copy"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-006",
+      "case_name": "Travel bottle with strong demo and clear use case",
+      "category": "travel bottle",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "ANG-D001",
+        "selected_framework": "AngleSelection",
+        "status": "accepted",
+        "triggers": [
+          "angle_selected",
+          "demo_angle",
+          "tie_break_applied"
+        ],
+        "operator_review_required": false,
+        "safe_output": "Hook: show travel bottle solving one concrete problem with foldable silicone bottle, leak-resistant cap, then prove it with demo photo, short leak-resistance clip. Buyer fit: Connect the proof to the active pain point and make the next step concrete. Objection handled: buyer may worry about mess or durability, so show the anti-leak detail before the CTA. CTA: invite the buyer to watch the proof and compare whether travel bottle solves the shown problem. Meta note: open with the visual proof in the first frame, then use the CTA after the proof. Operator asset: build the first creative around 'foldable silicone bottle, leak-resistant cap' as the proof scene, keep the claim narrower than the evidence, and use the CTA only after the proof is visible.",
+        "blocked": false,
+        "rule_decision_count": 1
+      },
+      "audit_pressure": [
+        "Should select clear demo angle",
+        "Should handle leak objection",
+        "Should produce useful operator-facing output"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-007",
+      "case_name": "Car phone holder with weak proof and compatibility objections",
+      "category": "car phone holder",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked: do not use the current car phone holder message yet. Primary reason: claim safety: current wording makes or implies a claim that needs proof or review before use. Evidence checked: dashboard mount, adjustable clamp. Operator action: remove the risky claim for car phone holder or collect proof strong enough for review. Operator review required. Safe next step: create a proof-safe rewrite for a solution-aware buyer on Meta, then review before use.",
+        "blocked": true,
+        "rule_decision_count": 4
+      },
+      "audit_pressure": [
+        "Should reject universal/never claims",
+        "Should request compatibility proof",
+        "Should avoid overconfident claim"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    },
+    {
+      "case_id": "R105-CASE-008",
+      "case_name": "Mini blender with safety and durability concerns",
+      "category": "mini blender",
+      "engine_output": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "CLR-D003",
+        "selected_framework": "ClaimRisk",
+        "status": "blocked",
+        "triggers": [
+          "claim_rejected",
+          "safe_rewrite",
+          "operator_review_required",
+          "proof_gap",
+          "lower_claim_or_reject",
+          "channel_constraint",
+          "cta_softened_or_rejected",
+          "reject_discount_offer"
+        ],
+        "operator_review_required": true,
+        "safe_output": "Blocked: do not use the current mini blender message yet. Primary reason: claim safety: current wording makes or implies a claim that needs proof or review before use. Evidence checked: USB rechargeable, small cup. Operator action: remove the risky claim for mini blender or collect proof strong enough for review. Operator review required. Safe next step: create a proof-safe rewrite for a solution-aware buyer on Meta, then review before use.",
+        "blocked": true,
+        "rule_decision_count": 7
+      },
+      "audit_pressure": [
+        "Should reject unsupported crushes-ice claim",
+        "Should consider safety and proof gaps",
+        "Should avoid margin-damaging offer"
+      ],
+      "expert_score_required": true,
+      "note": "Rerun output after A8-R104.2 output craft remediation; evidence for expert critique, not ground truth."
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-﻿# Forecast (synapse.forecast)
+# Forecast (synapse.forecast)
 
 This module provides a tiny, test-driven core for forecast paths and scenario math.
 

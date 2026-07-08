@@ -7,15 +7,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
-from .models import ProductContext, InterrogationVerdict
-from .interrogation_engine import InterrogationEngine
+from synapse.ledger_ndjson import append_event, build_event
+
 from .creative_factory import CreativeFactory
+from .interrogation_engine import InterrogationEngine
+from .models import InterrogationVerdict, ProductContext
 
+
+logger = logging.getLogger(__name__)
 
 WAVE_VERSION = "05"
 SCHEMA_VERSION = "1.0.0"
@@ -47,9 +53,55 @@ class WaveResult:
     duration_seconds: float = 0.0
     interrogation_verdict: str = ""
     interrogation_score: float = 0.0
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _get_ledger_path(ledger_dir: Path) -> Path:
+    if ledger_dir.suffix.lower() == ".ndjson":
+        return ledger_dir
+    return ledger_dir / "events.ndjson"
+
+
+def _build_event_record(event_type: str, entity_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    wave_id = str(payload.get("wave_id") or "")
+    try:
+        record = build_event(
+            event_type=event_type,
+            entity_type="product",
+            entity_id=entity_id,
+            payload=payload,
+            wave_id=wave_id,
+            event_id=None,
+            event_time=None,
+        )
+        if not isinstance(record, dict):
+            raise TypeError("build_event_must_return_dict")
+        return record
+    except TypeError:
+        return {
+            "event_id": f"wave_runner-{uuid4().hex[:12]}",
+            "event_type": event_type,
+            "entity_type": "product",
+            "entity_id": entity_id,
+            "payload": payload,
+            "wave_id": wave_id,
+            "event_time": _utc_now_iso(),
+        }
+
+
+def _append_ledger_event(ledger_dir: Path, event_type: str, entity_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    ledger_path = _get_ledger_path(ledger_dir)
+    record = _build_event_record(event_type=event_type, entity_id=entity_id, payload=payload)
+    persisted = append_event(record, path=ledger_path)
+    if not isinstance(persisted, dict):
+        raise TypeError("append_event_must_return_dict")
+    return persisted
 
 
 class WaveRunner:
@@ -62,14 +114,14 @@ class WaveRunner:
         self.output_dir = output_dir or DEFAULT_PATHS["output"]
         self.ledger_dir = ledger_dir or DEFAULT_PATHS["ledger"]
         self.manifest_dir = manifest_dir or DEFAULT_PATHS["manifests"]
-        
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
         self.manifest_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.interrogation_engine = InterrogationEngine()
         self.creative_factory = CreativeFactory()
-    
+
     def run(
         self,
         product: ProductContext,
@@ -79,7 +131,7 @@ class WaveRunner:
         started_at = datetime.now(timezone.utc)
         wave_id = self._generate_wave_id(product.product_id)
         input_hash = product.input_hash()
-        
+
         if not force:
             existing = self._check_existing(product.product_id, input_hash)
             if existing:
@@ -92,18 +144,22 @@ class WaveRunner:
                     started_at=started_at.isoformat(),
                     completed_at=datetime.now(timezone.utc).isoformat(),
                 )
-        
+
         try:
             interrogation = self.interrogation_engine.interrogate(product)
-            
+
             if interrogation.verdict == InterrogationVerdict.BLOCK:
-                self._log_event("WAVE_BLOCKED", product.product_id, {
-                    "wave_id": wave_id,
-                    "reason": "Interrogation BLOCK",
-                    "blocking_reasons": interrogation.blocking_reasons,
-                    "score": interrogation.total_score,
-                })
-                
+                self._log_event(
+                    "WAVE_BLOCKED",
+                    product.product_id,
+                    {
+                        "wave_id": wave_id,
+                        "reason": "Interrogation BLOCK",
+                        "blocking_reasons": interrogation.blocking_reasons,
+                        "score": interrogation.total_score,
+                    },
+                )
+
                 return WaveResult(
                     wave_id=wave_id,
                     product_id=product.product_id,
@@ -115,24 +171,28 @@ class WaveRunner:
                     started_at=started_at.isoformat(),
                     completed_at=datetime.now(timezone.utc).isoformat(),
                 )
-            
+
             kit = self.creative_factory.generate_kit(product, interrogation, config)
             kit_path = self._write_kit(product.product_id, wave_id, kit)
             manifest_path = self._write_manifest(product.product_id, wave_id, kit, input_hash)
             output_hash = self._compute_output_hash(kit)
-            
+
             completed_at = datetime.now(timezone.utc)
             duration = (completed_at - started_at).total_seconds()
-            
-            self._log_event("WAVE_COMPLETED", product.product_id, {
-                "wave_id": wave_id,
-                "input_hash": input_hash,
-                "output_hash": output_hash,
-                "hooks_count": len(kit["hooks"]),
-                "quality_score": kit["manifest"].quality_score,
-                "duration_seconds": duration,
-            })
-            
+
+            self._log_event(
+                "WAVE_COMPLETED",
+                product.product_id,
+                {
+                    "wave_id": wave_id,
+                    "input_hash": input_hash,
+                    "output_hash": output_hash,
+                    "hooks_count": len(kit["hooks"]),
+                    "quality_score": kit["manifest"].quality_score,
+                    "duration_seconds": duration,
+                },
+            )
+
             return WaveResult(
                 wave_id=wave_id,
                 product_id=product.product_id,
@@ -151,26 +211,36 @@ class WaveRunner:
                 interrogation_verdict=interrogation.verdict.value,
                 interrogation_score=interrogation.total_score,
             )
-            
+
         except Exception as e:
-            self._log_event("WAVE_ERROR", product.product_id, {"wave_id": wave_id, "error": str(e)})
+            error_type = type(e).__name__
+            self._log_event(
+                "WAVE_ERROR",
+                product.product_id,
+                {
+                    "wave_id": wave_id,
+                    "input_hash": input_hash,
+                    "error_code": "wave_runner_execution_error",
+                    "error_type": error_type,
+                },
+            )
             return WaveResult(
                 wave_id=wave_id,
                 product_id=product.product_id,
                 status="ERROR",
-                message=f"Error: {str(e)}",
+                message=f"WAVE_RUNNER_EXECUTION_ERROR:{error_type}",
                 input_hash=input_hash,
                 started_at=started_at.isoformat(),
                 completed_at=datetime.now(timezone.utc).isoformat(),
             )
-    
+
     def run_batch(self, products: List[ProductContext], force: bool = False, config: Optional[Dict] = None) -> List[WaveResult]:
         return [self.run(p, force=force, config=config) for p in products]
-    
+
     def _generate_wave_id(self, product_id: str) -> str:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return f"wave{WAVE_VERSION}_{product_id}_{timestamp}"
-    
+
     def _check_existing(self, product_id: str, input_hash: str) -> bool:
         for manifest_file in self.manifest_dir.glob(f"{product_id}_*.json"):
             try:
@@ -180,8 +250,15 @@ class WaveRunner:
                         return True
             except (FileNotFoundError, PermissionError):
                 continue
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+                logger.warning(
+                    "wave_runner manifest unreadable file=%s err=%s",
+                    manifest_file,
+                    type(exc).__name__,
+                )
+                continue
         return False
-    
+
     def _write_kit(self, product_id: str, wave_id: str, kit: Dict) -> Path:
         kit_data = {
             "schema_version": SCHEMA_VERSION,
@@ -201,7 +278,7 @@ class WaveRunner:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(kit_data, f, ensure_ascii=False, indent=2)
         return filepath
-    
+
     def _write_manifest(self, product_id: str, wave_id: str, kit: Dict, input_hash: str) -> Path:
         manifest = kit["manifest"]
         manifest_data = {
@@ -230,35 +307,59 @@ class WaveRunner:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(manifest_data, f, ensure_ascii=False, indent=2)
         return filepath
-    
+
     def _compute_output_hash(self, kit: Dict) -> str:
         content = json.dumps({"hooks": [h["content"] for h in kit["hooks"]]}, sort_keys=True)
         return hashlib.sha256(content.encode()).hexdigest()[:16]
-    
-    def _log_event(self, event_type: str, entity_id: str, payload: Dict):
+
+    def _log_event(self, event_type: str, entity_id: str, payload: Dict[str, Any]) -> None:
         try:
-            from synapse.infra.ledger import Ledger
-            ledger = Ledger(str(self.ledger_dir))
-            ledger.write(event_type=event_type, entity_type="product", entity_id=entity_id, payload=payload, wave_id=payload.get("wave_id", ""))
+            _append_ledger_event(self.ledger_dir, event_type, entity_id, payload)
         except Exception:
-            pass
+            logger.exception("wave_runner ledger write failed event_type=%s entity_id=%s", event_type, entity_id)
 
 
-def run_wave(product_id: str, name: str, category: str, price: float, cost: float, description: str = "", unique_features: Optional[List[str]] = None, force: bool = False) -> WaveResult:
-    product = ProductContext(product_id=product_id, name=name, category=category, price=price, cost=cost, description=description, unique_features=unique_features or [])
+def run_wave(
+    product_id: str,
+    name: str,
+    category: str,
+    price: float,
+    cost: float,
+    description: str = "",
+    unique_features: Optional[List[str]] = None,
+    force: bool = False,
+) -> WaveResult:
+    product = ProductContext(
+        product_id=product_id,
+        name=name,
+        category=category,
+        price=price,
+        cost=cost,
+        description=description,
+        unique_features=unique_features or [],
+    )
     runner = WaveRunner()
     return runner.run(product, force=force)
 
 
 def run_wave_from_csv(product_id: str, csv_path: str = "data/catalog/candidates_real.csv", force: bool = False) -> WaveResult:
     import csv
+
     csv_path = Path(csv_path)
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
+
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row.get("candidate_id") == product_id:
-                product = ProductContext(product_id=product_id, name=row.get("title", "Unknown"), category=row.get("category", "unknown"), price=float(row.get("price", 0)), cost=float(row.get("price", 0)) * 0.3)
+                product = ProductContext(
+                    product_id=product_id,
+                    name=row.get("title", "Unknown"),
+                    category=row.get("category", "unknown"),
+                    price=float(row.get("price", 0)),
+                    cost=float(row.get("price", 0)) * 0.3,
+                )
                 return WaveRunner().run(product, force=force)
+
     raise ValueError(f"Product {product_id} not found in CSV")

@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import json
+import os
 import time
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
-try:
-    from synapse.integrations.shopify_webhook import compute_shopify_hmac_sha256_base64
-except Exception:  # pragma: no cover
-    compute_shopify_hmac_sha256_base64 = None  # type: ignore
+from synapse.integrations.shopify_webhook import (
+    build_shopify_dedup_key,
+    extract_shopify_webhook_headers,
+)
+from synapse.integrations.shopify_webhook_adapter import handle_shopify_webhook_http
+from synapse.infra.refund_ledger_bridge import record_refund_in_ledger
+from synapse.infra.refund_normalizer import (
+    RefundNormalizationError,
+    normalize_shopify_refund_event,
+    refund_event_to_dict,
+)
+from synapse.infra.refund_registry import record_refund_event
 
 EXIT_OK = 0
 EXIT_BAD_REQUEST = 1
@@ -46,17 +55,6 @@ def _read_headers(headers_path: Path) -> Dict[str, str]:
     raise ValueError("headers.json must be dict or list")
 
 
-def _get_header_ci(headers: Dict[str, str], name: str) -> str:
-    for k, v in headers.items():
-        if k.lower() == name.lower():
-            return v
-    return ""
-
-
-def _build_dedup_key(shop_domain: str, webhook_id: str) -> str:
-    return f"{shop_domain}:{webhook_id}"
-
-
 def _load_dedup_list(path: Path) -> list[str]:
     if not path.exists():
         return []
@@ -81,21 +79,95 @@ def _write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _compute_hmac(secret: str, body: bytes) -> str:
-    if compute_shopify_hmac_sha256_base64 is not None:
-        return compute_shopify_hmac_sha256_base64(secret, body)
-    import hmac
-    import hashlib
+def _parse_threshold_env() -> Decimal | None:
+    env = os.environ.get("SYNAPSE_REFUND_ALERT_THRESHOLD_MXN", "").strip()
+    if env == "":
+        return None
+    try:
+        return Decimal(env)
+    except (InvalidOperation, ValueError):
+        return None
 
-    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).digest()
-    return base64.b64encode(digest).decode("ascii")
+
+def _emit_alert(text: str) -> bool:
+    try:
+        from synapse.infra.alert_wiring import get_alert_sink
+
+        sink = get_alert_sink()
+        sink.send(text)
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_refund_ledger_paths(out_dir: Path) -> tuple[Path, Path]:
+    ledger_env = os.environ.get("SYNAPSE_REFUND_LEDGER_PATH", "").strip()
+    idem_env = os.environ.get("SYNAPSE_REFUND_LEDGER_IDEMPOTENCY_PATH", "").strip()
+
+    ledger_path = Path(ledger_env) if ledger_env else (out_dir / "refund_ledger.ndjson")
+    idem_path = Path(idem_env) if idem_env else (out_dir / "refund_ledger_idempotency.json")
+    return ledger_path, idem_path
+
+
+def _process_refund_topic(body: bytes, out_dir: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(body.decode("utf-8"), parse_float=Decimal)
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as e:
+        raise RefundNormalizationError("invalid_json") from e
+
+    event = normalize_shopify_refund_event(payload, source="webhook")
+    event_dict = refund_event_to_dict(event)
+
+    event_path = out_dir / "refund_event.json"
+    registry_path = out_dir / "refund_registry.ndjson"
+    ledger_path, idem_path = _resolve_refund_ledger_paths(out_dir)
+
+    _write_json(event_path, event_dict)
+    reg = record_refund_event(registry_path, event)
+    ledger_result = record_refund_in_ledger(ledger_path, idem_path, event)
+
+    threshold = _parse_threshold_env()
+    alert_emitted = False
+    if threshold is not None and event.amount >= threshold:
+        alert_emitted = _emit_alert(
+            f"REFUND LARGE refund_id={event.refund_id} order_id={event.order_id} amount={event.amount} currency={event.currency}"
+        )
+
+    return {
+        "refund_processed": True,
+        "refund_recorded": bool(reg.recorded),
+        "refund_duplicate_by_refund_id": bool(reg.duplicate),
+        "refund_id": event.refund_id,
+        "refund_order_id": event.order_id,
+        "refund_amount": str(event.amount),
+        "refund_currency": event.currency,
+        "refund_reason": event.reason,
+        "refund_line_items_count": len(event.line_items),
+        "refund_event_path": str(event_path),
+        "refund_registry_path": str(registry_path),
+        "refund_ledger_recorded": bool(ledger_result.recorded),
+        "refund_ledger_duplicate": bool(ledger_result.duplicate),
+        "refund_ledger_path": str(ledger_result.ledger_path),
+        "refund_ledger_idempotency_path": str(ledger_result.idempotency_path),
+        "refund_ledger_line_count": int(ledger_result.ledger_line_count),
+        "refund_alert_emitted": bool(alert_emitted),
+    }
+
+
+def _decode_response_json(body: bytes) -> dict[str, Any]:
+    try:
+        decoded = json.loads(body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {"ok": False, "reason": "invalid_response_json"}
+    if isinstance(decoded, dict):
+        return decoded
+    return {"ok": False, "reason": "non_dict_response_json"}
 
 
 def main(argv: Iterable[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="shopify_webhook_cli")
 
     p.add_argument("--fixture-dir", "--fixture", dest="fixture_dir", default="")
-
     p.add_argument("--headers", "--headers-path", "--headers_file", dest="headers", default="")
     p.add_argument("--body", "--body-path", "--body_file", dest="body", default="")
     p.add_argument("--secret", "--hmac-secret", "--shared-secret", dest="secret", required=True)
@@ -106,7 +178,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = p.parse_args(list(argv) if argv is not None else None)
 
     t0 = time.perf_counter()
-
     fixture_dir = Path(args.fixture_dir) if args.fixture_dir else None
 
     if fixture_dir is not None:
@@ -127,64 +198,125 @@ def main(argv: Iterable[str] | None = None) -> int:
     headers = _read_headers(headers_path)
     body = body_path.read_bytes()
 
-    shop_domain = _get_header_ci(headers, "X-Shopify-Shop-Domain").strip()
-    webhook_id = _get_header_ci(headers, "X-Shopify-Webhook-Id").strip()
-    topic = _get_header_ci(headers, "X-Shopify-Topic").strip()
-    provided_hmac = _get_header_ci(headers, "X-Shopify-Hmac-Sha256").strip()
+    parsed_headers = extract_shopify_webhook_headers(headers)
+    shop_domain = (parsed_headers.shop_domain or "").strip()
+    webhook_id = (parsed_headers.webhook_id or "").strip()
+    topic = (parsed_headers.topic or "").strip()
+    provided_hmac = (parsed_headers.hmac_b64 or "").strip()
+    dedup_key = build_shopify_dedup_key(shop_domain, webhook_id) or ""
 
-    dedup_key = _build_dedup_key(shop_domain, webhook_id)
     hmac_valid = False
     dedup_result = "new"
 
     status_code = 400
     rc = EXIT_BAD_REQUEST
     body_json: dict[str, Any] = {"ok": False, "reason": "missing_required_headers"}
+    refund_meta: Dict[str, Any] = {
+        "refund_processed": False,
+        "refund_recorded": False,
+        "refund_duplicate_by_refund_id": False,
+        "refund_ledger_recorded": False,
+        "refund_ledger_duplicate": False,
+        "refund_alert_emitted": False,
+    }
 
     if shop_domain and webhook_id and topic and provided_hmac:
-        computed_hmac = _compute_hmac(args.secret, body)
+        http_resp = handle_shopify_webhook_http(
+            secret=args.secret,
+            headers=headers,
+            body=body,
+            dedup_set=None,
+        )
+        response_json = _decode_response_json(http_resp.body)
+        hmac_valid = http_resp.result.reason != "invalid_hmac"
 
-        import hmac as _hmac
-
-        hmac_valid = _hmac.compare_digest(provided_hmac, computed_hmac)
-        dedup_key = _build_dedup_key(shop_domain, webhook_id)
-
-        if not hmac_valid:
-            status_code = 401
-            rc = EXIT_UNAUTHORIZED
-            body_json = {"ok": False, "reason": "invalid_hmac"}
+        if not http_resp.result.accepted:
+            status_code = http_resp.status_code
+            body_json = response_json
+            if status_code == 401:
+                rc = EXIT_UNAUTHORIZED
+            elif status_code == 409:
+                rc = EXIT_DUPLICATE
+                dedup_result = "duplicate"
+            else:
+                rc = EXIT_BAD_REQUEST
         else:
+            event = http_resp.result.event
+            if event is not None:
+                shop_domain = (event.shop_domain or shop_domain).strip()
+                webhook_id = (event.webhook_id or webhook_id).strip()
+                topic = (event.topic or topic).strip()
+                dedup_key = event.dedup_key or dedup_key
+
             dedup_entries = _load_dedup_list(dedup_path)
-            if dedup_key in dedup_entries:
+            if dedup_key and dedup_key in dedup_entries:
                 status_code = 409
                 rc = EXIT_DUPLICATE
                 dedup_result = "duplicate"
                 body_json = {"ok": False, "reason": "duplicate_webhook", "dedup_key": dedup_key}
             else:
-                dedup_entries.append(dedup_key)
-                _save_dedup_list(dedup_path, dedup_entries)
-                status_code = 200
-                rc = EXIT_OK
-                dedup_result = "new"
-                body_json = {"ok": True}
+                topic_lc = topic.lower()
+                if topic_lc == "refunds/create":
+                    try:
+                        refund_meta = _process_refund_topic(body, out_dir)
+                    except RefundNormalizationError as e:
+                        status_code = 422
+                        rc = EXIT_BAD_REQUEST
+                        body_json = {
+                            "ok": False,
+                            "reason": f"refund_normalization_failed:{e}",
+                            "dedup_key": dedup_key,
+                        }
+                    except Exception as e:
+                        status_code = 500
+                        rc = EXIT_BAD_REQUEST
+                        body_json = {
+                            "ok": False,
+                            "reason": f"refund_processing_failed:{type(e).__name__}",
+                            "dedup_key": dedup_key,
+                        }
+                    else:
+                        if dedup_key:
+                            dedup_entries.append(dedup_key)
+                            _save_dedup_list(dedup_path, dedup_entries)
+                        status_code = 200
+                        rc = EXIT_OK
+                        dedup_result = "new"
+                        body_json = {
+                            "ok": True,
+                            "refund_id": refund_meta.get("refund_id"),
+                            "refund_recorded": refund_meta.get("refund_recorded"),
+                            "refund_ledger_recorded": refund_meta.get("refund_ledger_recorded"),
+                        }
+                else:
+                    if dedup_key:
+                        dedup_entries.append(dedup_key)
+                        _save_dedup_list(dedup_path, dedup_entries)
+                    status_code = 200
+                    rc = EXIT_OK
+                    dedup_result = "new"
+                    body_json = {"ok": True}
 
     (out_dir / "status_code.txt").write_text(str(status_code) + "\n", encoding="utf-8")
-    _write_json(out_dir / "response.json", {"status_code": status_code, "body_json": body_json, "dedup_key": dedup_key})
-
-    processing_ms = int((time.perf_counter() - t0) * 1000)
     _write_json(
-        out_dir / "processing_metadata.json",
-        {
-            "timestamp_utc": _utc_iso(),
-            "processing_ms": processing_ms,
-            "hmac_valid": bool(hmac_valid),
-            "hmac_algorithm": "sha256",
-            "dedup_key": dedup_key,
-            "dedup_result": dedup_result,
-            "webhook_topic": topic,
-            "shop_domain": shop_domain,
-        },
+        out_dir / "response.json",
+        {"status_code": status_code, "body_json": body_json, "dedup_key": dedup_key},
     )
 
+    processing_ms = int((time.perf_counter() - t0) * 1000)
+    processing_metadata = {
+        "timestamp_utc": _utc_iso(),
+        "processing_ms": processing_ms,
+        "hmac_valid": bool(hmac_valid),
+        "hmac_algorithm": "sha256",
+        "dedup_key": dedup_key,
+        "dedup_result": dedup_result,
+        "webhook_topic": topic,
+        "shop_domain": shop_domain,
+    }
+    processing_metadata.update(refund_meta)
+
+    _write_json(out_dir / "processing_metadata.json", processing_metadata)
     return rc
 
 

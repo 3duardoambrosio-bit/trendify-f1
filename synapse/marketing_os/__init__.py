@@ -42,3 +42,77 @@ __all__ = [
     "BlueprintGenerator", "CampaignBlueprint", "Platform", "Objective",
     "TargetingConfig", "quick_blueprint",
 ]
+# A8-R86I2 expert foundation public surface
+from .expert_foundation import (
+    ExpertAd,
+    ExpertAdSet,
+    ExpertAudience,
+    ExpertCampaignStructure,
+    ExpertHook,
+    ExpertOffer,
+    ExpertStopRules,
+    MarketingExpertPack,
+    build_marketing_expert_pack,
+    pack_to_dict,
+)
+
+_EXPERT_FOUNDATION_EXPORTS = (
+    "ExpertAd",
+    "ExpertAdSet",
+    "ExpertAudience",
+    "ExpertCampaignStructure",
+    "ExpertHook",
+    "ExpertOffer",
+    "ExpertStopRules",
+    "MarketingExpertPack",
+    "build_marketing_expert_pack",
+    "pack_to_dict",
+)
+
+__all__ = tuple(dict.fromkeys(tuple(globals().get("__all__", ())) + _EXPERT_FOUNDATION_EXPORTS))
+# A8-R87I1 first selling pack public surface
+from .selling_pack import (
+    FirstSellingPack,
+    build_first_selling_pack,
+    build_first_selling_pack_dict,
+    first_selling_pack_to_dict,
+)
+
+_SELLING_PACK_EXPORTS = (
+    "FirstSellingPack",
+    "build_first_selling_pack",
+    "build_first_selling_pack_dict",
+    "first_selling_pack_to_dict",
+)
+
+__all__ = tuple(dict.fromkeys(tuple(globals().get("__all__", ())) + _SELLING_PACK_EXPORTS))
+
+from .operator_artifact import (
+    FIRST_SELLING_PACK_ARTIFACT_BOUNDARIES,
+    FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION,
+    FirstSellingPackArtifact,
+    first_selling_pack_artifact_to_dict,
+    write_first_selling_pack_artifact,
+)
+
+try:
+    __all__ = tuple(
+        dict.fromkeys(
+            [
+                *__all__,
+                "FIRST_SELLING_PACK_ARTIFACT_BOUNDARIES",
+                "FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION",
+                "FirstSellingPackArtifact",
+                "first_selling_pack_artifact_to_dict",
+                "write_first_selling_pack_artifact",
+            ]
+        )
+    )
+except NameError:
+    __all__ = (
+        "FIRST_SELLING_PACK_ARTIFACT_BOUNDARIES",
+        "FIRST_SELLING_PACK_ARTIFACT_SCHEMA_VERSION",
+        "FirstSellingPackArtifact",
+        "first_selling_pack_artifact_to_dict",
+        "write_first_selling_pack_artifact",
+    )

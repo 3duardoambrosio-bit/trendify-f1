@@ -158,10 +158,11 @@ class AutopilotV2:
         )
 
         if capital_decision.allocated <= 0:
-            # El vault no autorizó gasto
-            # Razón puede ser not_approved o insufficient_budget
+            # Preservamos fidelidad semántica para dashboards / alerting.
             if capital_decision.reason == "not_approved":
                 reason = "not_approved_by_buyer"
+            elif capital_decision.reason == "vault_error":
+                reason = "vault_error_from_vault"
             else:
                 reason = "insufficient_budget_from_vault"
 

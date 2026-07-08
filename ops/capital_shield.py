@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 raise ImportError(
     "P0 BLOCK: ops.capital_shield (v1) está PROHIBIDO. "

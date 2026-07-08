@@ -6,11 +6,10 @@ Objetivo:
 - Sacar "qué pasó con X producto" sin abrir NDJSON a mano.
 - Reporte markdown con timeline y tabla.
 
-Compat:
-- Si existe synapse.infra.ledger.Ledger con query(), lo usamos.
-- Si no, parseamos NDJSON directo.
-
-Esto es F1 para operar y auditar rápido.
+High-integrity:
+- Usa el ledger canónico synapse.ledger_ndjson.
+- NO depende de synapse.infra.ledger.
+- Soporta leer un archivo .ndjson único o un directorio con múltiples .ndjson.
 """
 
 from __future__ import annotations
@@ -18,10 +17,14 @@ from __future__ import annotations
 from synapse.infra.cli_logging import cli_print
 
 import json
+import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
-import logging
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
+
+from synapse.ledger_ndjson import read_events
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,24 +35,30 @@ class AuditQuery:
     limit: int = 200
 
 
-def _read_ndjson_files(ledger_dir: str) -> Iterable[Dict[str, Any]]:
-    if not os.path.exists(ledger_dir):
+def _candidate_ndjson_paths(ledger_dir: str) -> List[Path]:
+    base = Path(ledger_dir)
+
+    if not base.exists():
         return []
-    files = []
-    for name in os.listdir(ledger_dir):
-        if name.lower().endswith(".ndjson"):
-            files.append(os.path.join(ledger_dir, name))
-    files.sort()
-    for fp in files:
-        with open(fp, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    yield json.loads(line)
-                except (json.JSONDecodeError, TypeError):
-                    continue
+
+    if base.is_file():
+        return [base] if base.suffix.lower() == ".ndjson" else []
+
+    paths = sorted(
+        [p for p in base.iterdir() if p.is_file() and p.suffix.lower() == ".ndjson"],
+        key=lambda p: p.name,
+    )
+    return paths
+
+
+def _read_ndjson_files(ledger_dir: str) -> Iterable[Dict[str, Any]]:
+    for path in _candidate_ndjson_paths(ledger_dir):
+        try:
+            for ev in read_events(path):
+                if isinstance(ev, dict):
+                    yield ev
+        except Exception:
+            logger.debug("suppressed exception while reading canonical ledger", exc_info=True)
 
 
 def _match(ev: Dict[str, Any], q: AuditQuery) -> bool:
@@ -61,42 +70,17 @@ def _match(ev: Dict[str, Any], q: AuditQuery) -> bool:
 
 
 def query_events(ledger_dir: str, q: AuditQuery) -> List[Dict[str, Any]]:
-    # Try Ledger API first
-    try:
-        from synapse.infra.ledger import Ledger  # type: ignore
-        led = Ledger(ledger_dir)
-        # Prefer query signature if present
-        if hasattr(led, "query"):
-            kwargs = {}
-            if q.entity_id:
-                kwargs["entity_id"] = q.entity_id
-            if q.wave_id:
-                kwargs["wave_id"] = q.wave_id
-            events = led.query(**kwargs)  # type: ignore
-            # Normalize dataclasses -> dict
-            out = []
-            for ev in events[: q.limit]:
-                if hasattr(ev, "to_dict"):
-                    out.append(ev.to_dict())  # type: ignore
-                elif hasattr(ev, "__dict__"):
-                    out.append(dict(ev.__dict__))  # type: ignore
-                else:
-                    out.append(ev)  # already dict?
-            return out[: q.limit]
-    except Exception as e:
-        logger.debug("suppressed exception", exc_info=True)
-
-    out2 = []
+    out: List[Dict[str, Any]] = []
     for ev in _read_ndjson_files(ledger_dir):
         if _match(ev, q):
-            out2.append(ev)
-            if len(out2) >= q.limit:
+            out.append(ev)
+            if len(out) >= q.limit:
                 break
-    return out2
+    return out
 
 
 def render_markdown(events: List[Dict[str, Any]], title: str = "Audit Report") -> str:
-    lines = []
+    lines: List[str] = []
     lines.append(f"# {title}")
     lines.append("")
     lines.append(f"Total events: **{len(events)}**")
@@ -105,7 +89,13 @@ def render_markdown(events: List[Dict[str, Any]], title: str = "Audit Report") -
     lines.append("|---|---|---|---|---|")
 
     for ev in events:
-        ts = str(ev.get("timestamp") or ev.get("ts") or "")
+        ts = str(
+            ev.get("timestamp")
+            or ev.get("ts")
+            or ev.get("event_time")
+            or ev.get("ingest_time")
+            or ""
+        )
         et = str(ev.get("event_type") or "")
         entity = f'{ev.get("entity_type","")}:{ev.get("entity_id","")}'
         wave = str(ev.get("wave_id") or "")
@@ -128,6 +118,7 @@ def write_report(md: str, out_path: str) -> str:
 
 def _cli() -> int:
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--ledger-dir", default="data/ledger")
     parser.add_argument("--entity-id", default="")

@@ -1,13 +1,16 @@
-# synapse/integration/__init__.py
-# Nota: no importamos módulos con CLI aquí (evita warnings de runpy).
+"""Legacy compatibility exports for synapse.integration."""
+
+from __future__ import annotations
+
 from .http_client import (
-    SimpleHttpClient,
+    HttpClientError,
     HttpRequest,
     HttpResponse,
-    HttpClientError,
-    HttpTimeoutError,
     HttpResponseError,
+    HttpTimeoutError,
+    SimpleHttpClient,
 )
+
 __all__ = [
     "SimpleHttpClient",
     "HttpRequest",

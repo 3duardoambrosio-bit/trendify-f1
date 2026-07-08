@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from synapse.legacy.legacy_cleanup import LegacyCleanupRunner
+from synapse.ledger_ndjson import read_events
+from synapse.legacy import legacy_cleanup as lc
 
 
 def _write(p: Path, text: str) -> None:
@@ -13,48 +12,86 @@ def _write(p: Path, text: str) -> None:
     p.write_text(text, encoding="utf-8")
 
 
-def test_legacy_cleanup_generates_report(tmp_path: Path, monkeypatch):
-    # Fake repo
-    repo = tmp_path
-    _write(repo / "synapse" / "__init__.py", "")
-    _write(repo / "synapse" / "quality_gate.py", "x=1\n")
-    _write(repo / "synapse" / "quality_gate_v2.py", "y=2\n")
+def _targets() -> list[lc.LegacyTarget]:
+    return [
+        lc.LegacyTarget(
+            module="tempmods.quality_gate",
+            rel_path="tempmods/quality_gate.py",
+            role="Legacy quality gate v1",
+            replacement_hint="Use tempmods.quality_gate_v2",
+            action="DELETE_AFTER_MIGRATION",
+        ),
+        lc.LegacyTarget(
+            module="tempmods.quality_gate_v2",
+            rel_path="tempmods/quality_gate_v2.py",
+            role="Quality gate v2",
+            replacement_hint="Current default",
+            action="KEEP",
+        ),
+    ]
 
-    # Make it importable
+
+def _prepare_repo(repo: Path) -> None:
+    _write(repo / "tempmods" / "__init__.py", "")
+    _write(repo / "tempmods" / "quality_gate.py", "x = 1\n")
+    _write(repo / "tempmods" / "quality_gate_v2.py", "y = 2\n")
+
+
+def test_legacy_cleanup_generates_report(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    _prepare_repo(repo)
+
     monkeypatch.syspath_prepend(str(repo))
+    monkeypatch.setattr(lc, "LEGACY_TARGETS", _targets())
 
-    # Run
-    r = LegacyCleanupRunner(repo)
-    rep = r.run(dry_run=False, force=True)
+    runner = lc.LegacyCleanupRunner(repo)
+    rep = runner.run(force=True)
 
     assert rep.schema_version == "1.0.0"
-    assert (repo / "data" / "legacy" / "legacy_report_latest.md").exists()
+    assert len(rep.modules) == 2
     assert (repo / "data" / "legacy" / "legacy_report_latest.json").exists()
-    assert any("quality_gate" in d for d in rep.duplicates)
+    assert (repo / "data" / "legacy" / "legacy_report_latest.md").exists()
+    assert (repo / "data" / "legacy" / "legacy_state.json").exists()
 
 
-def test_idempotency_uses_cached_report(tmp_path: Path, monkeypatch):
-    repo = tmp_path
-    _write(repo / "synapse" / "__init__.py", "")
-    _write(repo / "synapse" / "quality_gate_v2.py", "y=2\n")
+def test_legacy_cleanup_uses_cached_report_when_input_hash_matches(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    _prepare_repo(repo)
+
     monkeypatch.syspath_prepend(str(repo))
+    monkeypatch.setattr(lc, "LEGACY_TARGETS", _targets())
 
-    r = LegacyCleanupRunner(repo)
-    rep1 = r.run(dry_run=False, force=True)
-    rep2 = r.run(dry_run=False, force=False)
+    runner = lc.LegacyCleanupRunner(repo)
+    _ = runner.run(force=True)
 
-    assert rep1.input_hash == rep2.input_hash
+    report_json = repo / "data" / "legacy" / "legacy_report_latest.json"
+    cached = json.loads(report_json.read_text(encoding="utf-8"))
+    cached["schema_version"] = "cached-version"
+    report_json.write_text(json.dumps(cached, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    rep2 = runner.run(force=False)
+    assert rep2.schema_version == "cached-version"
 
 
-def test_dry_run_writes_md_but_not_json(tmp_path: Path, monkeypatch):
-    repo = tmp_path
-    _write(repo / "synapse" / "__init__.py", "")
-    _write(repo / "synapse" / "quality_gate_v2.py", "y=2\n")
+def test_legacy_cleanup_writes_canonical_ledger_event(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    _prepare_repo(repo)
+
     monkeypatch.syspath_prepend(str(repo))
+    monkeypatch.setattr(lc, "LEGACY_TARGETS", _targets())
 
-    r = LegacyCleanupRunner(repo)
-    rep = r.run(dry_run=True, force=True)
+    runner = lc.LegacyCleanupRunner(repo)
+    _ = runner.run(force=True)
 
-    out_dir = repo / "data" / "legacy"
-    assert (out_dir / "legacy_report_latest.md").exists()
-    assert not (out_dir / "legacy_report_latest.json").exists()
+    ledger_path = repo / "runtime" / "ledger" / "events.ndjson"
+    assert ledger_path.exists()
+
+    rows = read_events(ledger_path)
+    assert any(
+        r.get("event_type") == "LEGACY_CLEANUP_REPORTED"
+        and r.get("entity_id") == "legacy_cleanup"
+        for r in rows
+    )

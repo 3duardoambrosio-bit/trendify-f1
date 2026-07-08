@@ -1,4 +1,4 @@
-﻿# r003 — Soplador de Aire Eléctrico Recargable (Turbo Air Duster)
+# r003 — Soplador de Aire Eléctrico Recargable (Turbo Air Duster)
 
 ## DECISIÓN
 LANZAR (WINNER). Ticket alto y demo visual muy fuerte.

@@ -1,0 +1,266 @@
+{
+  "fixture_id": "a8_r109a_blocked",
+  "source_kind": "frozen_local_fixture",
+  "scenario": "blocked",
+  "product": {
+    "product_id": "dropi-mx-55207",
+    "name": "Parche Reductor Detox Nocturno",
+    "category": "salud_y_bienestar",
+    "supplier": "Dropi MX (fixture)",
+    "market": "MX",
+    "status": "blocked"
+  },
+  "decision": {
+    "outcome": "BLOCKED",
+    "permission_gate": "BLOCK",
+    "reason": "El producto depende de claims prohibidos de salud y el margen queda debajo del piso economico.",
+    "reason_codes": ["CLAIM_PROHIBITED_HEALTH", "MARGIN_BELOW_FLOOR"],
+    "caveats": [
+      "No preparar copy de venta mientras el claim central sea prohibido."
+    ]
+  },
+  "economics": {
+    "currency": "MXN",
+    "price_mxn": 299.0,
+    "compare_at_price_mxn": 0,
+    "product_cost_mxn": 142.0,
+    "shipping_cost_mxn": 89.0,
+    "payment_fee_mxn": 12.0,
+    "contribution_margin_mxn": 56.0,
+    "contribution_margin_percent": 18.7,
+    "breakeven_cpa_mxn": 56.0,
+    "notes": "Margen debajo del piso del 30% definido en la evaluacion local."
+  },
+  "scores": {
+    "opportunity_score": 4.1,
+    "threshold": 7.0,
+    "demand_signal": 6.8,
+    "competition_pressure": 7.9,
+    "logistics_risk": 5.5,
+    "claim_risk": 9.2
+  },
+  "operator_input": {
+    "target_audience": "Adultos en Mexico interesados en bienestar y perdida de peso.",
+    "pain_points": [
+      "Frustracion con dietas que no muestran resultados rapidos."
+    ],
+    "desires": [
+      "Bajar de peso sin esfuerzo percibido."
+    ],
+    "objections": [
+      "Desconfianza en productos milagro."
+    ],
+    "differentiators": [],
+    "tone_of_voice": "Aspiracional.",
+    "market_context": "Categoria saturada de productos con claims agresivos de salud.",
+    "customer_language": [],
+    "proof_elements": [],
+    "competitor_notes": ""
+  },
+  "claim_guard": {
+    "allowed_claims": [
+      "Parche adhesivo de uso nocturno segun instrucciones del fabricante."
+    ],
+    "risky_claims": [
+      "\"Acompana tu rutina de bienestar\": vago; requiere contexto para no implicar resultados."
+    ],
+    "prohibited_claims": [
+      "Reduce grasa o peso corporal.",
+      "Desintoxica el organismo.",
+      "Resultados visibles en 7 dias."
+    ],
+    "safe_wording": [
+      "No existe redaccion segura para el claim central de este producto; requiere reposicionamiento completo."
+    ],
+    "claim_guard_summary": "Riesgo critico: el valor percibido del producto depende de claims prohibidos de salud."
+  },
+  "shopify": {
+    "title": "Parche Reductor Detox Nocturno",
+    "subtitle": "",
+    "short_description": "Parche adhesivo de uso nocturno. Producto bloqueado: no publicar sin reposicionamiento aprobado.",
+    "long_description": "Producto bloqueado por claim guard. El copy comercial no se genera mientras el claim central sea prohibido. Requiere reposicionamiento y nueva evaluacion antes de preparar la tienda.",
+    "bullets": [
+      "Producto en cola de bloqueados; ver blocked_queue.",
+      "No publicar sin nueva evaluacion de claims."
+    ],
+    "benefits": [],
+    "specifications": [
+      {"name": "Presentacion", "value": "Caja con 30 parches"}
+    ],
+    "faq": [],
+    "seo_title": "",
+    "seo_meta_description": "",
+    "handle": "parche-reductor-detox-nocturno",
+    "tags": ["bloqueado", "revision-claims"],
+    "category": "Salud y Bienestar",
+    "shipping_note": "No aplica mientras el producto este bloqueado.",
+    "refund_claim_note": "No aplica mientras el producto este bloqueado.",
+    "claim_safe_disclaimer": "Este producto no puede publicarse con su claim actual.",
+    "image_checklist": [],
+    "publish_checklist": [
+      "Bloqueado: resolver claim guard antes de cualquier checklist de publicacion."
+    ],
+    "missing_inputs": ["reposicionamiento_de_claims", "margen_recalculado"]
+  },
+  "marketing": {
+    "strategy_summary": "Sin estrategia de venta activa: el producto esta bloqueado por claims prohibidos de salud.",
+    "core_angle": "No disponible: el angulo original depende de un claim prohibido.",
+    "why_this_angle": "No aplica mientras el producto este bloqueado.",
+    "buyer_profile": "No desarrollar hasta resolver el bloqueo.",
+    "hooks": [],
+    "headlines": [],
+    "primary_texts": [],
+    "short_ads": [],
+    "long_ads": [],
+    "captions": [],
+    "ugc_scripts": [],
+    "video_scripts": [],
+    "image_ad_concepts": [],
+    "channel_packs": [],
+    "testing_plan": {
+      "phase_1": "No aplica: producto bloqueado.",
+      "phase_2": "No aplica: producto bloqueado.",
+      "budget_note": "Sin gasto; sin plan de pruebas mientras exista bloqueo."
+    },
+    "angle_matrix": [],
+    "creative_hypotheses": [],
+    "claim_risk_by_copy": [
+      {
+        "copy_key": "hooks",
+        "risk_level": "prohibited",
+        "risky_terms": [],
+        "prohibited_terms": ["reduce grasa", "detox", "resultados en 7 dias"],
+        "safe_rewrite": "No existe rewrite seguro; requiere reposicionamiento completo.",
+        "reason": "El angulo central depende de claims prohibidos de salud."
+      },
+      {
+        "copy_key": "headlines",
+        "risk_level": "prohibited",
+        "risky_terms": [],
+        "prohibited_terms": ["reduce grasa", "detox"],
+        "safe_rewrite": "No existe rewrite seguro; requiere reposicionamiento completo.",
+        "reason": "El angulo central depende de claims prohibidos de salud."
+      },
+      {
+        "copy_key": "primary_texts",
+        "risk_level": "prohibited",
+        "risky_terms": [],
+        "prohibited_terms": ["desintoxica", "perdida de peso"],
+        "safe_rewrite": "No existe rewrite seguro; requiere reposicionamiento completo.",
+        "reason": "El angulo central depende de claims prohibidos de salud."
+      },
+      {
+        "copy_key": "short_ads",
+        "risk_level": "prohibited",
+        "risky_terms": [],
+        "prohibited_terms": ["reduce grasa"],
+        "safe_rewrite": "No existe rewrite seguro; requiere reposicionamiento completo.",
+        "reason": "El angulo central depende de claims prohibidos de salud."
+      },
+      {
+        "copy_key": "long_ads",
+        "risk_level": "prohibited",
+        "risky_terms": [],
+        "prohibited_terms": ["desintoxica", "resultados visibles"],
+        "safe_rewrite": "No existe rewrite seguro; requiere reposicionamiento completo.",
+        "reason": "El angulo central depende de claims prohibidos de salud."
+      }
+    ],
+    "testing_plan_v2": {
+      "first_test_budget_boundary_dry_run_only": "No aplica: producto bloqueado; sin boundary de prueba.",
+      "success_signals": [],
+      "warning_signals": [],
+      "stop_signals": [
+        "Producto bloqueado: no ejecutar ninguna prueba con el claim actual."
+      ],
+      "continue_if": [],
+      "review_if": [
+        "El operador propone un reposicionamiento sin claims de salud."
+      ],
+      "kill_if": [
+        "No existe reposicionamiento viable sin claims prohibidos."
+      ],
+      "what_not_to_conclude": [
+        "No concluir que el producto es viable mientras el claim central sea prohibido."
+      ]
+    }
+  },
+  "learning": {
+    "hypotheses": [
+      "El producto solo es viable si existe un reposicionamiento sin claims de salud."
+    ],
+    "evidence_needed": [
+      "Reposicionamiento aprobado por claim guard.",
+      "Margen recalculado sobre el piso del 30%."
+    ],
+    "first_sale_signals": [],
+    "risk_signals": [
+      "Cualquier intento de venta con el claim actual."
+    ],
+    "continue_if": [],
+    "review_if": [
+      "El operador propone un reposicionamiento sin claims de salud."
+    ],
+    "kill_if": [
+      "No existe reposicionamiento viable sin claims prohibidos.",
+      "El margen recalculado sigue debajo del piso."
+    ],
+    "operator_observations_schema": {
+      "fields": [
+        "fecha_observacion",
+        "propuesta_reposicionamiento",
+        "nota_operador"
+      ]
+    }
+  },
+  "blocked": [
+    {
+      "product_name": "Parche Reductor Detox Nocturno",
+      "reason": "Claims prohibidos de salud y margen debajo del piso economico.",
+      "reason_codes": ["CLAIM_PROHIBITED_HEALTH", "MARGIN_BELOW_FLOOR"],
+      "severity": "high",
+      "can_recover": true,
+      "operator_actions": [
+        {
+          "action_id": "repair_reposition_claims",
+          "label": "Reposicionar el producto sin claims de salud y reenviar a evaluacion.",
+          "kind": "repair_claims",
+          "target": "claim_guard.prohibited_claims",
+          "notes": "El claim central actual es irrecuperable; se requiere un angulo nuevo."
+        },
+        {
+          "action_id": "repair_renegotiate_cost",
+          "label": "Renegociar costo o envio para subir el margen sobre el piso del 30%.",
+          "kind": "repair_economics",
+          "target": "economics.contribution_margin_percent",
+          "notes": "Margen actual: 18.7%."
+        },
+        {
+          "action_id": "reject_product",
+          "label": "Rechazar el producto y sacarlo de la cola.",
+          "kind": "reject_product",
+          "target": "blocked_queue",
+          "notes": "Opcion valida si no hay reposicionamiento viable."
+        }
+      ]
+    }
+  ],
+  "operator_actions": [
+    {
+      "action_id": "review_blocked_queue",
+      "label": "Revisar la cola de bloqueados y decidir reparar o rechazar.",
+      "kind": "review_blocked",
+      "target": "blocked_queue",
+      "notes": "El operador decide; el sistema no publica ni repara solo."
+    }
+  ],
+  "evidence": {
+    "notes": [
+      "Fixture congelado A8-R109A; caso de bloqueo por claims y economia.",
+      "El bloqueo es local y determinista; no consulta servicios externos."
+    ],
+    "artifacts": [
+      "tests/fixtures/a8_r109a/blocked.json"
+    ]
+  }
+}

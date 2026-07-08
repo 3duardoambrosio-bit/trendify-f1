@@ -1,0 +1,251 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "scripts" / "synapse_control_surface.py"
+DOC = ROOT / "docs" / "local_control_surface_contract.md"
+AGENTS = ROOT / "AGENTS.md"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("synapse_control_surface", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["synapse_control_surface"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_script(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-S", str(SCRIPT), *args],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        timeout=15,
+    )
+
+
+
+
+
+def run_control_surface(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "scripts/synapse_control_surface.py", *args],
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+
+def test_local_control_surface_catalog_is_guarded() -> None:
+    module = load_module()
+    catalog = module.build_catalog(python_executable="python")
+    errors = module.validate_catalog(catalog)
+
+    assert errors == []
+    assert len(catalog) >= 6
+    assert len({command.command_id for command in catalog}) == len(catalog)
+
+    for command in catalog:
+        assert command.read_only is True
+        assert command.requires_secrets is False
+        assert command.live_allowed is False
+        assert command.writes_repo is False
+        assert ("--help" in command.argv) or command.functional_read_only is True
+
+
+def test_local_control_surface_forces_no_live_environment() -> None:
+    module = load_module()
+    env = module.build_guarded_env({})
+
+    assert env["SYNAPSE_DRY_RUN"] == "1"
+    assert env["SYNAPSE_NO_LIVE"] == "1"
+    assert env["SYNAPSE_ALLOW_NETWORK"] == "0"
+    assert env["SYNAPSE_ALLOW_SPEND"] == "0"
+    assert env["SYNAPSE_CONTROL_SURFACE"] == "LOCAL_ONLY"
+    assert env["SHOPIFY"] == "PAUSED"
+
+
+def test_local_control_surface_rejects_unknown_command() -> None:
+    module = load_module()
+    catalog = module.build_catalog(python_executable="python")
+
+    try:
+        module.get_command("rm_rf_everything", catalog)
+    except KeyError as exc:
+        assert "unknown local control command" in str(exc)
+    else:
+        raise AssertionError("unknown command was not rejected")
+
+
+def test_local_control_surface_cli_modes_work_without_sitecustomize() -> None:
+    check = run_script("--check")
+    assert check.returncode == 0
+    assert "LOCAL_CONTROL_SURFACE_OK=1" in check.stdout
+    assert "LIVE=0" in check.stdout
+    assert "SPEND=0" in check.stdout
+    assert "SECRETS=0" in check.stdout
+    assert "SHOPIFY=PAUSED" in check.stdout
+
+    listed = run_script("--list")
+    assert listed.returncode == 0
+    assert "phase1_ready_help" in listed.stdout
+    assert "ops_summary_help" in listed.stdout
+
+    json_out = run_script("--json")
+    assert json_out.returncode == 0
+    payload = json.loads(json_out.stdout)
+    assert isinstance(payload, list)
+    assert len(payload) >= 6
+    assert all(item["live_allowed"] is False for item in payload)
+    assert all(item["requires_secrets"] is False for item in payload)
+
+
+def test_local_control_surface_contract_docs_are_present() -> None:
+    doc = DOC.read_text(encoding="utf-8")
+
+    assert "Local Control Surface Contract" in doc
+    assert "scripts/synapse_control_surface.py" in doc
+    assert "ARBITRARY_SHELL=0" in doc
+    assert "SHOPIFY=PAUSED" in doc
+    assert "TOKEN_INPUT=0" in doc
+    assert "API_WRITE_ACTIONS=0" in doc
+
+
+def test_local_control_surface_is_referenced_from_agents() -> None:
+    agents = AGENTS.read_text(encoding="utf-8")
+
+    assert "docs/local_control_surface_contract.md" in agents
+    assert "scripts/synapse_control_surface.py" in agents
+    assert "no-live" in agents.lower()
+    assert "no-spend" in agents.lower()
+    assert "no-secrets" in agents.lower()
+
+
+def test_local_control_surface_exposes_local_health_command() -> None:
+    module = load_module()
+    catalog = module.build_catalog(python_executable="python")
+    command = module.get_command("local_health", catalog)
+
+    assert command.category == "health"
+    assert command.read_only is True
+    assert command.requires_secrets is False
+    assert command.live_allowed is False
+    assert command.writes_repo is False
+    assert command.functional_read_only is True
+    assert "--health" in command.argv
+
+
+def test_local_health_runs_through_whitelisted_control_surface() -> None:
+    completed = run_script("--run", "local_health")
+
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+
+    assert payload["schema"] == "synapse.local_control_surface.health.v1"
+    assert payload["control_surface"]["ok"] is True
+    assert payload["control_surface"]["local_only"] is True
+    assert payload["control_surface"]["catalog_count"] >= 8
+    assert "local_health" in payload["control_surface"]["command_ids"]
+
+    assert payload["boundaries"]["SYNAPSE_DRY_RUN"] == "1"
+    assert payload["boundaries"]["SYNAPSE_NO_LIVE"] == "1"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_NETWORK"] == "0"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_SPEND"] == "0"
+    assert payload["boundaries"]["SYNAPSE_CONTROL_SURFACE"] == "LOCAL_ONLY"
+    assert payload["boundaries"]["SHOPIFY"] == "PAUSED"
+
+    assert payload["required_files"]["docs/local_control_surface_contract.md"] is True
+    assert payload["required_files"]["scripts/synapse_control_surface.py"] is True
+    assert payload["operator_gate"]["gate"] == "G3_FIRST_FUNCTIONAL_READ_ONLY_COMMAND"
+    assert payload["operator_gate"]["status"] == "PASS"
+
+
+
+def test_local_control_surface_exposes_local_recent_decisions_command() -> None:
+    result = run_control_surface("--json")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    if isinstance(payload, list):
+        command_ids = {item.get("id") or item.get("command_id") or item.get("name") for item in payload}
+    else:
+        command_ids = {item.get("id") or item.get("command_id") or item.get("name") for item in payload.get("commands", [])}
+    assert "local_recent_decisions" in command_ids
+
+
+def test_local_recent_decisions_runs_read_only_json() -> None:
+    result = run_control_surface("--run", "local_recent_decisions")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["command_id"] == "local_recent_decisions"
+    assert payload["source"] == "data/ledger/events.ndjson"
+    assert isinstance(payload["source_exists"], bool)
+    assert isinstance(payload["count"], int)
+    assert isinstance(payload["decisions"], list)
+    assert isinstance(payload["errors"], list)
+
+
+
+def test_local_control_surface_exposes_local_safety_status_command() -> None:
+    result = run_control_surface("--json")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    commands = payload if isinstance(payload, list) else payload.get("commands", [])
+    command_by_id = {
+        item.get("id") or item.get("command_id") or item.get("name"): item
+        for item in commands
+    }
+    assert "local_safety_status" in command_by_id
+    assert command_by_id["local_safety_status"]["functional_read_only"] is True
+    assert command_by_id["local_safety_status"]["category"] == "health"
+
+
+def test_local_safety_status_runs_read_only_json() -> None:
+    result = run_control_surface("--run", "local_safety_status")
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["command_id"] == "local_safety_status"
+    assert payload["local_only"] is True
+    assert payload["read_only"] is True
+    assert payload["live_allowed"] is False
+    assert payload["network_allowed"] is False
+    assert payload["spend_allowed"] is False
+    assert payload["dry_run_effective"] is True
+    assert payload["shopify"] == "PAUSED"
+    assert payload["boundaries"]["SYNAPSE_CONTROL_SURFACE"] == "LOCAL_ONLY"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_NETWORK"] == "0"
+    assert payload["boundaries"]["SYNAPSE_ALLOW_SPEND"] == "0"
+    assert payload["boundaries"]["SYNAPSE_DRY_RUN"] == "1"
+    assert payload["boundaries"]["SYNAPSE_NO_LIVE"] == "1"
+    assert isinstance(payload["kill_switch"], dict)
+    assert isinstance(payload["capital_shield"], dict)
+    assert isinstance(payload["safety_modules"], dict)
+    assert isinstance(payload["sources"], list)
+    assert isinstance(payload["errors"], list)
+
+
+def test_local_safety_status_direct_flag_matches_run_shape() -> None:
+    direct = run_control_surface("--safety-status")
+    via_run = run_control_surface("--run", "local_safety_status")
+    assert direct.returncode == 0
+    assert via_run.returncode == 0
+    direct_payload = json.loads(direct.stdout)
+    via_run_payload = json.loads(via_run.stdout)
+    assert direct_payload["command_id"] == "local_safety_status"
+    assert via_run_payload["command_id"] == "local_safety_status"
+    assert direct_payload["boundaries"] == via_run_payload["boundaries"]
+    assert direct_payload["live_allowed"] is False
+    assert direct_payload["network_allowed"] is False
+    assert direct_payload["spend_allowed"] is False

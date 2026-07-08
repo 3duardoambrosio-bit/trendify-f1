@@ -1,0 +1,124 @@
+# A8-R43F Low Risk Debt Marker Registry
+
+## Summary
+
+- MODE=LOCAL_ONLY_CODE_HARDENING
+- BASE_HEAD=06fd84f
+- LOW_RISK_COUNT=107
+- UNMANAGED_LOW_RISK_COUNT=0
+- CONTROLLED_SURFACE_EXCLUSION_COUNT=9
+- DECISION=register before cleanup
+
+## Rule
+
+Low-risk debt markers are allowed only when registered or inside controlled registry surfaces. Cleanup must not change runtime behavior.
+
+## Entries
+
+- docs/go_no_go_template.md:11 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Date | TODO |
+- docs/go_no_go_template.md:12 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Operator | TODO |
+- docs/go_no_go_template.md:13 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Branch | TODO |
+- docs/go_no_go_template.md:14 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | HEAD | TODO |
+- docs/go_no_go_template.md:15 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | PC_READY_SCORE | TODO |
+- docs/go_no_go_template.md:18 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Human signature | TODO |
+- docs/go_no_go_template.md:19 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Signature timestamp (UTC ISO 8601) | TODO |
+- docs/go_no_go_template.md:20 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | GO valid until (UTC ISO 8601, max 72h after signature) | TODO |
+- docs/go_no_go_template.md:21 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Template HEAD at signature | TODO |
+- docs/go_no_go_template.md:27 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Full test suite RC | 0 | TODO | no-check |
+- docs/go_no_go_template.md:28 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Worktree clean | 1 | TODO | no-check |
+- docs/go_no_go_template.md:29 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Current HEAD recorded | 1 | TODO | no-check |
+- docs/go_no_go_template.md:30 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Evidence ZIP available | 1 | TODO | no-check |
+- docs/go_no_go_template.md:31 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | No live secrets exposed in docs/chat | 1 | TODO | no-check |
+- docs/go_no_go_template.md:32 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | No live spend executed before sign-off | 1 | TODO | no-check |
+- docs/go_no_go_template.md:38 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Facebook Page ready | 1 | TODO | no-check |
+- docs/go_no_go_template.md:39 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Instagram Business connected | 1 | TODO | no-check |
+- docs/go_no_go_template.md:40 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Shopify store ready | 1 | TODO | no-check |
+- docs/go_no_go_template.md:41 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Supplier / Dropi path ready | 1 | TODO | no-check |
+- docs/go_no_go_template.md:42 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | First SKU selected | 1 | TODO | no-check |
+- docs/go_no_go_template.md:43 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Creatives ready | 1 | TODO | no-check |
+- docs/go_no_go_template.md:44 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Monitoring runbook ready | 1 | TODO | no-check |
+- docs/go_no_go_template.md:45 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Kill switch verified by executable test | 1 | TODO | no-check |
+- docs/go_no_go_template.md:46 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Customer support path ready | 1 | TODO | no-check |
+- docs/go_no_go_template.md:47 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Refund process documented | 1 | TODO | no-check |
+- docs/go_no_go_template.md:53 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Capital reserved | TODO |
+- docs/go_no_go_template.md:54 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Capital allowed to risk | TODO |
+- docs/go_no_go_template.md:55 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Daily spend cap | TODO |
+- docs/go_no_go_template.md:56 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Campaign spend cap | TODO |
+- docs/go_no_go_template.md:57 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Stop-loss amount | TODO |
+- docs/go_no_go_template.md:58 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Stop-loss condition | TODO |
+- docs/go_no_go_template.md:59 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Maximum acceptable loss before pause | TODO |
+- docs/go_no_go_template.md:60 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Review frequency | TODO |
+- docs/go_no_go_template.md:66 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | SKU name | TODO |
+- docs/go_no_go_template.md:67 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Supplier | TODO |
+- docs/go_no_go_template.md:68 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Sale price | TODO |
+- docs/go_no_go_template.md:69 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Unit cost | TODO |
+- docs/go_no_go_template.md:70 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Gross margin | TODO |
+- docs/go_no_go_template.md:71 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Shipping assumption | TODO |
+- docs/go_no_go_template.md:72 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Refund assumption | TODO |
+- docs/go_no_go_template.md:73 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Stock assumption | TODO |
+- docs/go_no_go_template.md:74 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Primary buyer angle | TODO |
+- docs/go_no_go_template.md:75 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Main risk | TODO |
+- docs/go_no_go_template.md:81 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | Spend exceeds declared cap | TODO | human |
+- docs/go_no_go_template.md:94 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — Reason: TODO
+- docs/go_no_go_template.md:96 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — Human signature: TODO
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:46 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — **Timing risks:** Todo funciona individualmente pero los tiempos reales
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:197 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | **Customer Experience** | 0.5 | WhatsApp en plan (S18). Falta: auto-reply "¿dónde está?", OXXO reminders, cart recovery, COD confirmation, review pipeline. Todo en plan, nada construido. |
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:199 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | **System Resilience** | 3.0 | Circuit breakers, retry policies, idempotency, doctor command, structured logging existen. Falta: PSP failover, graceful shutdown mid-pipeline, secret rotation, backup strategy. Sólido pero no a prueba de tod
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:319 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — **Consecuencia:** Monitor dice "ROAS 2.2, todo bien". Pero estás perdiendo
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:460 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — Es como un seguro: no genera revenue, pero evita perder TODO el revenue.
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:462 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — (todo el revenue). Prevención: ~2h de implementación.
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:635 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — | 4 | Account Health + Warm-Up | S10/S12 | Sin esto, un ban mata todo |
+- docs/strategy/SYNAPSE_STRATEGIC_ANALYSIS_v1.md:638 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — **Todo lo demás es importante. Estas 5 son existenciales.**
+- docs/tests/marketing_os/test_interrogation_engine.py:395 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — name="Pastilla Cura Todo FDA",
+- docs/tests/marketing_os/test_quality_filter.py:95 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — """Todo mayúsculas debe detectarse."""
+- docs/tests/marketing_os/test_quality_filter.py:276 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — """Reset debe limpiar todo."""
+- scripts/bitacora_cli.py:49 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — # No rompemos todo por una línea corrupta
+- scripts/build_canonical_from_dropi_v2.py:13 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — B) legacy "items": lista de productos (usado por tests)
+- scripts/build_canonical_from_dropi_v2.py:116 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — source_raw: Any  # dict (v3 o legacy-normalizado) o string/None (v2)
+- scripts/build_canonical_from_dropi_v2.py:120 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — # v3/legacy: images: [{url:...}] / [{src:...}] / [{link:...}]
+- scripts/build_canonical_from_dropi_v2.py:139 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — Soporte legacy: dump = {"items":[{id,title,description,price,...}]}
+- scripts/build_canonical_from_dropi_v2.py:191 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — # B) legacy items
+- scripts/canonical_quality_gate.py:32 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — - LEGACY:
+- scripts/sanitize_evidence_images.py:81 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — # Recorremos todo, pero si la key huele a imagen, igual lo limpiamos
+- tests/integrations/test_dropi_order_forwarder.py:180 [TEMPORARY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — tr = DummyTransport(responses=[(503, b"temporary"), (201, b'{"ok":true}')])
+- tests/legacy/test_legacy_cleanup.py:7 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — from synapse.legacy import legacy_cleanup as lc
+- tests/legacy/test_legacy_cleanup.py:20 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — role="Legacy quality gate v1",
+- tests/legacy/test_legacy_cleanup.py:53 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert (repo / "data" / "legacy" / "legacy_report_latest.json").exists()
+- tests/legacy/test_legacy_cleanup.py:54 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert (repo / "data" / "legacy" / "legacy_report_latest.md").exists()
+- tests/legacy/test_legacy_cleanup.py:55 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert (repo / "data" / "legacy" / "legacy_state.json").exists()
+- tests/legacy/test_legacy_cleanup.py:69 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — report_json = repo / "data" / "legacy" / "legacy_report_latest.json"
+- tests/marketing_os/test_interrogation_engine.py:394 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — name="Pastilla Cura Todo FDA",
+- tests/marketing_os/test_quality_filter.py:94 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — """Todo mayúsculas debe detectarse."""
+- tests/marketing_os/test_quality_filter.py:275 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — """Reset debe limpiar todo."""
+- tests/marketing_os/test_wave_runner.py:112 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — description="Cura todo milagro garantizado",
+- tests/meta/test_a8_r38_product_candidate_contract_surface.py:94 [FIXME] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — if re.search(r"\b(FIXME|HACK)\b", text):
+- tests/meta/test_a8_r38_product_candidate_contract_surface.py:94 [HACK] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — if re.search(r"\b(FIXME|HACK)\b", text):
+- tests/meta/test_creative_gate_pipeline.py:181 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — """Products without kit_dir should still work (legacy path)."""
+- tests/meta/test_creative_gate_pipeline.py:185 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — sku="SKU-LEGACY",
+- tests/meta/test_publisher_adapter_live_contract.py:140 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — _campaign_payload_to_api_dict({"name": "Mapping Payload", forbidden_key: "legacy"})
+- tests/meta/test_publisher_contracts.py:118 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — payload = MetaCampaignPayload(name="Forbidden Runtime Key", extra={forbidden_key: "legacy"})
+- tests/meta/test_publisher_contracts.py:125 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — request = MetaPauseRequest(campaign_id="camp-123", extra={forbidden_key: "legacy"})
+- tests/meta/test_publisher_contracts.py:134 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — targeting={"geo_locations": {"countries": ["MX"]}, forbidden_key: "legacy"},
+- tests/meta/test_publisher_contracts.py:147 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — targeting={"nested": NestedTargeting(instagram_actor_id="legacy")},
+- tests/meta/test_publisher_contracts.py:160 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — self.instagram_actor_id = "legacy"
+- tests/meta/test_publisher_contracts.py:177 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — return {"interests": ["legacy"]}
+- tests/meta/test_publisher_contracts.py:196 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — "legacy echo",
+- tests/meta/test_publisher_contracts.py:197 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — api_response={"data": {"instagram_actor_id": "legacy"}},
+- tests/meta/test_publisher_contracts.py:201 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert response.api_response == {"data": {"instagram_actor_id": "legacy"}}
+- tests/meta/test_publisher_contracts.py:213 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — "legacy echo",
+- tests/meta/test_publisher_contracts.py:214 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — api_response={"data": {"interests": ["legacy"]}},
+- tests/meta/test_publisher_contracts.py:218 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert response.api_response == {"data": {"interests": ["legacy"]}}
+- tests/meta/test_publisher_contracts.py:236 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — "legacy echo",
+- tests/meta/test_publisher_contracts.py:237 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — api_response={"data": {"instagram_actor_id": "legacy"}},
+- tests/meta/test_publisher_contracts.py:248 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert "legacy" not in text
+- tests/meta/test_publisher_contracts.py:268 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — "legacy echo",
+- tests/meta/test_publisher_contracts.py:269 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — api_response={"data": {"interests": ["legacy"]}},
+- tests/meta/test_publisher_contracts.py:280 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert "legacy" not in text
+- tests/p0/test_gate_l4.py:180 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — operation_id="op-outside-legacy",
+- tests/p0/test_operational_docs_present.py:85 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — assert text.count("TODO") >= 20
+- tests/p0/test_runner_l4.py:98 [TODO] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — #  NO fixtures aquí. Todo adentro para evitar HealthCheck.
+- tools/a8_r42_supplier_validation_shell.py:136 [TBD] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — supplier_name="TBD",
+- tools/check_spend_gateway_idempotency_contract.ps1:36 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — # 2) Legacy log literal MUST be absent
+- tools/check_spend_gateway_idempotency_contract.ps1:37 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — $legacy = Select-String -Path .\ops\spend_gateway_v1.py -Pattern 'idempotency hit for key=%s' -Quiet
+- tools/check_spend_gateway_idempotency_contract.ps1:38 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — Write-Host ("legacy_idem_log_found=" + $legacy)
+- tools/check_spend_gateway_idempotency_contract.ps1:39 [LEGACY] REGISTERED_LOW_RISK_NO_RUNTIME_ACTION_REQUIRED — if ($legacy) { exit 1 }

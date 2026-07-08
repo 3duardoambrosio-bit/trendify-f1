@@ -12,7 +12,7 @@ def test_adapter_accepts_ok_and_returns_json():
     h = compute_shopify_hmac_sha256_base64(secret, body)
 
     headers = {
-        "x-shopify-hmac-sha256": h,  # lower-case to prove case-insensitive path works
+        "x-shopify-hmac-sha256": h,
         "X-Shopify-Webhook-Id": "wh_1",
         "X-Shopify-Topic": "orders/create",
         "X-Shopify-Shop-Domain": "example.myshopify.com",
@@ -26,6 +26,8 @@ def test_adapter_accepts_ok_and_returns_json():
     assert data["webhook_id"] == "wh_1"
     assert data["topic"] == "orders/create"
     assert data["shop_domain"] == "example.myshopify.com"
+    assert resp.result.event is not None
+    assert resp.result.event.dedup_key == "example.myshopify.com:wh_1"
 
 
 def test_adapter_rejects_invalid_hmac_401():
@@ -38,6 +40,46 @@ def test_adapter_rejects_invalid_hmac_401():
     data = json.loads(resp.body.decode("utf-8"))
     assert data["ok"] is False
     assert data["reason"] == "invalid_hmac"
+    assert resp.headers["x-synapse-reason"] == "invalid_hmac"
+
+
+def test_adapter_rejects_empty_body_400():
+    secret = "shpss_test_secret"
+    body = b""
+    h = compute_shopify_hmac_sha256_base64(secret, body)
+
+    headers = {
+        "X-Shopify-Hmac-Sha256": h,
+        "X-Shopify-Webhook-Id": "wh_empty",
+        "X-Shopify-Topic": "orders/create",
+        "X-Shopify-Shop-Domain": "example.myshopify.com",
+    }
+
+    resp = handle_shopify_webhook_http(secret=secret, headers=headers, body=body, dedup_set=set())
+    assert resp.status_code == 400
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["ok"] is False
+    assert data["reason"] == "empty_body"
+    assert resp.headers["x-synapse-reason"] == "empty_body"
+
+
+def test_adapter_rejects_missing_webhook_id_400():
+    secret = "shpss_test_secret"
+    body = b'{"x":1}'
+    h = compute_shopify_hmac_sha256_base64(secret, body)
+
+    headers = {
+        "X-Shopify-Hmac-Sha256": h,
+        "X-Shopify-Topic": "orders/create",
+        "X-Shopify-Shop-Domain": "example.myshopify.com",
+    }
+
+    resp = handle_shopify_webhook_http(secret=secret, headers=headers, body=body, dedup_set=set())
+    assert resp.status_code == 400
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["ok"] is False
+    assert data["reason"] == "missing_webhook_id"
+    assert resp.headers["x-synapse-reason"] == "missing_webhook_id"
 
 
 def test_adapter_dedup_409():
@@ -45,7 +87,11 @@ def test_adapter_dedup_409():
     body = b'{"x":1}'
     h = compute_shopify_hmac_sha256_base64(secret, body)
 
-    headers = {"X-Shopify-Hmac-Sha256": h, "X-Shopify-Webhook-Id": "wh_dup"}
+    headers = {
+        "X-Shopify-Hmac-Sha256": h,
+        "X-Shopify-Webhook-Id": "wh_dup",
+        "X-Shopify-Shop-Domain": "example.myshopify.com",
+    }
     d = set()
 
     r1 = handle_shopify_webhook_http(secret=secret, headers=headers, body=body, dedup_set=d)
@@ -56,3 +102,23 @@ def test_adapter_dedup_409():
     data = json.loads(r2.body.decode("utf-8"))
     assert data["ok"] is False
     assert data["reason"] == "duplicate_webhook"
+
+
+def test_adapter_rejects_invalid_json_400():
+    secret = "shpss_test_secret"
+    body = b'{"x":'
+    h = compute_shopify_hmac_sha256_base64(secret, body)
+
+    headers = {
+        "X-Shopify-Hmac-Sha256": h,
+        "X-Shopify-Webhook-Id": "wh_bad_json",
+        "X-Shopify-Topic": "orders/create",
+        "X-Shopify-Shop-Domain": "example.myshopify.com",
+    }
+
+    resp = handle_shopify_webhook_http(secret=secret, headers=headers, body=body, dedup_set=set())
+    assert resp.status_code == 400
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["ok"] is False
+    assert data["reason"] == "invalid_json"
+    assert resp.headers["x-synapse-reason"] == "invalid_json"

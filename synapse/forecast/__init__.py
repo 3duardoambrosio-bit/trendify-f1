@@ -1,4 +1,4 @@
-﻿"""
+"""
 synapse.forecast
 
 Forecast primitives used by tools and future automation.

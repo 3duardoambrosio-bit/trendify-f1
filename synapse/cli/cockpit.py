@@ -214,7 +214,7 @@ def _cmd_last_ledger(
 ) -> None:
     if ledger_path is None:
         ledger_path = os.environ.get(
-            "SYNAPSE_LEDGER_PATH", "data/ledger/ledger.ndjson",
+            "SYNAPSE_LEDGER_PATH", "data/ledger/events.ndjson",
         )
     p = Path(ledger_path)
     if not p.exists():

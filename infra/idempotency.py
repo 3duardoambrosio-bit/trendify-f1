@@ -1,232 +1,204 @@
-"""Idempotency guard backed by SQLite (stdlib, WAL).
-
-execute_once(key, operation):
-- missing -> insert PROCESSING, run op, store COMPLETED
-- COMPLETED -> return cached (DUPLICATE), DO NOT re-execute
-- FAILED -> retry allowed (delete + re-execute)
-- PROCESSING -> ConflictError (in flight)
-
-TTL: 24 hours (cleanup on access)
-"""
-
 from __future__ import annotations
 
+import hashlib
 import json
-import os
 import sqlite3
-from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
-from typing import Any, Callable, Optional, Tuple
+import time
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
 
-import deal
+STATUS_PROCESSING = "PROCESSING"
+STATUS_COMPLETED = "COMPLETED"
+STATUS_IN_FLIGHT = "IN_FLIGHT"
+STATUS_FAILED = "FAILED"
+STATUS_CONFLICT = "CONFLICT"
+STATUS_DUPLICATE = "DUPLICATE"
 
-_TTL_HOURS = 24
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS idempotency (
-    key TEXT PRIMARY KEY,
-    status TEXT NOT NULL CHECK(status IN ('PROCESSING','COMPLETED','FAILED')),
-    result TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-"""
+DEFAULT_DB_PATH = Path("runtime/idempotency/idempotency.sqlite3")
+DEFAULT_TTL_SECONDS = 600
 
 
-class ConflictError(RuntimeError):
-    """Raised when an operation with the same key is already PROCESSING."""
-    pass
+def _now() -> float:
+    return time.time()
 
 
-@dataclass(frozen=True, slots=True)
-class IdempotencyResult:
-    key: str
-    status: str  # COMPLETED | FAILED | DUPLICATE
-    result: Any
-    was_cached: bool
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+def payload_checksum(value: Any) -> str:
+    raw = _canonical_json(value).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
-def _cutoff_iso() -> str:
-    cutoff = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=_TTL_HOURS)
-    return cutoff.isoformat()
+def error_checksum(exc: BaseException) -> str:
+    raw = f"{type(exc).__name__}:{exc}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
-def _json_dumps(x: Any) -> str:
-    return json.dumps(x, sort_keys=True, separators=(",", ":"))
+@contextmanager
+def _connect(db_path: Path):
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS idempotency_keys (
+                key TEXT PRIMARY KEY,
+                payload_checksum TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                ttl_seconds INTEGER NOT NULL,
+                response_checksum TEXT,
+                response_blob TEXT,
+                error_checksum TEXT
+            )
+            """
+        )
+        yield conn
+    finally:
+        conn.close()
 
 
-def _json_loads(s: str) -> Any:
-    return json.loads(s)
+def _get_row(conn: sqlite3.Connection, key: str) -> Optional[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    return conn.execute(
+        "SELECT * FROM idempotency_keys WHERE key = ?",
+        (key,),
+    ).fetchone()
 
 
-class IdempotencyGuard:
-    """SQLite-backed idempotency for financial operations."""
-    @deal.pre(lambda self, db_path="data/idempotency.db": isinstance(db_path, str) and db_path.strip() != "", message="db_path required")
-    @deal.post(lambda result: result is None, message="returns None")
+def _encode_response(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    return _canonical_json(value)
 
-    def __init__(self, db_path: str = "data/idempotency.db") -> None:
-        self._db_path = db_path
-        d = os.path.dirname(db_path)
-        if d:
-            os.makedirs(d, exist_ok=True)
-        c = self._connect()
-        c.close()
 
-    def _connect(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self._db_path, timeout=30, isolation_level=None)
-        try:
-            c.execute("PRAGMA journal_mode=WAL")
-            c.execute("PRAGMA synchronous=NORMAL")
-            c.execute(_SCHEMA)
-        except sqlite3.Error:
-            c.close()
-            raise
-        return c
+def _decode_response(value: Optional[str]) -> Any:
+    if not value:
+        return None
+    return json.loads(value)
 
-    def _clean_expired(self, c: sqlite3.Connection) -> None:
-        c.execute("DELETE FROM idempotency WHERE updated_at < ?", (_cutoff_iso(),))
 
-    def _get(self, c: sqlite3.Connection, key: str) -> Optional[Tuple[str, Optional[str]]]:
-        row = c.execute(
-            "SELECT status, result FROM idempotency WHERE key=?",
-            (key,),
-        ).fetchone()
+def read_state(key: str, *, db_path: Path = DEFAULT_DB_PATH) -> Dict[str, Any]:
+    with _connect(db_path) as conn:
+        row = _get_row(conn, key)
+
+    if row is None:
+        return {"status": "MISSING", "key": key}
+
+    return {
+        "status": row["status"],
+        "key": row["key"],
+        "payload_checksum": row["payload_checksum"],
+        "response_checksum": row["response_checksum"],
+        "response": _decode_response(row["response_blob"]),
+        "error_checksum": row["error_checksum"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "ttl_seconds": row["ttl_seconds"],
+    }
+
+
+def execute_once(
+    key: str,
+    payload: Any,
+    operation: Callable[[Any], Any],
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+) -> Dict[str, Any]:
+    checksum = payload_checksum(payload)
+    now = _now()
+
+    with _connect(db_path) as conn:
+        row = _get_row(conn, key)
+
         if row is None:
-            return None
-        return str(row[0]), (None if row[1] is None else str(row[1]))
+            conn.execute(
+                """
+                INSERT INTO idempotency_keys (
+                    key, payload_checksum, status, created_at, updated_at, ttl_seconds
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (key, checksum, STATUS_PROCESSING, now, now, ttl_seconds),
+            )
+            conn.commit()
+        else:
+            if row["payload_checksum"] != checksum:
+                return {
+                    "status": STATUS_CONFLICT,
+                    "key": key,
+                    "payload_checksum": checksum,
+                    "existing_payload_checksum": row["payload_checksum"],
+                }
 
-    def _delete(self, c: sqlite3.Connection, key: str) -> None:
-        c.execute("DELETE FROM idempotency WHERE key=?", (key,))
+            status = row["status"]
 
-    def _insert_processing(self, c: sqlite3.Connection, key: str) -> None:
-        now = _now_iso()
-        c.execute(
-            "INSERT INTO idempotency(key,status,result,created_at,updated_at) VALUES (?,?,?,?,?)",
-            (key, "PROCESSING", None, now, now),
+            if status == STATUS_COMPLETED:
+                return {
+                    "status": STATUS_DUPLICATE,
+                    "key": key,
+                    "response_checksum": row["response_checksum"],
+                    "response": _decode_response(row["response_blob"]),
+                }
+
+            if status == STATUS_PROCESSING:
+                return {
+                    "status": STATUS_IN_FLIGHT,
+                    "key": key,
+                }
+
+            if status == STATUS_FAILED:
+                conn.execute(
+                    """
+                    UPDATE idempotency_keys
+                    SET status = ?, updated_at = ?, ttl_seconds = ?
+                    WHERE key = ?
+                    """,
+                    (STATUS_PROCESSING, _now(), ttl_seconds, key),
+                )
+                conn.commit()
+
+    try:
+        result = operation(payload)
+    except Exception as exc:
+        err = error_checksum(exc)
+        with _connect(db_path) as conn:
+            conn.execute(
+                """
+                UPDATE idempotency_keys
+                SET status = ?, updated_at = ?, response_checksum = NULL,
+                    response_blob = NULL, error_checksum = ?
+                WHERE key = ?
+                """,
+                (STATUS_FAILED, _now(), err, key),
+            )
+            conn.commit()
+        raise
+
+    encoded = _encode_response(result)
+    response_ck = payload_checksum(result)
+
+    with _connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE idempotency_keys
+            SET status = ?, updated_at = ?, response_checksum = ?,
+                response_blob = ?, error_checksum = NULL
+            WHERE key = ?
+            """,
+            (STATUS_COMPLETED, _now(), response_ck, encoded, key),
         )
+        conn.commit()
 
-    def _update(self, c: sqlite3.Connection, key: str, status: str, payload: Optional[str]) -> None:
-        now = _now_iso()
-        c.execute(
-            "UPDATE idempotency SET status=?, result=?, updated_at=? WHERE key=?",
-            (status, payload, now, key),
-        )
-
-    def _duplicate(self, key: str, payload: str) -> IdempotencyResult:
-        try:
-            cached = _json_loads(payload)
-        except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            raise ValueError("IDEMPOTENCY_BAD_JSON") from exc
-        return IdempotencyResult(key=key, status="DUPLICATE", result=cached, was_cached=True)
-
-    def _claim_key(self, key: str) -> Optional[IdempotencyResult]:
-        c = self._connect()
-        try:
-            self._clean_expired(c)
-            row = self._get(c, key)
-            if row is not None:
-                st, payload = row
-                if st == "COMPLETED":
-                    if payload is None:
-                        raise ValueError("IDEMPOTENCY_CORRUPT_RESULT")
-                    return self._duplicate(key, payload)
-                if st == "PROCESSING":
-                    raise ConflictError(f"KEY_IN_FLIGHT:{key}")
-                if st == "FAILED":
-                    self._delete(c, key)
-
-            try:
-                self._insert_processing(c, key)
-                return None
-            except sqlite3.IntegrityError:
-                row2 = self._get(c, key)
-                if row2 is None:
-                    self._insert_processing(c, key)
-                    return None
-                st2, payload2 = row2
-                if st2 == "PROCESSING":
-                    raise ConflictError(f"KEY_IN_FLIGHT:{key}")
-                if st2 == "COMPLETED":
-                    if payload2 is None:
-                        raise ValueError("IDEMPOTENCY_CORRUPT_RESULT")
-                    return self._duplicate(key, payload2)
-                self._delete(c, key)
-                self._insert_processing(c, key)
-                return None
-        finally:
-            c.close()
-
-    def _finalize(self, key: str, ok: bool, payload: Optional[str]) -> None:
-        c = self._connect()
-        try:
-            if ok:
-                if payload is None:
-                    raise ValueError("IDEMPOTENCY_INTERNAL_NULL_PAYLOAD")
-                self._update(c, key, "COMPLETED", payload)
-            else:
-                # On failure path: best-effort mark FAILED without masking original error.
-                try:
-                    self._update(c, key, "FAILED", None)
-                except sqlite3.Error:
-                    return
-        finally:
-            c.close()
-
-    @deal.pre(
-        lambda self, key, operation: isinstance(key, str) and key.strip() != "",
-        message="key required",
-    )
-    @deal.pre(
-        lambda self, key, operation: callable(operation),
-        message="operation must be callable",
-    )
-    @deal.post(
-        lambda result: isinstance(result, IdempotencyResult),
-        message="returns IdempotencyResult",
-    )
-    def execute_once(self, key: str, operation: Callable[[], Any]) -> IdempotencyResult:
-        dup = self._claim_key(key)
-        if dup is not None:
-            return dup
-
-        ok = False
-        result: Any = None
-        payload: Optional[str] = None
-        try:
-            result = operation()
-            payload = _json_dumps(result)
-            ok = True
-        finally:
-            self._finalize(key, ok, payload)
-
-        return IdempotencyResult(key=key, status="COMPLETED", result=result, was_cached=False)
-
-    @deal.pre(
-        lambda self, key: isinstance(key, str) and key.strip() != "",
-        message="key required",
-    )
-    @deal.post(lambda result: isinstance(result, bool), message="returns bool")
-    def is_completed(self, key: str) -> bool:
-        c = self._connect()
-        try:
-            self._clean_expired(c)
-            row = self._get(c, key)
-            return (row is not None) and (row[0] == "COMPLETED")
-        finally:
-            c.close()
-
-    @deal.pre(
-        lambda self, key: isinstance(key, str) and key.strip() != "",
-        message="key required",
-    )
-    @deal.post(lambda result: result is None, message="returns None")
-    def clear(self, key: str) -> None:
-        c = self._connect()
-        try:
-            self._delete(c, key)
-        finally:
-            c.close()
+    return {
+        "status": STATUS_COMPLETED,
+        "key": key,
+        "response_checksum": response_ck,
+        "response": result,
+    }
