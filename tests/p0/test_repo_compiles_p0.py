@@ -4,6 +4,8 @@ from pathlib import Path
 import py_compile
 
 EXCLUDE_SUBSTR = (
+    "runs/",
+    "artifacts/",
     "/.git/",
     "/.venv/",
     "/__pycache__/",
