@@ -346,3 +346,155 @@ def test_cli_error_paths(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert not (tmp_path / "inv" / "workspace.html").exists()
     # The report still exists so the operator can see why.
     assert (tmp_path / "inv" / "intake_report.json").is_file()
+
+def _write_a8_r110i3_catalog(path, rows):
+    import csv
+
+    fieldnames = [
+        "product_id",
+        "title",
+        "supplier",
+        "category",
+        "supplier_price_mxn",
+        "shipping_cost_mxn",
+        "sale_price_mxn",
+        "payment_fee_mxn",
+        "source_url",
+        "notes",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_a8_r110_rejects_colliding_fixture_slugs(tmp_path):
+    import json
+
+    from synapse.ui.local_catalog_workspace import (
+        STATUS_EVALUATING,
+        STATUS_INVALID_INPUT,
+        build_workspace_from_csv,
+        parse_catalog_csv,
+    )
+
+    csv_path = tmp_path / "colliding_slugs.csv"
+    rows = [
+        {
+            "product_id": "cat-1",
+            "title": "Producto Uno",
+            "supplier": "Proveedor A",
+            "category": "hogar",
+            "supplier_price_mxn": "100.00",
+            "shipping_cost_mxn": "20.00",
+            "sale_price_mxn": "250.00",
+            "payment_fee_mxn": "5.00",
+            "source_url": "",
+            "notes": "",
+        },
+        {
+            "product_id": "cat 1",
+            "title": "Producto Dos",
+            "supplier": "Proveedor B",
+            "category": "hogar",
+            "supplier_price_mxn": "110.00",
+            "shipping_cost_mxn": "22.00",
+            "sale_price_mxn": "260.00",
+            "payment_fee_mxn": "6.00",
+            "source_url": "",
+            "notes": "",
+        },
+    ]
+    _write_a8_r110i3_catalog(csv_path, rows)
+
+    result = parse_catalog_csv(csv_path)
+    assert result.counts[STATUS_EVALUATING] == 1
+    assert result.counts[STATUS_INVALID_INPUT] == 1
+    assert len(result.fixtures) == 1
+
+    invalid_rows = [row for row in result.rows if row.status == STATUS_INVALID_INPUT]
+    assert len(invalid_rows) == 1
+    assert "duplicate:fixture_id_slug" in invalid_rows[0].reasons
+
+    out_dir = tmp_path / "workspace"
+    summary = build_workspace_from_csv(csv_path, out_dir)
+    candidate_files = sorted(path.name for path in (out_dir / "candidates").glob("*.json"))
+    assert candidate_files == ["a8_r110_cat_1.json"]
+    assert len(summary["fixture_paths"]) == 1
+
+    report = json.loads((out_dir / "intake_report.json").read_text(encoding="utf-8"))
+    assert report["counts"][STATUS_EVALUATING] == 1
+    assert report["counts"][STATUS_INVALID_INPUT] == 1
+    assert any(
+        "duplicate:fixture_id_slug" in row["reasons"]
+        for row in report["rows"]
+        if row["status"] == STATUS_INVALID_INPUT
+    )
+
+
+def test_a8_r110_reused_output_dir_clears_stale_workspace_for_all_invalid_csv(tmp_path):
+    import json
+
+    from synapse.ui.local_catalog_workspace import (
+        STATUS_EVALUATING,
+        STATUS_INVALID_INPUT,
+        build_workspace_from_csv,
+    )
+
+    out_dir = tmp_path / "reused_output"
+
+    valid_csv = tmp_path / "valid.csv"
+    _write_a8_r110i3_catalog(
+        valid_csv,
+        [
+            {
+                "product_id": "cat-valid",
+                "title": "Producto Valido",
+                "supplier": "Proveedor A",
+                "category": "hogar",
+                "supplier_price_mxn": "100.00",
+                "shipping_cost_mxn": "20.00",
+                "sale_price_mxn": "250.00",
+                "payment_fee_mxn": "5.00",
+                "source_url": "",
+                "notes": "",
+            }
+        ],
+    )
+
+    first_summary = build_workspace_from_csv(valid_csv, out_dir)
+    assert first_summary["workspace_path"] == out_dir / "workspace.html"
+    assert (out_dir / "workspace.html").exists()
+    assert sorted(path.name for path in (out_dir / "candidates").glob("*.json")) == [
+        "a8_r110_cat_valid.json"
+    ]
+
+    invalid_csv = tmp_path / "all_invalid.csv"
+    _write_a8_r110i3_catalog(
+        invalid_csv,
+        [
+            {
+                "product_id": "",
+                "title": "",
+                "supplier": "",
+                "category": "hogar",
+                "supplier_price_mxn": "not-a-number",
+                "shipping_cost_mxn": "20.00",
+                "sale_price_mxn": "250.00",
+                "payment_fee_mxn": "5.00",
+                "source_url": "",
+                "notes": "",
+            }
+        ],
+    )
+
+    second_summary = build_workspace_from_csv(invalid_csv, out_dir)
+    assert second_summary["workspace_path"] is None
+    assert second_summary["fixture_paths"] == []
+    assert not (out_dir / "workspace.html").exists()
+    assert sorted((out_dir / "candidates").glob("*.json")) == []
+
+    report = json.loads((out_dir / "intake_report.json").read_text(encoding="utf-8"))
+    assert report["counts"][STATUS_EVALUATING] == 0
+    assert report["counts"][STATUS_INVALID_INPUT] == 1

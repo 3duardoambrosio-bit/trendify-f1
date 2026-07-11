@@ -315,6 +315,7 @@ def parse_catalog_csv(csv_path: str | Path) -> CatalogIntakeResult:
     rows: list[CatalogRowResult] = []
     fixtures: list[Mapping[str, Any]] = []
     seen_ids: set[str] = set()
+    seen_fixture_ids: dict[str, str] = {}
 
     for index, raw in enumerate(raw_rows, start=2):  # row 1 is the header
         product_id = (raw.get("product_id") or "").strip()
@@ -330,6 +331,13 @@ def parse_catalog_csv(csv_path: str | Path) -> CatalogIntakeResult:
             if product_id in seen_ids:
                 reasons.append("duplicate:product_id")
             seen_ids.add(product_id)
+
+            fixture_id = f"a8_r110_{_slug(product_id)}"
+            previous_product_id = seen_fixture_ids.get(fixture_id)
+            if previous_product_id is not None and previous_product_id != product_id:
+                reasons.append("duplicate:fixture_id_slug")
+            else:
+                seen_fixture_ids[fixture_id] = product_id
 
         economics, invalid_reasons, missing_fields = _parse_economics(raw)
         reasons.extend(invalid_reasons)
@@ -426,6 +434,26 @@ def build_view_models(result: CatalogIntakeResult) -> list[WorkbenchViewModel]:
     ]
 
 
+def _clear_generated_outputs(output_dir: Path) -> None:
+    """Remove only A8-R110 generated workspace/candidate outputs.
+
+    Reusing --output-dir must never leave stale workspace.html or old
+    candidates/*.json when the current CSV produces no valid fixtures.
+    Do not delete arbitrary operator files under output_dir.
+    """
+    workspace_path = output_dir / "workspace.html"
+    if workspace_path.exists() or workspace_path.is_symlink():
+        workspace_path.unlink()
+
+    candidates_dir = output_dir / "candidates"
+    if not candidates_dir.exists():
+        return
+
+    for candidate_path in sorted(candidates_dir.glob("*.json")):
+        if candidate_path.is_file() or candidate_path.is_symlink():
+            candidate_path.unlink()
+
+
 def build_workspace_from_csv(
     csv_path: str | Path, output_dir: str | Path = DEFAULT_OUTPUT_DIR
 ) -> dict[str, Any]:
@@ -435,6 +463,7 @@ def build_workspace_from_csv(
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
+    _clear_generated_outputs(out)
 
     report_path = out / "intake_report.json"
     with report_path.open("w", encoding="utf-8", newline="\n") as handle:
