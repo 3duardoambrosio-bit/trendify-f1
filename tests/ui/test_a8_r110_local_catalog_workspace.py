@@ -498,3 +498,56 @@ def test_a8_r110_reused_output_dir_clears_stale_workspace_for_all_invalid_csv(tm
     report = json.loads((out_dir / "intake_report.json").read_text(encoding="utf-8"))
     assert report["counts"][STATUS_EVALUATING] == 0
     assert report["counts"][STATUS_INVALID_INPUT] == 1
+
+def test_a8_r110_candidates_dir_symlink_never_deletes_operator_target(
+    tmp_path,
+) -> None:
+    """A candidates directory symlink is unlinked without traversing its target."""
+
+    from synapse.ui import local_catalog_workspace as workspace
+
+    operator_dir = tmp_path / "operator_owned"
+    operator_dir.mkdir()
+
+    operator_json = operator_dir / "importante.json"
+    operator_text = operator_dir / "manual.txt"
+
+    operator_json.write_text(
+        '{"operator_owned": true}\n',
+        encoding="utf-8",
+    )
+    operator_text.write_text(
+        "no borrar\n",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    candidates_link = output_dir / "candidates"
+
+    try:
+        candidates_link.symlink_to(
+            operator_dir,
+            target_is_directory=True,
+        )
+    except (OSError, NotImplementedError) as exc:
+        import pytest
+
+        pytest.skip(f"directory symlink unavailable on this platform: {exc}")
+
+    assert candidates_link.is_symlink()
+
+    workspace._clear_generated_outputs(output_dir)
+
+    assert not candidates_link.is_symlink()
+    assert not candidates_link.exists()
+
+    assert operator_json.read_text(encoding="utf-8") == (
+        '{"operator_owned": true}\n'
+    )
+    assert operator_text.read_text(encoding="utf-8") == "no borrar\n"
+    assert sorted(path.name for path in operator_dir.iterdir()) == [
+        "importante.json",
+        "manual.txt",
+    ]

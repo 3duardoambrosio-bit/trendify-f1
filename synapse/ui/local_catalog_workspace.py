@@ -446,6 +446,9 @@ def _clear_generated_outputs(output_dir: Path) -> None:
         workspace_path.unlink()
 
     candidates_dir = output_dir / "candidates"
+    if candidates_dir.is_symlink():
+        candidates_dir.unlink()
+        return
     if not candidates_dir.exists():
         return
 
