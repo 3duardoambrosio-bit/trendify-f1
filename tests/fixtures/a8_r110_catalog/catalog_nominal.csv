@@ -1,0 +1,4 @@
+product_id,title,supplier,category,supplier_price_mxn,shipping_cost_mxn,sale_price_mxn,payment_fee_mxn,source_url,notes
+cat-001,Organizador de Cables Compacto,Proveedor MX Alfa,hogar_y_oficina,128.00,55.00,349.00,14.00,,Candidato prioritario del operador
+cat-002,Soporte Plegable de Laptop,Proveedor MX Alfa,hogar_y_oficina,180.50,60.00,449.00,,,
+cat-003,Lampara LED de Escritorio,Proveedor MX Beta,iluminacion,95.00,48.00,299.00,12.00,,Confirmar voltaje con proveedor

@@ -109,6 +109,111 @@ def _fact_label(field_name: str) -> str:
     return _BRIEF_FACT_LABELS.get(field_name, str(field_name).replace("_", " ").capitalize())
 
 
+# A8-R110I2R1 conditional source copy. The renderer defaults to R109A/R109B
+# frozen-fixture wording; when provenance/source_kind declares an operator local
+# catalog import, the same surfaces speak CSV-local language instead. Any other
+# source_kind (i.e. the frozen fixtures) keeps the fixture wording, so R109B
+# output stays byte-identical. This is copy only: no financial/economics/CLI/
+# security behaviour changes.
+LOCAL_CATALOG_SOURCE_KIND = "operator_local_catalog_import"
+
+# key -> (fixture_default, local_catalog_variant). Each key maps to one render
+# site below; the default half must match the pre-R110 literal exactly.
+_SOURCE_COPY: dict[str, tuple[str, str]] = {
+    "offline_badge": ("FIXTURE LOCAL - OFFLINE", "CSV LOCAL - OFFLINE"),
+    "offline_badge_title": (
+        "Datos de fixture congelado; render offline",
+        "Datos importados desde CSV local; render offline",
+    ),
+    "command_honesty": (
+        "Datos de fixture congelado - sin discovery en vivo - sin analytics"
+        " - sin escrituras - Fase 1 dry-run",
+        "Datos importados desde CSV local - sin discovery en vivo - sin analytics"
+        " - sin escrituras - Fase 1 dry-run",
+    ),
+    "selector_heading": (
+        "Pipeline de candidatos (solo fixture)",
+        "Pipeline de candidatos (catálogo local)",
+    ),
+    "selector_note": (
+        "Candidatos embebidos del fixture congelado;"
+        " sin discovery en vivo.",
+        "Candidatos importados desde CSV local;"
+        " sin discovery en vivo.",
+    ),
+    "empty_pipeline_note": (
+        "pipeline de candidatos (solo fixture; sin discovery en vivo)",
+        "pipeline de candidatos (catálogo local; sin discovery en vivo)",
+    ),
+    "candidate_pipeline_card": (
+        "Candidate Pipeline (solo fixture)",
+        "Candidate Pipeline (catálogo local)",
+    ),
+    "rail_source_prefix": ("fixture", "csv"),
+    "product_lab_summary": (
+        "Fixture local congelado, solo lectura.",
+        "Catálogo CSV local, solo lectura.",
+    ),
+    "chain_source_step": ("Fixture congelado", "Catálogo CSV local"),
+    "chain_html_detail": (
+        "sin red de runtime - sin reloj de runtime - mismo fixture, mismo output",
+        "sin red de runtime - sin reloj de runtime - mismo CSV, mismo output",
+    ),
+    "drawer_source_chip": ("fixture congelado", "catálogo CSV local"),
+    "evidence_source_chip": ("fixture congelado", "catálogo CSV local"),
+    "footer_source": ("fixture congelado", "catálogo CSV local"),
+    "money_cockpit_title": (
+        "Money Cockpit - KPI strip (numeros del fixture)",
+        "Money Cockpit - KPI strip (números del CSV local)",
+    ),
+    "economics_number_source": ("numeros del fixture", "números del CSV local"),
+    "packet_economics_header": (
+        "== Economia (numeros del fixture) ==",
+        "== Economia (números del CSV local) ==",
+    ),
+    "packet_source_line": (
+        "Fixture congelado; render determinista; el operador decide y ejecuta.",
+        "Catálogo CSV local; render determinista; el operador decide y ejecuta.",
+    ),
+    "already_did_chain": (
+        "Registro la cadena de evidencia determinista (mismo fixture, mismo"
+        " output; auditoria completa en el drawer)",
+        "Registro la cadena de evidencia determinista (mismo CSV, mismo"
+        " output; auditoria completa en el drawer)",
+    ),
+    # candidate_pipeline.pipeline_note is authored in the ViewModel with fixture
+    # wording; for a local-catalog source the renderer shows the CSV variant.
+    "pipeline_note": (
+        "Conteos derivados del escenario del fixture congelado; sin discovery en vivo.",
+        "Conteos derivados del catálogo CSV local; sin discovery en vivo.",
+    ),
+    # Capability tier: keep the honesty (still not "real hoy"), but do not label
+    # CSV-local unit economics as "SOLO FIXTURE" when it came from the operator.
+    "capability_tier_strip_label": ("Solo fixture", "Catálogo local (offline)"),
+    "capability_tier_badge": ("SOLO FIXTURE", "CSV LOCAL (OFFLINE)"),
+}
+
+
+def _is_local_catalog_source(data: Mapping[str, Any]) -> bool:
+    kind = data.get("source_kind")
+    if not kind:
+        kind = (data.get("provenance") or {}).get("source_kind")
+    return str(kind or "") == LOCAL_CATALOG_SOURCE_KIND
+
+
+def _source_copy(data: Mapping[str, Any], key: str) -> str:
+    fixture_text, local_text = _SOURCE_COPY[key]
+    return local_text if _is_local_catalog_source(data) else fixture_text
+
+
+def _pipeline_note(data: Mapping[str, Any], pipeline: Mapping[str, Any]) -> str:
+    """ViewModel pipeline_note verbatim, unless a local-catalog source needs the
+    CSV-local wording (the ViewModel authors it with fixture wording)."""
+    if _is_local_catalog_source(data):
+        return _source_copy(data, "pipeline_note")
+    return str(pipeline.get("pipeline_note", ""))
+
+
 def _e(value: Any) -> str:
     return html.escape(str(value), quote=True)
 
@@ -397,7 +502,9 @@ _SELECTOR_SORTS: tuple[tuple[str, str], ...] = (
 
 
 def _render_selector(
-    candidates: Sequence[Mapping[str, Any]], selected_fid: str
+    candidates: Sequence[Mapping[str, Any]],
+    selected_fid: str,
+    data: Mapping[str, Any],
 ) -> str:
     """Candidate pipeline board: filters, sorting, composite score, drivers,
     blockers, stage and next action per candidate. Local-only interaction."""
@@ -485,13 +592,12 @@ def _render_selector(
         " multi-candidato: --fixture-dir tests/fixtures/a8_r109a --output"
         " runs/.../workspace.html</p>"
         if len(candidates) == 1
-        else '<p class="honesty">Candidatos embebidos del fixture congelado;'
-        " sin discovery en vivo.</p>"
+        else f'<p class="honesty">{_e(_source_copy(data, "selector_note"))}</p>'
     )
     return (
         '<div class="card selector" data-marker="product_selector"'
         ' data-role="candidate_switcher">'
-        "<h3>Pipeline de candidatos (solo fixture)</h3>"
+        f'<h3>{_e(_source_copy(data, "selector_heading"))}</h3>'
         '<div class="sel-controls">'
         f'<span class="sel-ctl-label">Filtrar</span>'
         f'<span data-role="selector_filters">{filters}</span>'
@@ -713,7 +819,7 @@ def _packet_full_text(data: Mapping[str, Any]) -> str:
         f"- {decision.get('outcome', '')} (gate {decision.get('permission_gate', '')})",
         f"- {decision.get('reason', '')}",
         "",
-        "== Economia (numeros del fixture) ==",
+        _source_copy(data, "packet_economics_header"),
         f"- Precio: {_fmt_money(economics.get('price_mxn'))}"
         f" / Costo: {_fmt_money(economics.get('product_cost_mxn'))}",
         f"- Margen: {_fmt_money(economics.get('contribution_margin_mxn'))}"
@@ -736,7 +842,7 @@ def _packet_full_text(data: Mapping[str, Any]) -> str:
         "- Sin escrituras en vivo, sin gasto, sin red, sin fulfillment"
         if boundary.get("no_live_writes")
         else "- Boundary declarado en safety_boundary del contrato",
-        "- Fixture congelado; render determinista; el operador decide y ejecuta.",
+        "- " + _source_copy(data, "packet_source_line"),
     ]
     return "\n".join(lines)
 
@@ -829,7 +935,8 @@ def _render_rail(data: Mapping[str, Any], active_module: str) -> str:
         )
     parts.append(
         '<div class="rail-foot">Sin escrituras en vivo - sin gasto - sin red<br>'
-        f'fixture: {_e(data.get("fixture_id", ""))}<br>{_e(VISUAL_VERSION)}</div>'
+        f'{_e(_source_copy(data, "rail_source_prefix"))}: {_e(data.get("fixture_id", ""))}'
+        f"<br>{_e(VISUAL_VERSION)}</div>"
     )
     parts.append("</nav>")
     return "".join(parts)
@@ -856,8 +963,8 @@ def _render_session_gate(data: Mapping[str, Any]) -> str:
         '<button type="button" class="gate-enter" data-gate-enter>Entrar al Workbench</button>'
         '<p class="gate-disclaimer">No es autenticacion real; sesion local del navegador'
         " (localStorage). Sin backend, sin cuenta, sin credenciales, sin red.</p>"
-        f'<p class="gate-fixture">fixture: {_e(data.get("fixture_id", ""))}'
-        " - offline - deterministico</p>"
+        f'<p class="gate-fixture">{_e(_source_copy(data, "rail_source_prefix"))}:'
+        f' {_e(data.get("fixture_id", ""))} - offline - deterministico</p>'
         "</div></div>"
     )
 
@@ -882,14 +989,14 @@ def _render_header(data: Mapping[str, Any]) -> str:
                 _fmt_money(margin),
                 sub=f"{_fmt_percent(economics.get('contribution_margin_percent'))} de contribucion",
                 tone="gold",
-                title="economics.contribution_margin_mxn (numeros del fixture)",
+                title=f"economics.contribution_margin_mxn ({_source_copy(data, 'economics_number_source')})",
             )
             + _metric(
                 "Breakeven CPA",
                 _fmt_money(economics.get("breakeven_cpa_mxn")),
                 sub="tope de adquisicion por unidad",
                 tone="gold",
-                title="economics.breakeven_cpa_mxn (numeros del fixture)",
+                title=f"economics.breakeven_cpa_mxn ({_source_copy(data, 'economics_number_source')})",
             )
             + _metric(
                 "Precio",
@@ -938,8 +1045,8 @@ def _render_header(data: Mapping[str, Any]) -> str:
         f'<button type="button" class="drawer-btn" data-drawer-open'
         f' title="Auditoria tecnica: origen de datos, cadena determinista, mapa de'
         f' capacidades">Ver evidencia</button>'
-        f'<span class="chip chip-steel" title="Datos de fixture congelado; render offline">'
-        f"FIXTURE LOCAL - OFFLINE</span>"
+        f'<span class="chip chip-steel" title="{_e(_source_copy(data, "offline_badge_title"))}">'
+        f'{_e(_source_copy(data, "offline_badge"))}</span>'
         f'<span class="chip chip-boundary" data-marker="safety_boundary_chip"'
         f' title="Boundary Fase 1: sin escrituras en vivo, sin gasto, sin red externa">'
         f"SIN ESCRITURAS - SIN GASTO - SIN RED</span></div>"
@@ -1077,10 +1184,7 @@ def _synapse_already_did_items(data: Mapping[str, Any]) -> list[str]:
             f"fuente: {pipeline.get('source', '')})"
         )
     if provenance.get("deterministic_renderer"):
-        items.append(
-            "Registro la cadena de evidencia determinista (mismo fixture, mismo"
-            " output; auditoria completa en el drawer)"
-        )
+        items.append(_source_copy(data, "already_did_chain"))
     if boundary.get("no_live_writes"):
         items.append("Preservo el boundary: sin escrituras en vivo, sin gasto, sin red")
     return items
@@ -1215,7 +1319,7 @@ def _capability_strip(data: Mapping[str, Any]) -> str:
     surface = data.get("capability_surface_map") or {}
     tiers = (
         ("real_now", "Real hoy", "go"),
-        ("fixture_only", "Solo fixture", "muted"),
+        ("fixture_only", _source_copy(data, "capability_tier_strip_label"), "muted"),
         ("future_or_not_connected", "Futuro / no conectado", "warn"),
         ("forbidden_to_claim", "Prohibido reclamar", "risk"),
     )
@@ -1278,6 +1382,8 @@ def _render_brain_map(data: Mapping[str, Any]) -> str:
             )
             if tier:
                 tier_label, tone = _TIER_PRESENTATION[tier]
+                if tier == "fixture_only":
+                    tier_label = _source_copy(data, "capability_tier_badge")
                 source = f"capability_surface_map.{tier}"
             else:
                 tier, tier_label, tone = "undeclared", "SIN DECLARAR", "muted"
@@ -1395,9 +1501,9 @@ def _render_command_center(
         )
     }
     pipeline_block = _card(
-        "Candidate Pipeline (solo fixture)",
+        _source_copy(data, "candidate_pipeline_card"),
         _kv(pipeline_fields)
-        + f'<p class="honesty">{_e(pipeline.get("pipeline_note", ""))}</p>',
+        + f'<p class="honesty">{_e(_pipeline_note(data, pipeline))}</p>',
         attrs='data-contract-section="candidate_pipeline"',
     )
 
@@ -1444,14 +1550,13 @@ def _render_command_center(
     )
 
     honesty = (
-        '<div class="honesty-banner">Datos de fixture congelado - sin discovery en vivo'
-        " - sin analytics - sin escrituras - Fase 1 dry-run</div>"
+        f'<div class="honesty-banner">{_e(_source_copy(data, "command_honesty"))}</div>'
     )
 
     brief = _commercial_brief(data)
     snapshot = _selling_pack_snapshot(data)
     stack = _readiness_stack(data)
-    selector = _render_selector(candidates, selected_fid)
+    selector = _render_selector(candidates, selected_fid, data)
     export_panel = _selling_packet_panel(data)
 
     empty_state = ""
@@ -1460,8 +1565,9 @@ def _render_command_center(
             '<div class="card" data-marker="empty_state_no_product">'
             "<h3>Shortlist vacia</h3>"
             '<p class="disabled">Sin producto en la shortlist: no hay editor, no hay'
-            " payloads, no hay paquete de venta. Siguiente accion segura: revisar el"
-            " pipeline de candidatos (solo fixture; sin discovery en vivo).</p></div>"
+            " payloads, no hay paquete de venta. Siguiente accion segura: revisar el "
+            + _e(_source_copy(data, "empty_pipeline_note"))
+            + ".</p></div>"
         )
 
     progress_card = (
@@ -1597,9 +1703,9 @@ def _render_product_lab(data: Mapping[str, Any], active_module: str) -> str:
     product_card = _card("Producto", product_html)
     provenance_card = _card(
         "Origen de los datos (resumen)",
-        '<p class="op-summary">Fixture local congelado, solo lectura. El detalle'
-        " tecnico de auditoria (origen, cadena determinista, mapa de capacidades)"
-        " vive en el Evidence Drawer.</p>"
+        f'<p class="op-summary">{_e(_source_copy(data, "product_lab_summary"))}'
+        " El detalle tecnico de auditoria (origen, cadena determinista, mapa de"
+        " capacidades) vive en el Evidence Drawer.</p>"
         '<button type="button" class="drawer-btn" data-drawer-open>Ver evidencia</button>',
     )
     brief_card = _card(
@@ -1815,7 +1921,7 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
     )
     kpi_card = (
         '<div class="card money-cockpit" data-marker="money_cockpit">'
-        "<h3>Money Cockpit - KPI strip (numeros del fixture)</h3>"
+        f'<h3>{_e(_source_copy(data, "money_cockpit_title"))}</h3>'
         f'<div class="kpi-strip" data-marker="kpi_strip">'
         f'<div class="kpi-hero">{hero_tiles}</div>'
         f'<div class="kpi-minis">{mini_tiles}</div></div>'
@@ -2913,7 +3019,7 @@ def _assumptions_ledger(data: Mapping[str, Any]) -> str:
     if economics.get("notes"):
         items.append(f"Economia: {economics.get('notes')}")
     if pipeline.get("pipeline_note"):
-        items.append(f"Pipeline: {pipeline.get('pipeline_note')}")
+        items.append(f"Pipeline: {_pipeline_note(data, pipeline)}")
     if richness.get("policy"):
         items.append(f"Politica de brief: {richness.get('policy')}")
     return _card(
@@ -2984,7 +3090,7 @@ def _render_evidence_drawer(data: Mapping[str, Any]) -> str:
     base_head = str(provenance.get("base_head", ""))
     chain_steps = (
         (
-            "Fixture congelado",
+            _source_copy(data, "chain_source_step"),
             f"{provenance.get('source_fixture', '')} - base_head {base_head[:12]}",
         ),
         (
@@ -2994,7 +3100,7 @@ def _render_evidence_drawer(data: Mapping[str, Any]) -> str:
         ("Renderer visual", VISUAL_VERSION),
         (
             "HTML estatico offline",
-            "sin red de runtime - sin reloj de runtime - mismo fixture, mismo output",
+            _source_copy(data, "chain_html_detail"),
         ),
     )
     chain = (
@@ -3019,7 +3125,7 @@ def _render_evidence_drawer(data: Mapping[str, Any]) -> str:
         '<div class="honesty-banner" data-principle="operator_in_control"'
         ' data-determinism="deterministic_renderer" data-network="no_runtime_network">'
         "Render determinista - sin reloj de runtime - sin red de runtime"
-        " - fixture congelado - operador-en-control</div>"
+        f' - {_e(_source_copy(data, "drawer_source_chip"))} - operador-en-control</div>'
         + chain
         + provenance_card
         + _source_fields_ledger(data)
@@ -3057,7 +3163,7 @@ def _render_evidence(data: Mapping[str, Any], active_module: str) -> str:
         f'<div class="field-chips">'
         + _chip("render determinista", "steel")
         + _chip("sin red de runtime", "steel")
-        + _chip("fixture congelado", "steel")
+        + _chip(_source_copy(data, "evidence_source_chip"), "steel")
         + "</div>"
         f'<button type="button" class="drawer-btn" data-drawer-open>'
         f"Ver evidencia</button></div></section>"
@@ -4157,8 +4263,9 @@ def _candidate_shell(
             ' data-memory="browser_local_memory local_only_persistence">'
             "Memoria local del navegador (localStorage): alias del operador, checklists,"
             " drafts y tabs. Sin backend - sin cuenta - sin autenticacion real.<br>"
-            "Sin escrituras en vivo - sin gasto - sin red - fixture congelado"
-            ' - operador-en-control &nbsp;<button type="button" class="link-btn"'
+            "Sin escrituras en vivo - sin gasto - sin red - "
+            + _e(_source_copy(data, "footer_source"))
+            + ' - operador-en-control &nbsp;<button type="button" class="link-btn"'
             ' data-session-reset>Reiniciar sesion local</button></footer>',
             "</div></div></div>",
             _render_evidence_drawer(data),
@@ -4238,7 +4345,10 @@ def render_workspace_html(view_models: Sequence[WorkbenchViewModel]) -> str:
         f' data-candidate-count="{len(datas)}"'
     )
     gate = _render_session_gate(
-        {"fixture_id": f"workspace multi-candidato ({len(datas)} estados)"}
+        {
+            "fixture_id": f"workspace multi-candidato ({len(datas)} estados)",
+            "source_kind": datas[0].get("source_kind", ""),
+        }
     )
     return _document(
         f"workspace ({len(datas)} candidatos)", body_attrs, gate, shells
