@@ -52,66 +52,13 @@ function Invoke-A8R43HRegistryGate {
     throw "A8_R43H_REGISTRY_GATE_NOT_FOUND=$__a8r43hGate"
   }
 
-  $__a8r43hQuotedGate = '"' + $__a8r43hGate.Replace('"', '\"') + '"'
-  $__a8r43hQuotedRepo = '"' + $__a8r43hRepo.Replace('"', '\"') + '"'
+  Write-Host "A8_R43Z_R43H_IN_PROCESS_INVOCATION=1"
 
-  $__a8r43hPsi = [System.Diagnostics.ProcessStartInfo]::new()
-  $__a8r43hPsi.FileName = "powershell.exe"
-  $__a8r43hPsi.WorkingDirectory = $__a8r43hRepo
-  $__a8r43hPsi.UseShellExecute = $false
-  $__a8r43hPsi.RedirectStandardOutput = $true
-  $__a8r43hPsi.RedirectStandardError = $true
-  $__a8r43hPsi.CreateNoWindow = $true
-  $__a8r43hPsi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File $__a8r43hQuotedGate -Repo $__a8r43hQuotedRepo"
+  & $__a8r43hGate -Repo $__a8r43hRepo
+  $__a8r43hCommandSucceeded = $?
 
-  Write-Host "A8_R43Z_R43H_PROCESS_CAPTURE=1"
-
-  $__a8r43hProcess = [System.Diagnostics.Process]::new()
-  $__a8r43hProcess.StartInfo = $__a8r43hPsi
-
-  [void]$__a8r43hProcess.Start()
-
-  $__a8r43hStdoutTask = $__a8r43hProcess.StandardOutput.ReadToEndAsync()
-  $__a8r43hStderrTask = $__a8r43hProcess.StandardError.ReadToEndAsync()
-
-  if (-not $__a8r43hProcess.WaitForExit(300000)) {
-    try {
-      $__a8r43hProcess.Kill()
-    }
-    catch {
-      Write-Host "A8_R43Z_R43H_TIMEOUT_KILL_FAILED=1"
-    }
-
-    throw "A8_R43H_REGISTRY_GATE_TIMEOUT_MS=300000"
-  }
-
-  $__a8r43hStdout = $__a8r43hStdoutTask.GetAwaiter().GetResult()
-  $__a8r43hStderr = $__a8r43hStderrTask.GetAwaiter().GetResult()
-
-  if (-not [string]::IsNullOrWhiteSpace($__a8r43hStdout)) {
-    $__a8r43hStdout -split "`n" | ForEach-Object {
-      if (-not [string]::IsNullOrWhiteSpace($_)) {
-        Write-Host $_
-      }
-    }
-  }
-
-  if (-not [string]::IsNullOrWhiteSpace($__a8r43hStderr)) {
-    $__a8r43hStderr -split "`n" | ForEach-Object {
-      if (-not [string]::IsNullOrWhiteSpace($_)) {
-        Write-Host "A8_R43Z_R43H_STDERR: $_"
-      }
-    }
-  }
-
-  $__a8r43hRc = [int]$__a8r43hProcess.ExitCode
-
-  # A8_R43L_LASTEXITCODE_STRICTMODE_SAFE=1
-
-  Write-Host "A8_R43Z_R43H_GATE_RC=$__a8r43hRc"
-
-  if ($__a8r43hRc -ne 0) {
-    throw "A8_R43H_REGISTRY_GATE_FAILED=$__a8r43hRc"
+  if (-not $__a8r43hCommandSucceeded) {
+    throw "A8_R43H_REGISTRY_GATE_FAILED"
   }
 
   Write-Host "A8_R43H_REGISTRY_GATE_PASS=1"
