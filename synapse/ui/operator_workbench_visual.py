@@ -40,7 +40,10 @@ import html
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from synapse.ui.operator_workbench_renderer import scan_forbidden_tokens
+from synapse.ui.operator_workbench_renderer import (
+    _methodology_decision_data,
+    scan_forbidden_tokens,
+)
 from synapse.ui.operator_workbench_view_model import (
     WorkbenchViewModel,
     build_view_model_from_path,
@@ -1613,10 +1616,98 @@ def _render_command_center(
     )
 
 
+def _render_methodology_decision(
+    data: Mapping[str, Any],
+) -> str:
+    resolved = _methodology_decision_data(data)
+
+    if resolved is None:
+        return ""
+
+    decision, methodology = resolved
+
+    rules = []
+
+    for rule in methodology["rule_decisions"]:
+        rules.append(
+            '<div class="methodology-rule"'
+            f' data-methodology-rule-id="{_e(rule["rule_id"])}">'
+            + _kv(
+                {
+                    "rule_id": rule["rule_id"],
+                    "framework": rule["framework"],
+                    "source_anchor": rule["source_anchor"],
+                    "priority": rule["priority"],
+                    "predicate_matched": rule[
+                        "predicate_matched"
+                    ],
+                    "semantic_matched": rule[
+                        "semantic_matched"
+                    ],
+                    "decision_text": rule["decision_text"],
+                }
+            )
+            + "<h4>missing_fields</h4>"
+            + _ul(rule["missing_fields"], "plain warn")
+            + "<h4>triggers</h4>"
+            + _ul(rule["triggers"], "plain")
+            + "</div>"
+        )
+
+    return (
+        '<div class="card methodology-decision"'
+        ' data-contract-section="methodology_decision"'
+        ' data-methodology-present="true"'
+        ' data-permission-gate="REVIEW"'
+        f' data-operator-review-required="'
+        f'{str(methodology["operator_review_required"]).lower()}"'
+        ' data-safe-output-review-required="true">'
+        "<h3>Methodology Decision — solo lectura</h3>"
+        '<p class="warning">'
+        "Salida del motor sellado. Requiere revisión del operador. "
+        "Un estado accepted no autoriza publicación, gasto ni "
+        "escrituras en vivo.</p>"
+        '<p class="honesty">'
+        "El campo operator_review_required refleja si la regla "
+        "seleccionada exige revisión metodológica adicional. "
+        "Cuando su valor es false, no elimina "
+        "permission_gate=REVIEW.</p>"
+        + _kv(
+            {
+                "permission_gate": decision["permission_gate"],
+                "schema_version": methodology["schema_version"],
+                "status": methodology["status"],
+                "selected_rule_id": methodology[
+                    "selected_rule_id"
+                ],
+                "selected_framework": methodology[
+                    "selected_framework"
+                ],
+                "operator_review_required": methodology[
+                    "operator_review_required"
+                ],
+            }
+        )
+        + "<h4>triggers</h4>"
+        + _ul(methodology["triggers"], "plain")
+        + "<h4>rule_decisions</h4>"
+        + (
+            "".join(rules)
+            or '<p class="empty">(sin decisiones de regla)</p>'
+        )
+        + "<h4>safe_output — texto inerte</h4>"
+        + '<pre class="cb-body methodology-safe-output"'
+        ' data-methodology-safe-output="inert">'
+        + _e(methodology["safe_output"])
+        + "</pre>"
+        + "</div><!-- methodology-decision:end -->"
+    )
+
 def _render_decision_center(data: Mapping[str, Any], active_module: str) -> str:
     decision = data.get("decision") or {}
     scores = data.get("scores") or {}
     richness = data.get("input_richness") or {}
+    methodology_panel = _render_methodology_decision(data)
 
     score_rows = []
     for key, value in scores.items():
@@ -1667,7 +1758,7 @@ def _render_decision_center(data: Mapping[str, Any], active_module: str) -> str:
         f'<section id="decision_center" data-module="decision_center" class="module{active}">'
         f'<div class="mod-head"><h2>Decision Center</h2>'
         f'<p class="purpose">Por que el motor decidio esto y donde esta el riesgo.</p></div>'
-        f'<div class="grid g2">{scores_card}{decision_card}</div>{richness_block}</section>'
+        f'<div class="grid g2">{scores_card}{decision_card}</div>{methodology_panel}{richness_block}</section>'
     )
 
 
