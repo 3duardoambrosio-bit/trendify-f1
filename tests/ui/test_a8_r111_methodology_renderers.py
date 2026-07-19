@@ -19,7 +19,7 @@ from synapse.ui.operator_workbench_renderer import (
 )
 from synapse.ui.operator_workbench_view_model import (
     build_view_model,
-    build_view_model_from_path,
+    load_fixture,
 )
 from synapse.ui.operator_workbench_visual import (
     render_visual_html,
@@ -45,11 +45,15 @@ CONTEXT_PATH = (
     / "nominal_context.json"
 )
 
-LEGACY_FIXTURE_DIR = (
-    ROOT
-    / "tests"
+LEGACY_SOURCE_DIR = (
+    Path("tests")
     / "fixtures"
     / "a8_r109a"
+)
+
+LEGACY_FIXTURE_DIR = (
+    ROOT
+    / LEGACY_SOURCE_DIR
 )
 
 LEGACY_NAMES = (
@@ -61,28 +65,28 @@ LEGACY_NAMES = (
 
 LEGACY_AUDIT_SHA256 = {
     "recommended":
-        "DC2D2EA76F5278E9C72084070FB04F7AC38EB458D7D6B5D0A48887B62C82026B",
+        "8A8C1577AAED2296632672F9557E0EA05159C09AA3E5446C23A34EC151644FB7",
     "blocked":
-        "DB186AA06A5660F3F4E7C147E2274A30AA7BFE735DDDAC0A04A2AB75AFDCEB49",
+        "F80CA88F64D3CCF08BFFD07036C62DE5F23275EF8EC8EB47AC8459349A5214FC",
     "low_input":
-        "CC4A0F9AAF9F49076C4BEB3F81C7A6C91FC44244921F6B058B3CBDDCE4912F85",
+        "E9CE17B51052EC5FA8CB8325A0908E026EA7D78B25F7651DA4BD1706042E701C",
     "empty_shortlist":
-        "47FCD632D171B3E85FC97D1583EBD52A5E663ED842F752C3F88D76727FC6E8FE",
+        "673C09DBE184A86313827AD4B05928A18DBCE0E5590B39F7F9575A44A870CC97",
 }
 
 LEGACY_VISUAL_SHA256 = {
     "recommended":
-        "D8E570E12E4A529F74BB40DA71D1B2C25B0F917CB755C5B234BB97BA1C605DE4",
+        "E189F920FCF0559DAD205133658071B4DB7A47E04D09D34C05E58CF13F110716",
     "blocked":
-        "E1C7EB09CB88E45867CF032B5023E0B062D740D4A5724B0975499AAE27BAE4A0",
+        "31F25F961FCE36C2058082B8748028E3DDD0CC17048E23087F57E3A99E3AF0CD",
     "low_input":
-        "7CB449555E618136675002E36202F9F1D37AD522F4D04AF19FB3D77BBEAC9E0E",
+        "26D09D8DCB346D6875C53D9D8E887959EFB3D2FCBE9F464D3EF551D13703BB44",
     "empty_shortlist":
-        "09ADB64A5409484610D1E66C98306516E28ED484834FDB57FD75F89EB87A618C",
+        "12E4AC480E4AA1778ABD4C8E4BA643845B5922CD4530CF265DD5D243D814D98E",
 }
 
 LEGACY_WORKSPACE_SHA256 = (
-    "D939F56497EB4C1C8173155256C38E5CC2E769313FDEAC48EEAFEDBF67FDFD75"
+    "0C52B1C79DB608A77B8E08BFA354CCCD34475A9B16BB704DB67E4736B21A3F12"
 )
 
 RULE_FIELDS = (
@@ -102,6 +106,21 @@ def _sha256_text(value: str) -> str:
     return hashlib.sha256(
         value.encode("utf-8")
     ).hexdigest().upper()
+
+
+def _legacy_view_model(
+    name: str,
+    *,
+    fixture_dir: Path = LEGACY_FIXTURE_DIR,
+):
+    fixture_path = fixture_dir / f"{name}.json"
+
+    return build_view_model(
+        load_fixture(fixture_path),
+        source_fixture=(
+            LEGACY_SOURCE_DIR / f"{name}.json"
+        ).as_posix(),
+    )
 
 
 def _context() -> dict[str, Any]:
@@ -451,9 +470,7 @@ def test_malformed_present_methodology_fails_closed(
 def test_legacy_single_render_hashes_remain_exact(
     name: str,
 ) -> None:
-    view_model = build_view_model_from_path(
-        LEGACY_FIXTURE_DIR / f"{name}.json"
-    )
+    view_model = _legacy_view_model(name)
 
     data = view_model.to_dict()
 
@@ -482,9 +499,7 @@ def test_legacy_single_render_hashes_remain_exact(
 
 def test_legacy_workspace_hash_remains_exact() -> None:
     view_models = [
-        build_view_model_from_path(
-            LEGACY_FIXTURE_DIR / f"{name}.json"
-        )
+        _legacy_view_model(name)
         for name in LEGACY_NAMES
     ]
 
@@ -498,6 +513,35 @@ def test_legacy_workspace_hash_remains_exact() -> None:
     assert (
         'data-contract-section="methodology_decision"'
         not in workspace
+    )
+
+
+def test_legacy_hashes_ignore_absolute_fixture_root(
+    tmp_path: Path,
+) -> None:
+    relocated_dir = tmp_path / "relocated" / "a8_r109a"
+    relocated_dir.mkdir(parents=True)
+
+    source_path = LEGACY_FIXTURE_DIR / "recommended.json"
+    relocated_path = relocated_dir / source_path.name
+    relocated_path.write_bytes(source_path.read_bytes())
+
+    canonical = _legacy_view_model("recommended")
+    relocated = _legacy_view_model(
+        "recommended",
+        fixture_dir=relocated_dir,
+    )
+
+    assert canonical.to_json() == relocated.to_json()
+
+    assert (
+        render_workbench_html(canonical)
+        == render_workbench_html(relocated)
+    )
+
+    assert (
+        render_visual_html(canonical)
+        == render_visual_html(relocated)
     )
 
 
