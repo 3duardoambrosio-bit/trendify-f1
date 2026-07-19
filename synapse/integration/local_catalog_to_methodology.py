@@ -31,6 +31,7 @@ LOCAL_CATALOG_SOURCE_KIND = "operator_local_catalog_import"
 
 _REQUIRED_CONTEXT_FIELDS: tuple[str, ...] = (
     "product_facts",
+    "product_id",
     "buyer_state",
     "proof_available",
     "claim_risk",
@@ -100,7 +101,7 @@ def _require_string_sequence(
 
 def _validate_fixture_contract(
     fixture: Mapping[str, Any],
-) -> tuple[str, Mapping[str, Any]]:
+) -> tuple[str, str, Mapping[str, Any]]:
     source_kind = _require_nonempty_text(
         fixture.get("source_kind"),
         "fixture.source_kind",
@@ -121,6 +122,11 @@ def _validate_fixture_contract(
         "fixture.product.category",
     )
 
+    fixture_product_id = _require_nonempty_text(
+        product.get("product_id"),
+        "fixture.product.product_id",
+    )
+
     decision = _require_mapping(
         fixture.get("decision"),
         "fixture.decision",
@@ -136,7 +142,7 @@ def _validate_fixture_contract(
             "fixture.decision.methodology already exists"
         )
 
-    return fixture_category, decision
+    return fixture_category, fixture_product_id, decision
 
 
 def build_methodology_input(
@@ -146,7 +152,11 @@ def build_methodology_input(
     """Validate exact operator context and map it to the sealed engine input."""
 
     fixture = _require_mapping(fixture, "fixture")
-    fixture_category, _decision = _validate_fixture_contract(fixture)
+    (
+        fixture_category,
+        fixture_product_id,
+        _decision,
+    ) = _validate_fixture_contract(fixture)
 
     context = _require_mapping(
         methodology_context,
@@ -209,6 +219,17 @@ def build_methodology_input(
         context.get("margin_profile"),
         "methodology_context.margin_profile",
     )
+
+    context_product_id = _require_nonempty_text(
+        context.get("product_id"),
+        "methodology_context.product_id",
+    )
+
+    if context_product_id != fixture_product_id:
+        raise LocalCatalogMethodologyBridgeError(
+            "methodology_context.product_id must exactly match "
+            "fixture.product.product_id"
+        )
 
     context_category = _require_nonempty_text(
         context.get("category"),

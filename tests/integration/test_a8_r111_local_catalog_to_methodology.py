@@ -41,9 +41,9 @@ BRIDGE_PATH = (
 )
 
 
-def _fixture() -> dict:
+def _fixture(index: int = 0) -> dict:
     result = parse_catalog_csv(NOMINAL_CSV)
-    return copy.deepcopy(dict(result.fixtures[0]))
+    return copy.deepcopy(dict(result.fixtures[index]))
 
 
 def _context() -> dict:
@@ -54,6 +54,7 @@ def _context() -> dict:
     "field",
     (
         "product_facts",
+        "product_id",
         "buyer_state",
         "proof_available",
         "claim_risk",
@@ -116,6 +117,20 @@ def test_category_mismatch_fails_closed() -> None:
         match="must exactly match",
     ):
         build_methodology_input(_fixture(), context)
+
+
+def test_same_category_product_id_mismatch_fails_closed() -> None:
+    context = _context()
+    fixture = _fixture(1)
+
+    assert fixture["product"]["category"] == context["category"]
+    assert fixture["product"]["product_id"] != context["product_id"]
+
+    with pytest.raises(
+        LocalCatalogMethodologyBridgeError,
+        match="product_id must exactly match",
+    ):
+        build_methodology_input(fixture, context)
 
 
 def test_unknown_context_field_fails_closed() -> None:

@@ -5,6 +5,7 @@
   "channel": "Meta",
   "claim_risk": "low",
   "margin_profile": "acceptable",
+  "product_id": "cat-001",
   "product_facts": [
     "Identidad declarada por el operador: Organizador de Cables Compacto",
     "Proveedor declarado por el operador: Proveedor MX Alfa"
