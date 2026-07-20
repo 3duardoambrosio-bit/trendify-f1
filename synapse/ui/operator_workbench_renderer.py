@@ -271,6 +271,252 @@ def _render_product_decision(data: Mapping[str, Any]) -> str:
     return _section("product-decision", "Product / Decision", body)
 
 
+_METHODOLOGY_REQUIRED_FIELDS: tuple[str, ...] = (
+    "schema_version",
+    "selected_rule_id",
+    "selected_framework",
+    "status",
+    "triggers",
+    "operator_review_required",
+    "safe_output",
+    "rule_decisions",
+)
+
+_METHODOLOGY_RULE_REQUIRED_FIELDS: tuple[str, ...] = (
+    "rule_id",
+    "framework",
+    "source_anchor",
+    "priority",
+    "predicate_matched",
+    "semantic_matched",
+    "missing_fields",
+    "triggers",
+    "decision_text",
+)
+
+
+def _non_string_sequence(value: Any) -> bool:
+    return isinstance(value, Sequence) and not isinstance(
+        value,
+        (str, bytes, bytearray),
+    )
+
+
+def _methodology_decision_data(
+    data: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], Mapping[str, Any]] | None:
+    decision = data.get("decision")
+
+    if not isinstance(decision, Mapping):
+        raise ValueError("methodology parent decision must be a mapping")
+
+    if "methodology" not in decision:
+        return None
+
+    methodology = decision["methodology"]
+
+    if not isinstance(methodology, Mapping) or not methodology:
+        raise ValueError(
+            "decision.methodology must be a non-empty mapping"
+        )
+
+    if decision.get("permission_gate") != "REVIEW":
+        raise ValueError(
+            "methodology requires decision.permission_gate=REVIEW"
+        )
+
+    missing = [
+        field
+        for field in _METHODOLOGY_REQUIRED_FIELDS
+        if field not in methodology
+    ]
+
+    if missing:
+        raise ValueError(
+            "decision.methodology missing required fields: "
+            + ",".join(missing)
+        )
+
+    for field in (
+        "schema_version",
+        "selected_rule_id",
+        "selected_framework",
+        "status",
+        "safe_output",
+    ):
+        if not isinstance(methodology[field], str):
+            raise ValueError(
+                f"decision.methodology.{field} must be text"
+            )
+
+    if type(methodology["operator_review_required"]) is not bool:
+        raise ValueError(
+            "decision.methodology.operator_review_required "
+            "must be bool"
+        )
+
+    for field in ("triggers", "rule_decisions"):
+        if not _non_string_sequence(methodology[field]):
+            raise ValueError(
+                f"decision.methodology.{field} "
+                "must be a non-string sequence"
+            )
+
+    for index, rule in enumerate(methodology["rule_decisions"]):
+        if not isinstance(rule, Mapping):
+            raise ValueError(
+                "decision.methodology.rule_decisions"
+                f"[{index}] must be a mapping"
+            )
+
+        rule_missing = [
+            field
+            for field in _METHODOLOGY_RULE_REQUIRED_FIELDS
+            if field not in rule
+        ]
+
+        if rule_missing:
+            raise ValueError(
+                "decision.methodology.rule_decisions"
+                f"[{index}] missing required fields: "
+                + ",".join(rule_missing)
+            )
+
+        for field in (
+            "rule_id",
+            "framework",
+            "source_anchor",
+            "decision_text",
+        ):
+            if not isinstance(rule[field], str):
+                raise ValueError(
+                    "decision.methodology.rule_decisions"
+                    f"[{index}].{field} must be text"
+                )
+
+        if type(rule["priority"]) is not int:
+            raise ValueError(
+                "decision.methodology.rule_decisions"
+                f"[{index}].priority must be int"
+            )
+
+        for field in (
+            "predicate_matched",
+            "semantic_matched",
+        ):
+            if type(rule[field]) is not bool:
+                raise ValueError(
+                    "decision.methodology.rule_decisions"
+                    f"[{index}].{field} must be bool"
+                )
+
+        for field in ("missing_fields", "triggers"):
+            if not _non_string_sequence(rule[field]):
+                raise ValueError(
+                    "decision.methodology.rule_decisions"
+                    f"[{index}].{field} "
+                    "must be a non-string sequence"
+                )
+
+    return decision, methodology
+
+
+def _render_methodology_rule(
+    rule: Mapping[str, Any],
+) -> str:
+    body = (
+        _kv_table(
+            {
+                "rule_id": rule["rule_id"],
+                "framework": rule["framework"],
+                "source_anchor": rule["source_anchor"],
+                "priority": rule["priority"],
+                "predicate_matched": rule["predicate_matched"],
+                "semantic_matched": rule["semantic_matched"],
+                "decision_text": rule["decision_text"],
+            }
+        )
+        + "<h4>missing_fields</h4>"
+        + _ul(rule["missing_fields"])
+        + "<h4>triggers</h4>"
+        + _ul(rule["triggers"])
+    )
+
+    return (
+        '<div class="methodology-rule"'
+        f' data-methodology-rule-id="{_e(rule["rule_id"])}">'
+        f"{body}</div>"
+    )
+
+
+def _render_methodology_decision(
+    data: Mapping[str, Any],
+) -> str:
+    resolved = _methodology_decision_data(data)
+
+    if resolved is None:
+        return ""
+
+    decision, methodology = resolved
+
+    rules = "".join(
+        _render_methodology_rule(rule)
+        for rule in methodology["rule_decisions"]
+    )
+
+    body = (
+        '<p class="warning">'
+        "Salida del motor sellado. Requiere revisión del operador. "
+        "Un estado accepted no autoriza publicación, gasto ni "
+        "escrituras en vivo.</p>"
+        '<p class="honesty">'
+        "El campo operator_review_required refleja si la regla "
+        "seleccionada exige revisión metodológica adicional. "
+        "Cuando su valor es false, no elimina "
+        "permission_gate=REVIEW.</p>"
+        + _kv_table(
+            {
+                "permission_gate": decision["permission_gate"],
+                "schema_version": methodology["schema_version"],
+                "status": methodology["status"],
+                "selected_rule_id": methodology[
+                    "selected_rule_id"
+                ],
+                "selected_framework": methodology[
+                    "selected_framework"
+                ],
+                "operator_review_required": methodology[
+                    "operator_review_required"
+                ],
+            }
+        )
+        + "<h3>triggers</h3>"
+        + _ul(methodology["triggers"])
+        + "<h3>rule_decisions</h3>"
+        + (
+            rules
+            or '<p class="empty">(sin decisiones de regla)</p>'
+        )
+        + "<h3>safe_output — texto inerte</h3>"
+        + '<pre data-methodology-safe-output="inert">'
+        + _e(methodology["safe_output"])
+        + "</pre>"
+    )
+
+    return (
+        '<section id="methodology-decision"'
+        ' data-contract-section="methodology_decision"'
+        ' data-methodology-present="true"'
+        ' data-permission-gate="REVIEW"'
+        f' data-operator-review-required="'
+        f'{str(methodology["operator_review_required"]).lower()}"'
+        ' data-safe-output-review-required="true">'
+        "<h2>Methodology Decision</h2>"
+        '<code class="contract-marker">'
+        "methodology_decision</code>"
+        f"{body}</section>"
+    )
+
 def _render_input_richness(data: Mapping[str, Any]) -> str:
     richness = data["input_richness"]
     parts = [
@@ -625,6 +871,7 @@ pre { background: #f4f4f4; border: 1px solid #b5b5b5; padding: 8px; white-space:
 def render_workbench_html(view_model: WorkbenchViewModel) -> str:
     """Render the ViewModel to a deterministic, self-contained HTML string."""
     data = view_model.to_dict()
+    methodology_section = _render_methodology_decision(data)
 
     sections = "\n".join(
         (
@@ -633,6 +880,11 @@ def render_workbench_html(view_model: WorkbenchViewModel) -> str:
             _render_candidate_pipeline(data),
             _render_action_queue(data),
             _render_product_decision(data),
+            *(
+                (methodology_section,)
+                if methodology_section
+                else ()
+            ),
             _render_input_richness(data),
             _render_economics_scores(data),
             _render_shopify_pack(data),

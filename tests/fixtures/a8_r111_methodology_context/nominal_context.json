@@ -1,0 +1,16 @@
+{
+  "buyer_state": "problem-aware",
+  "candidate_output": "",
+  "category": "hogar_y_oficina",
+  "channel": "Meta",
+  "claim_risk": "low",
+  "margin_profile": "acceptable",
+  "product_id": "cat-001",
+  "product_facts": [
+    "Identidad declarada por el operador: Organizador de Cables Compacto",
+    "Proveedor declarado por el operador: Proveedor MX Alfa"
+  ],
+  "proof_available": [
+    "Registro CSV local del operador con identidad y costos completos"
+  ]
+}
