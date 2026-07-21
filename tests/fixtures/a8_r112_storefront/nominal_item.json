@@ -1,0 +1,73 @@
+{
+  "fixture": {
+    "fixture_id": "a8_r110_cat_001",
+    "source_kind": "operator_local_catalog_import",
+    "scenario": "catalog_intake",
+    "product": {
+      "product_id": "cat-001",
+      "name": "Organizador de Cables Compacto",
+      "category": "hogar_y_oficina",
+      "supplier": "Proveedor MX Alfa",
+      "market": "MX",
+      "status": "candidate"
+    },
+    "decision": {
+      "outcome": "EVALUATING",
+      "permission_gate": "REVIEW",
+      "reason": "Candidato local sin autorización de publicación.",
+      "reason_codes": [
+        "CATALOG_INTAKE",
+        "NO_OPERATOR_BRIEF"
+      ],
+      "caveats": [
+        "Revisión humana obligatoria."
+      ],
+      "methodology": {
+        "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+        "selected_rule_id": "ANG-D001",
+        "selected_framework": "product_specific_angle",
+        "status": "accepted",
+        "triggers": [],
+        "operator_review_required": false,
+        "safe_output": "Hook: ejemplo interno no autorizado para publicación.",
+        "rule_decisions": []
+      }
+    },
+    "operator_input": {},
+    "evidence": {
+      "notes": [
+        "Fixture local de prueba."
+      ],
+      "artifacts": [
+        "catalog_nominal.csv"
+      ]
+    },
+    "economics": {
+      "currency": "MXN",
+      "price_mxn": 399.0,
+      "product_cost_mxn": 120.0,
+      "shipping_cost_mxn": 70.0,
+      "payment_fee_mxn": 10.0,
+      "contribution_margin_mxn": 199.0,
+      "contribution_margin_percent": 49.9,
+      "breakeven_cpa_mxn": 199.0,
+      "notes": "Solo contexto de operador."
+    }
+  },
+  "methodology_context": {
+    "buyer_state": "problem-aware",
+    "candidate_output": "",
+    "category": "hogar_y_oficina",
+    "channel": "Meta",
+    "claim_risk": "low",
+    "margin_profile": "acceptable",
+    "product_id": "cat-001",
+    "product_facts": [
+      "Identidad declarada por el operador: Organizador de Cables Compacto",
+      "Proveedor declarado por el operador: Proveedor MX Alfa"
+    ],
+    "proof_available": [
+      "Registro CSV local del operador con identidad y costos completos"
+    ]
+  }
+}
