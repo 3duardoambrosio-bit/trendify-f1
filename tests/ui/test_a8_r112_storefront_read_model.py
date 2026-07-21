@@ -217,13 +217,14 @@ def test_distinct_ids_with_same_slug_fail_closed() -> None:
     (
         0,
         -1,
+        "0.004",
         "NaN",
         "Infinity",
         True,
         None,
     ),
 )
-def test_nonpositive_or_nonfinite_price_fails_closed(
+def test_invalid_or_subcent_price_fails_closed(
     value: object,
 ) -> None:
     item = _item()

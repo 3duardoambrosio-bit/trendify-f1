@@ -472,7 +472,13 @@ def _positive_money(value: Any, path: str) -> Decimal:
             f"{path} must be a positive finite decimal"
         )
 
-    return amount.quantize(_MONEY, rounding=ROUND_HALF_UP)
+    quantized = amount.quantize(_MONEY, rounding=ROUND_HALF_UP)
+    if quantized <= Decimal("0"):
+        raise StorefrontReadModelError(
+            f"{path} must be a positive finite decimal after cent rounding"
+        )
+
+    return quantized
 
 
 def _preview_status(
