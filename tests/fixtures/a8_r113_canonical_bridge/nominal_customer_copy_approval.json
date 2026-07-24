@@ -1,0 +1,19 @@
+{
+  "approval": {
+    "approved_copy_sha256": "963f011cc64f3dc59cb2ccb0aa598ac868cd06bd3de529fbfe2fa78948a019cf",
+    "external_writes_authorized": false,
+    "publication_authorized": false,
+    "scope": "LOCAL_PREVIEW_ONLY",
+    "status": "APPROVED_FOR_LOCAL_PREVIEW"
+  },
+  "copy": {
+    "description": "Luz para complementar la iluminaci?n de un escritorio con monitor durante sesiones nocturnas.",
+    "facts": [
+      "Formato de barra para colocaci?n sobre monitor.",
+      "Pensada para complementar la iluminaci?n del ?rea de trabajo."
+    ],
+    "product_id": "disc_71c892da6f966e",
+    "proof": [],
+    "title": "Barra LED asimétrica para monitor"
+  }
+}

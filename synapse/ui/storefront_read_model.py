@@ -17,6 +17,10 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
+from synapse.integration.canonical_product_bridge import (
+    CanonicalProductBridgeError,
+    validate_promoted_fixture_custody,
+)
 from synapse.ui.storefront_customer_copy import (
     CustomerCopyApprovalError,
     validate_operator_approved_customer_copy,
@@ -25,6 +29,15 @@ from synapse.ui.storefront_customer_copy import (
 SCHEMA_VERSION = "a8-r112.storefront_read_model.v1"
 MODE = "LOCAL_PREVIEW"
 SOURCE_KIND = "operator_local_catalog_import"
+DISCOVERY_PROMOTION_SOURCE_KIND = (
+    "operator_approved_discovery_promotion"
+)
+ALLOWED_SOURCE_KINDS = frozenset(
+    {
+        SOURCE_KIND,
+        DISCOVERY_PROMOTION_SOURCE_KIND,
+    }
+)
 CURRENCY = "MXN"
 METHODOLOGY_SCHEMA_VERSION = (
     "synapse.marketing_methodology.decision_engine.v1"
@@ -227,10 +240,19 @@ def _build_product(
         fixture.get("source_kind"),
         f"{path}.fixture.source_kind",
     )
-    if source_kind != SOURCE_KIND:
+    if source_kind not in ALLOWED_SOURCE_KINDS:
+        allowed = ",".join(sorted(ALLOWED_SOURCE_KINDS))
         raise StorefrontReadModelError(
-            f"{path}.fixture.source_kind must be {SOURCE_KIND}"
+            f"{path}.fixture.source_kind must be one of:{allowed}"
         )
+
+    if source_kind == DISCOVERY_PROMOTION_SOURCE_KIND:
+        try:
+            validate_promoted_fixture_custody(fixture)
+        except CanonicalProductBridgeError as exc:
+            raise StorefrontReadModelError(
+                f"{path}.fixture.canonical_bridge: {exc}"
+            ) from None
 
     product = _require_mapping(
         fixture.get("product"),
@@ -638,7 +660,9 @@ def _require_text(value: Any, path: str) -> str:
 
 
 __all__ = [
+    "ALLOWED_SOURCE_KINDS",
     "CURRENCY",
+    "DISCOVERY_PROMOTION_SOURCE_KIND",
     "MODE",
     "SCHEMA_VERSION",
     "SOURCE_KIND",

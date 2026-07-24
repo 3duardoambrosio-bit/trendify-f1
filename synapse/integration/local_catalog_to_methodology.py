@@ -15,6 +15,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from synapse.integration.canonical_product_bridge import (
+    CanonicalProductBridgeError,
+    validate_promoted_fixture_custody,
+)
 from synapse.marketing_os.methodology_decision_engine import (
     DEFAULT_SPEC_PATH,
     MethodologyDecisionEngineError,
@@ -28,6 +32,15 @@ from synapse.marketing_os.methodology_rule_loader import (
 )
 
 LOCAL_CATALOG_SOURCE_KIND = "operator_local_catalog_import"
+DISCOVERY_PROMOTION_SOURCE_KIND = (
+    "operator_approved_discovery_promotion"
+)
+ALLOWED_SOURCE_KINDS = frozenset(
+    {
+        LOCAL_CATALOG_SOURCE_KIND,
+        DISCOVERY_PROMOTION_SOURCE_KIND,
+    }
+)
 
 _REQUIRED_CONTEXT_FIELDS: tuple[str, ...] = (
     "product_facts",
@@ -107,10 +120,19 @@ def _validate_fixture_contract(
         "fixture.source_kind",
     )
 
-    if source_kind != LOCAL_CATALOG_SOURCE_KIND:
+    if source_kind not in ALLOWED_SOURCE_KINDS:
+        allowed = ",".join(sorted(ALLOWED_SOURCE_KINDS))
         raise LocalCatalogMethodologyBridgeError(
-            "fixture.source_kind must be operator_local_catalog_import"
+            f"fixture.source_kind must be one of:{allowed}"
         )
+
+    if source_kind == DISCOVERY_PROMOTION_SOURCE_KIND:
+        try:
+            validate_promoted_fixture_custody(fixture)
+        except CanonicalProductBridgeError as exc:
+            raise LocalCatalogMethodologyBridgeError(
+                f"fixture.canonical_bridge: {exc}"
+            ) from None
 
     product = _require_mapping(
         fixture.get("product"),
@@ -340,6 +362,8 @@ def enrich_local_catalog_fixture_with_methodology(
 
 
 __all__ = [
+    "ALLOWED_SOURCE_KINDS",
+    "DISCOVERY_PROMOTION_SOURCE_KIND",
     "LOCAL_CATALOG_SOURCE_KIND",
     "LocalCatalogMethodologyBridgeError",
     "build_methodology_input",
