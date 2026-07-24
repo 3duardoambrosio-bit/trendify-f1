@@ -17,6 +17,11 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
+from synapse.ui.storefront_customer_copy import (
+    CustomerCopyApprovalError,
+    validate_operator_approved_customer_copy,
+)
+
 SCHEMA_VERSION = "a8-r112.storefront_read_model.v1"
 MODE = "LOCAL_PREVIEW"
 SOURCE_KIND = "operator_local_catalog_import"
@@ -33,6 +38,9 @@ STATUS_PRICE_AND_METHODOLOGY_MISSING = (
 )
 
 _REQUIRED_ITEM_FIELDS = frozenset({"fixture", "methodology_context"})
+_ALLOWED_ITEM_FIELDS = frozenset(
+    (*_REQUIRED_ITEM_FIELDS, "customer_copy_approval")
+)
 _REQUIRED_CONTEXT_FIELDS: tuple[str, ...] = (
     "product_facts",
     "product_id",
@@ -81,7 +89,7 @@ def build_storefront_read_model(
         _require_exact_keys(
             item,
             required=_REQUIRED_ITEM_FIELDS,
-            allowed=_REQUIRED_ITEM_FIELDS,
+            allowed=_ALLOWED_ITEM_FIELDS,
             path=item_path,
         )
 
@@ -96,6 +104,12 @@ def build_storefront_read_model(
         product = _build_product(
             fixture=fixture,
             context=context,
+            customer_copy_approval_present=(
+                "customer_copy_approval" in item
+            ),
+            customer_copy_approval=item.get(
+                "customer_copy_approval"
+            ),
             path=item_path,
         )
 
@@ -205,6 +219,8 @@ def _build_product(
     *,
     fixture: Mapping[str, Any],
     context: Mapping[str, Any],
+    customer_copy_approval_present: bool,
+    customer_copy_approval: Any,
     path: str,
 ) -> dict[str, Any]:
     source_kind = _require_nonempty_text(
@@ -289,6 +305,40 @@ def _build_product(
     )
     product_slug = _slug(product_id, f"{path}.fixture.product.product_id")
 
+    public_content = {
+        "title": title,
+        "description": "",
+        "facts": [],
+        "proof": [],
+        "content_state": "IDENTITY_ONLY",
+    }
+
+    if customer_copy_approval_present:
+        if not methodology_present:
+            raise StorefrontReadModelError(
+                f"{path}.customer_copy_approval requires methodology"
+            )
+        if methodology_status != "accepted":
+            raise StorefrontReadModelError(
+                f"{path}.customer_copy_approval requires "
+                "methodology status accepted"
+            )
+        if review_required is not False:
+            raise StorefrontReadModelError(
+                f"{path}.customer_copy_approval requires "
+                "methodology operator review to be false"
+            )
+
+        try:
+            public_content = validate_operator_approved_customer_copy(
+                customer_copy_approval,
+                expected_product_id=product_id,
+            )
+        except CustomerCopyApprovalError as exc:
+            raise StorefrontReadModelError(
+                f"{path}.customer_copy_approval: {exc}"
+            ) from None
+
     return {
         "product_id": product_id,
         "slug": product_slug,
@@ -298,13 +348,7 @@ def _build_product(
         "preview_status": preview_status,
         "publication_status": "NOT_AUTHORIZED",
         "price": price,
-        "public_content": {
-            "title": title,
-            "description": "",
-            "facts": [],
-            "proof": [],
-            "content_state": "IDENTITY_ONLY",
-        },
+        "public_content": public_content,
         "routes": {
             "product_detail": f"/products/{product_slug}",
         },

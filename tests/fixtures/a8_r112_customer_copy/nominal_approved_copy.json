@@ -1,0 +1,19 @@
+{
+  "approval": {
+    "approved_copy_sha256": "4ee0c85ed032b135d82381f2fb8f8ee3108af1d82873c10aac6c0efa99be6850",
+    "external_writes_authorized": false,
+    "publication_authorized": false,
+    "scope": "LOCAL_PREVIEW_ONLY",
+    "status": "APPROVED_FOR_LOCAL_PREVIEW"
+  },
+  "copy": {
+    "description": "Mantén los cables de uso cotidiano agrupados y accesibles en espacios de trabajo o del hogar.",
+    "facts": [
+      "Formato compacto para escritorio, mesa o estación de trabajo.",
+      "Pensado para mantener cables de uso cotidiano agrupados y accesibles."
+    ],
+    "product_id": "cat-001",
+    "proof": [],
+    "title": "Organizador de Cables Compacto"
+  }
+}
