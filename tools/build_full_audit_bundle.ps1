@@ -339,7 +339,30 @@ foreach ($rel in $criticalSourceFiles) {
   }
 }
 
-$headNameOnly = @(& git -C $Repo show --name-only --pretty=format: HEAD)
+$headParentLine = ([string](
+  & git -C $Repo rev-list --parents -n 1 HEAD
+)).Trim()
+
+$headParentParts = @(
+  $headParentLine -split "\s+"
+)
+
+if ($headParentParts.Count -gt 2) {
+  $headNameOnly = @(
+    & git -C $Repo diff --name-only "HEAD^1" HEAD
+  )
+} else {
+  $headNameOnly = @(
+    & git -C $Repo show --name-only --pretty=format: HEAD
+  )
+}
+
+$headNameOnly = @(
+  $headNameOnly |
+    Where-Object {
+      -not [string]::IsNullOrWhiteSpace($_)
+    }
+)
 Write-A8R29Utf8NoBomText -Path (Join-Path $OutDir "git_show_head_name_only.txt") -Text (($headNameOnly -join "`n") + "`n")
 
 $trackedFiles = @(& git -C $Repo ls-files)
