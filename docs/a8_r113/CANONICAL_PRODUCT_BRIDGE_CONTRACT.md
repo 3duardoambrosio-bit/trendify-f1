@@ -79,11 +79,19 @@ El fixture promovido incluye el envelope `canonical_bridge` con:
 - snapshot completo del candidato;
 - campo canónico `candidate_snapshot`;
 - SHA-256 del snapshot;
+- SHA-256 canónico de la aprobación completa;
 - aprobación del operador;
 - decisión vinculada.
 
-Metodología y storefront recalculan el digest y verifican la
-identidad antes de aceptar un fixture promovido.
+El envelope de custodia usa:
+
+```text
+a8-r113.promoted_fixture_custody.v2
+```
+
+Metodología y storefront recalculan ambos digests y verifican la
+identidad, la aprobación y la relación entre decisión financiera y
+decisión final antes de aceptar un fixture promovido.
 
 Una mutación del snapshot, producto, decisión, digest o aprobación
 debe fallar cerrada.
@@ -171,5 +179,5 @@ La isla contiene tres fixtures deterministas:
 - `nominal_methodology_context.json`;
 - `nominal_customer_copy_approval.json`.
 
-Los tres preservan la identidad `disc_71c892da6f966e` y no
+Los tres preservan UTF-8, la identidad `disc_71c892da6f966e` y no
 autorizan publicación, writes, gasto ni fulfillment.

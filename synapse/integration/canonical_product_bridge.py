@@ -16,7 +16,6 @@ import hmac
 import json
 import re
 from collections.abc import Mapping
-from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -33,7 +32,7 @@ SCHEMA_VERSION = "a8-r113.canonical_product_bridge.v1"
 SOURCE_KIND = "operator_approved_discovery_promotion"
 APPROVAL_STATUS = "APPROVED_FOR_LOCAL_PROMOTION"
 APPROVAL_SCOPE = "LOCAL_PREVIEW_PIPELINE_ONLY"
-CUSTODY_SCHEMA_VERSION = "a8-r113.promoted_fixture_custody.v1"
+CUSTODY_SCHEMA_VERSION = "a8-r113.promoted_fixture_custody.v2"
 
 
 class CanonicalProductBridgeError(ValueError):
@@ -297,6 +296,11 @@ _ALLOWED_FINAL_DECISIONS = frozenset(
     }
 )
 
+_FINAL_TO_FINANCIAL_DECISION = {
+    "READY_FOR_SANDBOX_BRIEF": "PASS",
+    "WATCH_SANDBOX_BRIEF_ONLY": "WATCH",
+}
+
 
 def promote_smoke_result_to_local_fixture(
     result: "SmokeIntegrationResult",
@@ -397,6 +401,7 @@ def promote_smoke_result_to_local_fixture(
             "candidate_snapshot": canonicalize_discovery_candidate(
                 candidate
             ),
+            "approval_sha256": _canonical_mapping_sha256(validated),
             "approval": {
                 "status": validated["status"],
                 "scope": validated["scope"],
@@ -484,6 +489,7 @@ _CUSTODY_FIELDS = frozenset(
         "candidate_id",
         "candidate_sha256",
         "candidate_snapshot",
+        "approval_sha256",
         "approval",
     }
 )
@@ -711,6 +717,62 @@ def validate_promoted_fixture_custody(
                 f"{field} must be false"
             )
 
+    approval_digest = _require_text(
+        custody.get("approval_sha256"),
+        "fixture.canonical_bridge.approval_sha256",
+    )
+
+    if not _SHA256_RE.fullmatch(approval_digest):
+        raise CanonicalProductBridgeError(
+            "fixture.canonical_bridge.approval_sha256 must be "
+            "64 lowercase hexadecimal characters"
+        )
+
+    expected_approval_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "status": approval["status"],
+        "scope": approval["scope"],
+        "operator_id": approval["operator_id"],
+        "approval_record_id": approval["approval_record_id"],
+        "candidate_id": candidate_id,
+        "candidate_sha256": digest,
+        "decision_run_id": approval["decision_run_id"],
+        "financial_decision": approval["financial_decision"],
+        "final_decision": approval["final_decision"],
+        "publication_authorized": False,
+        "external_writes_authorized": False,
+        "spend_authorized": False,
+        "fulfillment_authorized": False,
+    }
+    expected_approval_digest = _canonical_mapping_sha256(
+        expected_approval_payload
+    )
+
+    if not hmac.compare_digest(
+        approval_digest,
+        expected_approval_digest,
+    ):
+        raise CanonicalProductBridgeError(
+            "fixture.canonical_bridge.approval_sha256 mismatch"
+        )
+
+    final_decision = approval["final_decision"]
+    expected_financial_decision = (
+        _FINAL_TO_FINANCIAL_DECISION.get(final_decision)
+    )
+
+    if expected_financial_decision is None:
+        raise CanonicalProductBridgeError(
+            "fixture.canonical_bridge.approval.final_decision "
+            "is not eligible for local promotion"
+        )
+
+    if approval["financial_decision"] != expected_financial_decision:
+        raise CanonicalProductBridgeError(
+            "fixture.canonical_bridge.approval.financial_decision "
+            "does not match final_decision"
+        )
+
     if decision.get("permission_gate") != "REVIEW":
         raise CanonicalProductBridgeError(
             "fixture.decision.permission_gate must remain REVIEW"
@@ -724,6 +786,7 @@ def validate_promoted_fixture_custody(
     return {
         "candidate_id": candidate_id,
         "candidate_sha256": digest,
+        "approval_sha256": approval_digest,
         "approval_record_id": approval["approval_record_id"],
     }
 

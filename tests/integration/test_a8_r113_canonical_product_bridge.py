@@ -434,6 +434,10 @@ def test_promoted_fixture_custody_is_digest_bound() -> None:
     assert validated["candidate_sha256"] == (
         discovery_candidate_sha256(result.candidate)
     )
+    assert len(validated["approval_sha256"]) == 64
+    assert fixture["canonical_bridge"]["schema_version"] == (
+        "a8-r113.promoted_fixture_custody.v2"
+    )
 
     tampered = copy.deepcopy(fixture)
     tampered["canonical_bridge"]["candidate_snapshot"][
@@ -443,6 +447,76 @@ def test_promoted_fixture_custody_is_digest_bound() -> None:
     with pytest.raises(
         CanonicalProductBridgeError,
         match="candidate_sha256 mismatch",
+    ):
+        validate_promoted_fixture_custody(tampered)
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "operator_id",
+        "approval_record_id",
+        "decision_run_id",
+        "financial_decision",
+    ),
+)
+def test_promoted_fixture_rejects_approval_field_tampering(
+    field: str,
+) -> None:
+    result = _smoke()
+    fixture = promote_smoke_result_to_local_fixture(
+        result,
+        _promotion_approval(result),
+    )
+
+    tampered = copy.deepcopy(fixture)
+    tampered["canonical_bridge"]["approval"][field] += "-tampered"
+
+    with pytest.raises(
+        CanonicalProductBridgeError,
+        match="approval_sha256 mismatch",
+    ):
+        validate_promoted_fixture_custody(tampered)
+
+
+def test_promoted_fixture_rejects_coordinated_decision_tampering() -> None:
+    result = _smoke()
+    fixture = promote_smoke_result_to_local_fixture(
+        result,
+        _promotion_approval(result),
+    )
+
+    tampered = copy.deepcopy(fixture)
+    tampered["canonical_bridge"]["approval"][
+        "final_decision"
+    ] = "WATCH_SANDBOX_BRIEF_ONLY"
+    tampered["canonical_bridge"]["approval"][
+        "financial_decision"
+    ] = "WATCH"
+    tampered["decision"]["outcome"] = (
+        "WATCH_SANDBOX_BRIEF_ONLY"
+    )
+
+    with pytest.raises(
+        CanonicalProductBridgeError,
+        match="approval_sha256 mismatch",
+    ):
+        validate_promoted_fixture_custody(tampered)
+
+
+def test_promoted_fixture_rejects_approval_digest_tampering() -> None:
+    result = _smoke()
+    fixture = promote_smoke_result_to_local_fixture(
+        result,
+        _promotion_approval(result),
+    )
+
+    tampered = copy.deepcopy(fixture)
+    tampered["canonical_bridge"]["approval_sha256"] = "0" * 64
+
+    with pytest.raises(
+        CanonicalProductBridgeError,
+        match="approval_sha256 mismatch",
     ):
         validate_promoted_fixture_custody(tampered)
 
@@ -548,6 +622,7 @@ def test_nominal_fixtures_drive_complete_pipeline() -> None:
     product = model["products"][0]
 
     assert custody["candidate_id"] == candidate_id
+    assert len(custody["approval_sha256"]) == 64
     assert product["product_id"] == candidate_id
     assert product["preview_status"] == "READY"
     assert product["publication_status"] == "NOT_AUTHORIZED"
@@ -559,6 +634,31 @@ def test_nominal_fixtures_drive_complete_pipeline() -> None:
         value is False
         for value in model["safety"].values()
     )
+
+
+def test_nominal_fixtures_preserve_utf8_customer_copy() -> None:
+    context = _load_nominal_fixture(
+        "nominal_methodology_context.json"
+    )
+    copy_approval = _load_nominal_fixture(
+        "nominal_customer_copy_approval.json"
+    )
+
+    serialized = json.dumps(
+        {
+            "context": context,
+            "copy_approval": copy_approval,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+    assert "sintética" in serialized
+    assert "economía explícitas" in serialized
+    assert "iluminación" in serialized
+    assert "colocación" in serialized
+    assert "área de trabajo" in serialized
+    assert "?" not in serialized
 
 
 def test_contract_records_identity_custody_and_safety() -> None:

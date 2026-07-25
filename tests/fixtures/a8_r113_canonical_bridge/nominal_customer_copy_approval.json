@@ -1,16 +1,16 @@
 {
   "approval": {
-    "approved_copy_sha256": "963f011cc64f3dc59cb2ccb0aa598ac868cd06bd3de529fbfe2fa78948a019cf",
+    "approved_copy_sha256": "bb235fcbbc4fcb5b7b66447021879e1718d4ecfd865334b9ded8e7541ea3bea5",
     "external_writes_authorized": false,
     "publication_authorized": false,
     "scope": "LOCAL_PREVIEW_ONLY",
     "status": "APPROVED_FOR_LOCAL_PREVIEW"
   },
   "copy": {
-    "description": "Luz para complementar la iluminaci?n de un escritorio con monitor durante sesiones nocturnas.",
+    "description": "Luz para complementar la iluminación de un escritorio con monitor durante sesiones nocturnas.",
     "facts": [
-      "Formato de barra para colocaci?n sobre monitor.",
-      "Pensada para complementar la iluminaci?n del ?rea de trabajo."
+      "Formato de barra para colocación sobre monitor.",
+      "Pensada para complementar la iluminación del área de trabajo."
     ],
     "product_id": "disc_71c892da6f966e",
     "proof": [],
