@@ -5,6 +5,7 @@ from typing import Optional, Dict
 from urllib.parse import urlparse
 
 from infra.feature_flags import FeatureFlags
+from infra.log_sanitizer import INVALID_URL_REDACTED, redact_url
 
 
 # Dominios dinero real que deben estar gated por flags.
@@ -13,6 +14,9 @@ _DOMAIN_TO_SYSTEM: Dict[str, str] = {
     "api.dropi.co": "dropi",
     "myshopify.com": "shopify",
 }
+_INVALID_URL_REASON = (
+    f"NETWORK_BLOCKED_INVALID_URL: url={INVALID_URL_REDACTED}"
+)
 
 
 def _host_of(url: str) -> str:
@@ -31,7 +35,13 @@ def classify_system(url: str) -> Optional[str]:
     """
     Devuelve el sistema ("meta"/"dropi"/"shopify") si el URL es de un dominio sensible.
     """
-    host = _host_of(url)
+    safe_url = redact_url(url)
+    if safe_url == INVALID_URL_REDACTED:
+        return None
+    try:
+        host = _host_of(safe_url)
+    except Exception:
+        return None
     if not host:
         return None
     for dom, sys in _DOMAIN_TO_SYSTEM.items():
@@ -48,7 +58,15 @@ class NetworkDecision:
 
 
 def decide_url(url: str) -> NetworkDecision:
-    sys = classify_system(url)
+    safe_url = redact_url(url)
+    if safe_url == INVALID_URL_REDACTED:
+        return NetworkDecision(False, None, _INVALID_URL_REASON)
+
+    try:
+        sys = classify_system(safe_url)
+    except Exception:
+        return NetworkDecision(False, None, _INVALID_URL_REASON)
+
     if sys is None:
         return NetworkDecision(True, None, None)
 
@@ -59,7 +77,7 @@ def decide_url(url: str) -> NetworkDecision:
     return NetworkDecision(
         False,
         sys,
-        f"NETWORK_BLOCKED_BY_FLAGS: system={sys} url={url} "
+        f"NETWORK_BLOCKED_BY_FLAGS: system={sys} url={safe_url} "
         f"(set SYNAPSE_DRY_RUN=0 and SYNAPSE_LIVE_{sys.upper()}=1)",
     )
 
