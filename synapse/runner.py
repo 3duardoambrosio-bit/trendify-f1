@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -152,6 +153,9 @@ def _parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     ap.add_argument("--ledger", type=str, default=str(LEDGER_REL))
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--no-ledger", action="store_true")
+    mode = ap.add_mutually_exclusive_group(required=False)
+    mode.add_argument("--apply", action="store_true")
+    mode.add_argument("--dry-run", action="store_true")
     return ap.parse_args(argv)
 
 
@@ -247,35 +251,131 @@ def _run_learning_loop(loop, *, ledger, cfg, force=False, dry_run=False):
     return loop.run(**kwargs)
 
 
+def _readonly_enabled() -> bool:
+    return os.getenv("SYNAPSE_READONLY", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
+def _learning_result_rc(result: Any) -> int:
+    if isinstance(result, int) and not isinstance(result, bool):
+        return result if result in (0, 2, 3) else 3
+
+    status = getattr(result, "status", None)
+    if status in {"COMPLETED", "COMPLETED_DRY_RUN", "SKIPPED"}:
+        return 0
+    if status in {
+        "INSUFFICIENT_EVIDENCE",
+        "INSUFFICIENT_SPEND",
+        "INSUFFICIENT_RECORDS",
+    }:
+        return 2
+    return 3
+
+
+def _learning_result_status(result: Any, rc: int) -> str:
+    status = getattr(result, "status", None)
+    if isinstance(status, str) and status:
+        return status
+    return {0: "COMPLETED", 2: "BLOCKED", 3: "EXECUTION_ERROR"}[rc]
+
+
+def _emit_learning_output(
+    *,
+    status: str,
+    dry_run: bool,
+    apply_requested: bool,
+    writes_allowed: bool,
+    rc: int,
+    result: Any = None,
+) -> None:
+    print(f"LEARNING_STATUS={status}")
+    print(f"LEARNING_DRY_RUN={str(dry_run).lower()}")
+    print(f"LEARNING_APPLY_REQUESTED={str(apply_requested).lower()}")
+    print(f"LEARNING_WRITES_ALLOWED={str(writes_allowed).lower()}")
+    print(f"LEARNING_RC={rc}")
+
+    for field, output_name in (
+        ("input_hash", "LEARNING_INPUT_HASH"),
+        ("state_path", "LEARNING_STATE_PATH"),
+        ("report_path", "LEARNING_REPORT_PATH"),
+        ("weights_path", "LEARNING_WEIGHTS_PATH"),
+    ):
+        value = getattr(result, field, None)
+        if value:
+            print(f"{output_name}={value}")
+
+
 @deal.pre(lambda argv=None: True, message="main contract")
 @deal.post(lambda result: isinstance(result, int), message="main must return int")
 @deal.raises(deal.RaisesContractError)
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ns = _parse_args(argv)
-    cfg = _build_config(ns)
-    ledger = _ledger_for(cfg)
+    apply_requested = bool(ns.apply)
 
-    from synapse.learning.learning_loop import LearningLoop, LearningLoopConfig
+    if not apply_requested:
+        status = "DRY_RUN_NOOP" if ns.dry_run else "DEFAULT_NOOP"
+        _emit_learning_output(
+            status=status,
+            dry_run=True,
+            apply_requested=False,
+            writes_allowed=False,
+            rc=0,
+        )
+        return 0
 
-    _ll_cli = (
-        locals().get("args")
-        or locals().get("ns")
-        or locals().get("parsed_args")
-        or locals().get("cli")
-    )
-    _ll_root = locals().get("root")
-    if _ll_root is None and _ll_cli is not None:
-        _ll_root = getattr(_ll_cli, "root", None)
-    _ll_quiet = locals().get("quiet")
-    if _ll_quiet is None:
-        if _ll_cli is not None and hasattr(_ll_cli, "quiet"):
-            _ll_quiet = getattr(_ll_cli, "quiet")
-        else:
-            _ll_quiet = False
-    llc = _make_learning_loop_config(root=_ll_root, ledger=ledger, quiet=_ll_quiet)
-    loop = LearningLoop(llc)
-    rc = _run_learning_loop(loop, ledger=ledger, cfg=llc, force=False, dry_run=False)
-    return int(rc)
+    if _readonly_enabled():
+        _emit_learning_output(
+            status="READONLY_BLOCKED",
+            dry_run=False,
+            apply_requested=True,
+            writes_allowed=False,
+            rc=2,
+        )
+        return 2
+
+    try:
+        cfg = _build_config(ns)
+        ledger = _ledger_for(cfg)
+
+        from synapse.learning.learning_loop import LearningLoop
+
+        llc = _make_learning_loop_config(
+            root=cfg.root,
+            ledger=ledger,
+            quiet=cfg.quiet,
+        )
+        loop = LearningLoop(cfg.root)
+        result = _run_learning_loop(
+            loop,
+            ledger=ledger,
+            cfg=llc,
+            force=False,
+            dry_run=False,
+        )
+        rc = _learning_result_rc(result)
+        _emit_learning_output(
+            status=_learning_result_status(result, rc),
+            dry_run=False,
+            apply_requested=True,
+            writes_allowed=True,
+            rc=rc,
+            result=result,
+        )
+        return rc
+    except Exception:
+        _emit_learning_output(
+            status="EXECUTION_ERROR",
+            dry_run=False,
+            apply_requested=True,
+            writes_allowed=True,
+            rc=3,
+        )
+        return 3
 
 
 if __name__ == "__main__":

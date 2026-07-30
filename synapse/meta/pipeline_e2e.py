@@ -29,6 +29,7 @@ from synapse.meta.advantage_plus import AdvantagePlusCampaignBuilder
 from synapse.meta.warm_up_protocol import WarmUpProtocol
 
 __MARKER__ = "SESSION_S10_pipeline_e2e_20260228"
+PUBLISH_NOT_CONNECTED = "pipeline_e2e_publish_not_connected_use_ops_orchestrator_v1"
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ log = logging.getLogger(__name__)
 class PipelineE2EConfig:
     enable_health_check: bool = True
     enable_warm_up: bool = True
-    enable_publish: bool = True
+    enable_publish: bool = False
     enable_creative_gate: bool = True  # S14: validate creatives before publish
     max_products: int = 25
 
@@ -56,6 +57,10 @@ class PipelineE2EResult:
     health_status: Optional[AccountHealthStatus] = None
     warm_up_limit: Decimal = Decimal("0")
     live_api_enabled: bool = False
+    rc: int = 0
+    diagnostic: str = ""
+    external_write: bool = False
+    publish_connected: bool = False
 
 
 def _flag_enabled(flag_name: str) -> bool:
@@ -106,7 +111,10 @@ class PipelineE2E:
         created = 0
         blocked = 0
 
-        live = _flag_enabled(self._config.meta_live_api_flag)
+        publish_requested = bool(self._config.enable_publish)
+        result_rc = 2 if publish_requested else 0
+        result_diagnostic = PUBLISH_NOT_CONNECTED if publish_requested else ""
+        live = False
 
         health_status: Optional[AccountHealthStatus] = None
         if self._config.enable_health_check:
@@ -122,21 +130,11 @@ class PipelineE2E:
                     health_status=None,
                     warm_up_limit=Decimal("0"),
                     live_api_enabled=live,
+                    rc=result_rc,
+                    diagnostic=result_diagnostic,
                 )
 
             if (health_status.risk_level == "red") or (health_status.can_publish is False):
-                # S19: Alert on health-check block
-                try:
-                    from synapse.infra.alert_wiring import get_alert_sink
-                    sink = get_alert_sink()
-                    sink.send(
-                        f"PIPELINE BLOCKED: account health={health_status.risk_level} "
-                        f"can_publish={health_status.can_publish} — {len(products)} product(s) blocked",
-                        level="CRITICAL",
-                        dedupe_key="pipeline_health_blocked",
-                    )
-                except Exception:
-                    pass
                 return PipelineE2EResult(
                     products_processed=0,
                     campaigns_created=0,
@@ -145,6 +143,8 @@ class PipelineE2E:
                     health_status=health_status,
                     warm_up_limit=Decimal("0"),
                     live_api_enabled=live,
+                    rc=result_rc,
+                    diagnostic=result_diagnostic,
                 )
 
         warm_limit = self._config.daily_cap_usd
@@ -206,15 +206,15 @@ class PipelineE2E:
                     creatives=list(creatives),
                 )
 
-                if self._config.enable_publish:
-                    try:
-                        _ = self._safe_client.create_campaign(payload)
-                    except (OSError, UnicodeError, ValueError, TypeError, ArithmeticError, KeyError) as e:
-                        blocked += 1
-                        errors.append({"stage": "publish", "product": payload.get("product_ref"), "error": str(e)})
-                        continue
-
-                created += 1
+                if publish_requested:
+                    blocked += 1
+                    errors.append(
+                        {
+                            "stage": "publish",
+                            "product": payload.get("product_ref"),
+                            "error": PUBLISH_NOT_CONNECTED,
+                        }
+                    )
 
             except (OSError, UnicodeError, ValueError, TypeError, ArithmeticError, KeyError) as e:
                 blocked += 1
@@ -228,21 +228,8 @@ class PipelineE2E:
             health_status=health_status,
             warm_up_limit=warm_limit,
             live_api_enabled=live,
+            rc=result_rc,
+            diagnostic=result_diagnostic,
         )
-
-        # S19: Alert if any campaigns were blocked
-        if blocked > 0:
-            try:
-                from synapse.infra.alert_wiring import get_alert_sink
-                sink = get_alert_sink()
-                stages = list({e.get("stage", "unknown") for e in errors})
-                sink.send(
-                    f"PIPELINE: {blocked} campaign(s) blocked, {created} created. "
-                    f"Stages: {stages}",
-                    level="WARN",
-                    dedupe_key=f"pipeline_blocked:{blocked}:{created}",
-                )
-            except Exception:
-                pass  # best-effort
 
         return result_out

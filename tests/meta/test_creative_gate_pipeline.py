@@ -89,13 +89,18 @@ class FakeProduct:
 class FakeSafeClient:
     def __init__(self):
         self.payloads = []
+        self.safe_calls = 0
 
     def create_campaign(self, payload):
         self.payloads.append(payload)
-        return {"id": "CAMP-1"}
+        raise AssertionError("offline pipeline must not publish")
+
+    def create_campaign_safe(self, *args, **kwargs):
+        self.safe_calls += 1
+        raise AssertionError("offline pipeline must not call MetaSafeClient")
 
 
-def _build_pipeline(enable_creative_gate=True, enable_publish=True):
+def _build_pipeline(enable_creative_gate=True, enable_publish=False):
     from synapse.meta.account_health import AccountHealthChecker, AccountHealthConfig, AccountMetrics
     from synapse.meta.advantage_plus import AdvantagePlusCampaignBuilder, AdvantagePlusConfig
     from synapse.meta.pipeline_e2e import PipelineE2E, PipelineE2EConfig
@@ -132,9 +137,11 @@ class TestCreativeGateValid:
         )
 
         out = e2e.execute(products=[product], account_metrics=metrics)
-        assert out.campaigns_created == 1
+        assert out.campaigns_created == 0
         assert out.campaigns_blocked == 0
-        assert len(safe.payloads) == 1
+        assert out.products_processed == 1
+        assert len(safe.payloads) == 0
+        assert safe.safe_calls == 0
 
 
 # ── 2. Invalid kit → gate fails → campaign blocked ──────────
@@ -155,6 +162,7 @@ class TestCreativeGateBlocks:
         assert out.campaigns_created == 0
         assert out.campaigns_blocked == 1
         assert len(safe.payloads) == 0
+        assert safe.safe_calls == 0
 
         # Error should mention creative_gate stage
         assert any(e["stage"] == "creative_gate" for e in out.errors)
@@ -189,7 +197,11 @@ class TestBackwardCompat:
         )
 
         out = e2e.execute(products=[product], account_metrics=metrics)
-        assert out.campaigns_created == 1
+        assert out.campaigns_created == 0
+        assert out.campaigns_blocked == 0
+        assert out.products_processed == 1
+        assert len(safe.payloads) == 0
+        assert safe.safe_calls == 0
 
 
 # ── 4. Middleware: missing kit_dir → FAIL-CLOSED ─────────────
@@ -242,7 +254,11 @@ class TestGateDisabled:
 
         out = e2e.execute(products=[product], account_metrics=metrics)
         # Gate disabled → should NOT block
-        assert out.campaigns_created == 1
+        assert out.campaigns_created == 0
+        assert out.campaigns_blocked == 0
+        assert out.products_processed == 1
+        assert len(safe.payloads) == 0
+        assert safe.safe_calls == 0
 
 
 # ── 7. Mixed batch: valid + invalid → only valid published ───
@@ -262,9 +278,11 @@ class TestMixedBatch:
         ]
 
         out = e2e.execute(products=products, account_metrics=metrics)
-        assert out.campaigns_created == 1
+        assert out.campaigns_created == 0
         assert out.campaigns_blocked == 1
         assert out.products_processed == 2
+        assert len(safe.payloads) == 0
+        assert safe.safe_calls == 0
 
 
 # ── 8. Middleware valid kit produces correct result ──────────

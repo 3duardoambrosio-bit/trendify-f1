@@ -4,6 +4,7 @@ from pathlib import Path
 from synapse.learning.learning_loop import (
     LearningLoop,
     LearningLoopConfig,
+    STATUS_COMPLETED,
     STATUS_COMPLETED_DRY_RUN,
     STATUS_INSUFFICIENT_EVIDENCE,
     STATUS_LEARNING_LOOP_LEDGER_FAILED,
@@ -378,3 +379,35 @@ def test_learning_loop_never_reports_completed_or_skipped_on_internal_failures(t
     assert ledger_failure.status not in ("COMPLETED", "SKIPPED")
     assert read_failure.status not in ("COMPLETED", "SKIPPED")
     assert malformed.status not in ("COMPLETED", "SKIPPED")
+
+
+def test_learning_loop_reads_reopened_ndjson_ledger_from_disk(tmp_path):
+    from synapse.runner import NdjsonLedger
+
+    repo = tmp_path / "repo"
+    ledger_path = repo / "data" / "ledger" / "events.ndjson"
+    writer = NdjsonLedger(ledger_path)
+    writer.write(
+        {
+            "event_type": "EXPERIMENT_METRICS_RECORDED",
+            "spend": 20.0,
+            "roas": 2.0,
+            "hook_rate_3s": 0.4,
+            "platform": "meta",
+            "product_id": "PERSISTED-1",
+        }
+    )
+
+    reopened = NdjsonLedger(ledger_path)
+    runner = LearningLoop(repo)
+    result = runner.run(
+        ledger_obj=reopened,
+        cfg=LearningLoopConfig(
+            min_records=1,
+            min_spend_before_learn=0.0,
+            require_evidence=True,
+        ),
+    )
+
+    assert result.status == STATUS_COMPLETED
+    assert reopened.events
