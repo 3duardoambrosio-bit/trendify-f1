@@ -19,6 +19,7 @@ from typing import Any
 
 from synapse.integration.canonical_product_bridge import (
     CanonicalProductBridgeError,
+    LOCAL_PRODUCT_PROMOTION_SOURCE_KIND,
     validate_promoted_fixture_custody,
 )
 from synapse.ui.storefront_customer_copy import (
@@ -36,6 +37,7 @@ ALLOWED_SOURCE_KINDS = frozenset(
     {
         SOURCE_KIND,
         DISCOVERY_PROMOTION_SOURCE_KIND,
+        LOCAL_PRODUCT_PROMOTION_SOURCE_KIND,
     }
 )
 CURRENCY = "MXN"
@@ -246,7 +248,10 @@ def _build_product(
             f"{path}.fixture.source_kind must be one of:{allowed}"
         )
 
-    if source_kind == DISCOVERY_PROMOTION_SOURCE_KIND:
+    if source_kind in {
+        DISCOVERY_PROMOTION_SOURCE_KIND,
+        LOCAL_PRODUCT_PROMOTION_SOURCE_KIND,
+    }:
         try:
             validate_promoted_fixture_custody(fixture)
         except CanonicalProductBridgeError as exc:
@@ -663,6 +668,7 @@ __all__ = [
     "ALLOWED_SOURCE_KINDS",
     "CURRENCY",
     "DISCOVERY_PROMOTION_SOURCE_KIND",
+    "LOCAL_PRODUCT_PROMOTION_SOURCE_KIND",
     "MODE",
     "SCHEMA_VERSION",
     "SOURCE_KIND",

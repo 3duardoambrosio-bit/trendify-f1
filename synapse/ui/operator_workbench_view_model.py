@@ -207,6 +207,8 @@ PIPELINE_NOTE_FIXTURE_ONLY = (
 
 # Maps operator action kinds to the workbench module that owns them.
 ACTION_KIND_TO_MODULE: dict[str, str] = {
+    "review_checkpoint": "evidence",
+    "review_shopify_draft": "shopify_studio",
     "verify_supplier": "shopify_studio",
     "collect_assets": "shopify_studio",
     "enrich_input": "product_lab",
@@ -1019,14 +1021,26 @@ def build_provenance(
     source_fixture: str,
     copy_payload_count: int,
 ) -> dict[str, Any]:
+    """Build provenance without overwriting a newer adapter's custody facts.
+
+    Historical frozen fixtures keep the exact R109A defaults. Newer local
+    adapters may provide a ``provenance`` mapping in the fixture; only the
+    explicitly supported fields below can override those historical defaults.
+    This prevents a current checkpoint from being mislabeled as the old frozen
+    fixture adapter while preserving deterministic output for legacy fixtures.
+    """
     evidence = _mapping(fixture.get("evidence"))
+    supplied = _mapping(fixture.get("provenance"))
     return {
         "source_fixture": source_fixture,
         "source_kind": _text(fixture.get("source_kind"), SOURCE_KIND_DEFAULT),
-        "adapter_status": "frozen_fixture_adapter",
-        "base_head": BASE_HEAD,
-        "fase_1_status": FASE_1_STATUS,
-        "island": ISLAND,
+        "adapter_status": _text(
+            supplied.get("adapter_status"), "frozen_fixture_adapter"
+        ),
+        "base_head": _text(supplied.get("base_head"), BASE_HEAD),
+        "fase_1_status": _text(supplied.get("fase_1_status"), FASE_1_STATUS),
+        "island": _text(supplied.get("island"), ISLAND),
+        "worktree_state": _text(supplied.get("worktree_state")),
         "deterministic_renderer": True,
         "no_runtime_network": True,
         "no_runtime_clock": True,
@@ -1621,12 +1635,34 @@ def build_module_status_summary(
         )
     else:
         missing_inputs = _texts(shopify_pack.get("missing_inputs"))
-        if missing_inputs:
+        publication_boundaries = [
+            item
+            for item in missing_inputs
+            if "publication" in item.lower() and "authoriz" in item.lower()
+        ]
+        preparation_gaps = [
+            item for item in missing_inputs if item not in publication_boundaries
+        ]
+        if preparation_gaps or publication_boundaries:
+            badge_parts: list[str] = []
+            if preparation_gaps:
+                badge_parts.append(f"{len(preparation_gaps)} GAP")
+            if publication_boundaries:
+                badge_parts.append("SIN PUBLICAR")
+            summary_parts: list[str] = []
+            if preparation_gaps:
+                summary_parts.append(
+                    "Gap(s) de preparacion: " + ", ".join(preparation_gaps) + "."
+                )
+            if publication_boundaries:
+                summary_parts.append(
+                    "Boundary deliberado: " + ", ".join(publication_boundaries) + "."
+                )
             add(
                 "shopify_studio",
                 MODULE_STATUS_WARNING,
-                f"{len(missing_inputs)} FALTAN",
-                "Pack copy-ready con inputs pendientes: " + ", ".join(missing_inputs) + ".",
+                " / ".join(badge_parts),
+                " ".join(summary_parts),
                 _texts(shopify_pack.get("publish_checklist"))[0]
                 if shopify_pack.get("publish_checklist")
                 else "",

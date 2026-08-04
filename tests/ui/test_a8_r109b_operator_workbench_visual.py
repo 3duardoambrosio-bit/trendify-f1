@@ -328,9 +328,9 @@ def test_recommended_renders_premium_operator_os() -> None:
         assert marker in document, f"missing R3 premium marker: {marker}"
 
     # Session gate is local-only and never claims real authentication.
-    assert "SYNAPSE Operator Session" in document
-    assert "No es autenticacion real" in document
-    assert "Entrar al Workbench" in document
+    assert "Contexto local del operador" in document
+    assert "No es un inicio de sesion ni autenticacion" in document
+    assert "Abrir Workbench" in document
     assert 'id="operator_alias_input"' in document
     assert "data-session-reset" in document
     for phrase in ("login seguro", "autenticacion segura", "password", "contrasena"):
@@ -371,7 +371,7 @@ def test_all_states_keep_session_gate_and_cockpit_honest(name: str) -> None:
     assert 'data-marker="premium_top_cockpit"' in document
     assert 'data-marker="synapse_brain_map"' in document
     assert "browser_local_memory" in document
-    assert "No es autenticacion real" in document
+    assert "No es un inicio de sesion ni autenticacion" in document
 
 
 # --- 3e. R4 functional operator workspace (I1B-R4) ---------------------------------
@@ -455,7 +455,7 @@ def test_recommended_is_functional_operator_workspace() -> None:
     assert 'data-draft-reset="shopify_listing"' in document
     assert 'data-draft-reset="marketing_copy"' in document
     # Drafts are explicitly local-only and never engine recomputation.
-    assert "no modifican el fixture" in document
+    assert "No modifican el fixture ni el ViewModel" in document
     assert "no recalcula" in document
 
     # Selector shows the embedded candidate with money + next action context.
@@ -702,7 +702,7 @@ def test_r6_operator_controls_are_wired_locally() -> None:
         '[data-drawer-open]',
         '[data-drawer-close]',
         '[data-select-angle]',
-        "r109b_angles_",
+        'var ANGLES_PREFIX = "r1132_angles_";',
     ):
         assert js_hook in document, f"missing local JS wiring: {js_hook}"
 

@@ -15,11 +15,19 @@ import hashlib
 import hmac
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from synapse.discovery.synthetic_schema import DiscoveryCandidate
+from synapse.financial.evaluation import (
+    Decision as FinancialDecision,
+    FinancialAssumptions,
+    FinancialInput,
+    FinancialResult,
+    ScenarioName,
+    evaluate_financials,
+)
 
 
 if TYPE_CHECKING:
@@ -30,9 +38,14 @@ if TYPE_CHECKING:
 
 SCHEMA_VERSION = "a8-r113.canonical_product_bridge.v1"
 SOURCE_KIND = "operator_approved_discovery_promotion"
+LOCAL_CATALOG_SOURCE_KIND = "operator_local_catalog_import"
+LOCAL_PRODUCT_PROMOTION_SOURCE_KIND = (
+    "operator_approved_local_product_promotion"
+)
 APPROVAL_STATUS = "APPROVED_FOR_LOCAL_PROMOTION"
 APPROVAL_SCOPE = "LOCAL_PREVIEW_PIPELINE_ONLY"
 CUSTODY_SCHEMA_VERSION = "a8-r113.promoted_fixture_custody.v2"
+LOCAL_PRODUCT_FINAL_DECISION = "READY_FOR_REVIEW"
 
 
 class CanonicalProductBridgeError(ValueError):
@@ -112,6 +125,284 @@ def discovery_candidate_sha256(
     ).hexdigest()
 
 
+_LOCAL_SNAPSHOT_FIELDS = frozenset(
+    {
+        "candidate_id",
+        "product_id",
+        "product_name",
+        "category",
+        "supplier_mode",
+        "market",
+        "price",
+        "cost",
+        "estimated_cac",
+        "expected_units",
+        "local_provenance",
+        "catalog_economics",
+        "product_status",
+        "methodology",
+        "reason_codes",
+        "operator_input",
+        "evidence",
+    }
+)
+_LOCAL_PROVENANCE_FIELDS = frozenset(
+    {
+        "source_kind",
+        "fixture_id",
+        "scenario",
+        "source_fixture_sha256",
+    }
+)
+_LOCAL_CATALOG_ECONOMICS_FIELDS = frozenset(
+    {
+        "currency",
+        "price_mxn",
+        "product_cost_mxn",
+        "shipping_cost_mxn",
+        "payment_fee_mxn",
+    }
+)
+
+
+def canonicalize_local_product_candidate(
+    catalog_fixture: Mapping[str, Any],
+    financial_input: FinancialInput,
+) -> dict[str, Any]:
+    """Bind one validated local-catalog fixture to canonical financial input."""
+    fixture = _require_mapping(catalog_fixture, "catalog_fixture")
+
+    if fixture.get("source_kind") != LOCAL_CATALOG_SOURCE_KIND:
+        raise CanonicalProductBridgeError(
+            "catalog_fixture.source_kind must be "
+            f"{LOCAL_CATALOG_SOURCE_KIND}"
+        )
+
+    fixture_id = _require_text(
+        fixture.get("fixture_id"),
+        "catalog_fixture.fixture_id",
+    )
+    scenario = _require_text(
+        fixture.get("scenario"),
+        "catalog_fixture.scenario",
+    )
+    product = _require_mapping(
+        fixture.get("product"),
+        "catalog_fixture.product",
+    )
+    decision = _require_mapping(
+        fixture.get("decision"),
+        "catalog_fixture.decision",
+    )
+    operator_input = _require_mapping(
+        fixture.get("operator_input", {}),
+        "catalog_fixture.operator_input",
+    )
+    evidence = _require_mapping(
+        fixture.get("evidence", {}),
+        "catalog_fixture.evidence",
+    )
+    economics = _require_mapping(
+        fixture.get("economics"),
+        "catalog_fixture.economics",
+    )
+
+    if decision.get("permission_gate") != "REVIEW":
+        raise CanonicalProductBridgeError(
+            "catalog_fixture.decision.permission_gate must remain REVIEW"
+        )
+
+    product_id = _require_text(
+        product.get("product_id"),
+        "catalog_fixture.product.product_id",
+    )
+    product_name = _require_text(
+        product.get("name"),
+        "catalog_fixture.product.name",
+    )
+    category = _require_text(
+        product.get("category"),
+        "catalog_fixture.product.category",
+    )
+    supplier = _require_text(
+        product.get("supplier"),
+        "catalog_fixture.product.supplier",
+    )
+    market = _require_text(
+        product.get("market"),
+        "catalog_fixture.product.market",
+    )
+
+    if market != "MX":
+        raise CanonicalProductBridgeError(
+            "catalog_fixture.product.market must be MX"
+        )
+    if economics.get("currency") != "MXN":
+        raise CanonicalProductBridgeError(
+            "catalog_fixture.economics.currency must be MXN"
+        )
+
+    catalog_price = _require_finite_decimal(
+        economics.get("price_mxn"),
+        "catalog_fixture.economics.price_mxn",
+        minimum=Decimal("0.01"),
+    )
+    product_cost = _require_finite_decimal(
+        economics.get("product_cost_mxn"),
+        "catalog_fixture.economics.product_cost_mxn",
+        minimum=Decimal("0"),
+    )
+    shipping_cost = _require_finite_decimal(
+        economics.get("shipping_cost_mxn"),
+        "catalog_fixture.economics.shipping_cost_mxn",
+        minimum=Decimal("0"),
+    )
+    payment_fee = _require_finite_decimal(
+        economics.get("payment_fee_mxn"),
+        "catalog_fixture.economics.payment_fee_mxn",
+        minimum=Decimal("0"),
+    )
+
+    if not isinstance(financial_input, FinancialInput):
+        raise CanonicalProductBridgeError(
+            "financial_input must be a FinancialInput"
+        )
+    if financial_input.product_id != product_id:
+        raise CanonicalProductBridgeError(
+            "financial_input.product_id must match catalog product"
+        )
+    if financial_input.name != product_name:
+        raise CanonicalProductBridgeError(
+            "financial_input.name must match catalog product"
+        )
+    if financial_input.expected_units <= 0:
+        raise CanonicalProductBridgeError(
+            "financial_input.expected_units must be positive"
+        )
+
+    _require_decimal_match(
+        financial_input.price,
+        catalog_price,
+        actual_path="financial_input.price",
+        expected_path="catalog_fixture.economics.price_mxn",
+    )
+    _require_decimal_match(
+        financial_input.landed_cost,
+        product_cost + shipping_cost,
+        actual_path="financial_input.landed_cost",
+        expected_path=(
+            "catalog_fixture.economics.product_cost_mxn + "
+            "shipping_cost_mxn"
+        ),
+    )
+    estimated_cac = _require_finite_decimal(
+        financial_input.estimated_cac,
+        "financial_input.estimated_cac",
+        minimum=Decimal("0"),
+    )
+    price = _require_finite_decimal(
+        financial_input.price,
+        "financial_input.price",
+        minimum=Decimal("0.01"),
+    )
+    landed_cost = _require_finite_decimal(
+        financial_input.landed_cost,
+        "financial_input.landed_cost",
+        minimum=Decimal("0.01"),
+    )
+    product_status = _require_text(
+        product.get("status", "candidate"),
+        "catalog_fixture.product.status",
+    )
+    methodology: dict[str, Any] | None = None
+    if "methodology" in decision:
+        methodology = _json_ready(
+            _require_mapping(
+                decision.get("methodology"),
+                "catalog_fixture.decision.methodology",
+            )
+        )
+    try:
+        expected_financial_result = evaluate_financials(
+            financial_input,
+            assumptions=FinancialAssumptions(
+                payment_fee_pct=Decimal("0"),
+                payment_fixed_fee=payment_fee,
+            ),
+        )
+    except ValueError as exc:
+        raise CanonicalProductBridgeError(
+            "financial_input cannot be evaluated canonically"
+        ) from exc
+    reason_codes = sorted(set(expected_financial_result.reason_codes))
+
+    return {
+        "candidate_id": product_id,
+        "product_id": product_id,
+        "product_name": product_name,
+        "category": category,
+        "supplier_mode": supplier,
+        "market": market,
+        "price": format(price, ".2f"),
+        "cost": format(landed_cost, ".2f"),
+        "estimated_cac": format(estimated_cac, ".2f"),
+        "expected_units": financial_input.expected_units,
+        "local_provenance": {
+            "source_kind": LOCAL_CATALOG_SOURCE_KIND,
+            "fixture_id": fixture_id,
+            "scenario": scenario,
+            "source_fixture_sha256": _canonical_mapping_sha256(
+                fixture
+            ),
+        },
+        "catalog_economics": {
+            "currency": "MXN",
+            "price_mxn": format(catalog_price, ".2f"),
+            "product_cost_mxn": format(product_cost, ".2f"),
+            "shipping_cost_mxn": format(shipping_cost, ".2f"),
+            "payment_fee_mxn": format(payment_fee, ".2f"),
+        },
+        "product_status": product_status,
+        "methodology": methodology,
+        "reason_codes": reason_codes,
+        "operator_input": _json_ready(operator_input),
+        "evidence": _json_ready(evidence),
+    }
+
+
+def serialize_local_product_candidate(
+    catalog_fixture: Mapping[str, Any],
+    financial_input: FinancialInput,
+) -> str:
+    """Serialize local-product custody input deterministically."""
+    return (
+        json.dumps(
+            canonicalize_local_product_candidate(
+                catalog_fixture,
+                financial_input,
+            ),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
+    )
+
+
+def local_product_candidate_sha256(
+    catalog_fixture: Mapping[str, Any],
+    financial_input: FinancialInput,
+) -> str:
+    """Return SHA-256 for one canonical local-product candidate."""
+    return hashlib.sha256(
+        serialize_local_product_candidate(
+            catalog_fixture,
+            financial_input,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 _REQUIRED_APPROVAL_FIELDS = frozenset(
     {
         "schema_version",
@@ -143,6 +434,27 @@ def validate_promotion_approval(
     final_decision: str,
 ) -> dict[str, Any]:
     """Validate exact operator approval bound to one candidate and decision."""
+    candidate_snapshot = canonicalize_discovery_candidate(candidate)
+    return _validate_promotion_approval_values(
+        approval,
+        candidate_id=str(candidate_snapshot["candidate_id"]),
+        candidate_sha256=discovery_candidate_sha256(candidate),
+        decision_run_id=decision_run_id,
+        financial_decision=financial_decision,
+        final_decision=final_decision,
+    )
+
+
+def _validate_promotion_approval_values(
+    approval: Mapping[str, Any],
+    *,
+    candidate_id: str,
+    candidate_sha256: str,
+    decision_run_id: str,
+    financial_decision: str,
+    final_decision: str,
+) -> dict[str, Any]:
+    """Shared exact approval validation for either canonical candidate kind."""
     if not isinstance(approval, Mapping):
         raise CanonicalProductBridgeError(
             "promotion_approval must be a mapping"
@@ -224,7 +536,7 @@ def validate_promotion_approval(
         "schema_version": SCHEMA_VERSION,
         "status": APPROVAL_STATUS,
         "scope": APPROVAL_SCOPE,
-        "candidate_id": candidate.candidate_id,
+        "candidate_id": candidate_id,
         "decision_run_id": decision_run_id,
         "financial_decision": financial_decision,
         "final_decision": final_decision,
@@ -255,17 +567,60 @@ def validate_promotion_approval(
             "64 lowercase hexadecimal characters"
         )
 
-    expected_digest = discovery_candidate_sha256(candidate)
-
     if not hmac.compare_digest(
         supplied_digest,
-        expected_digest,
+        candidate_sha256,
     ):
         raise CanonicalProductBridgeError(
             "promotion_approval.candidate_sha256 mismatch"
         )
 
     return normalized
+
+
+def validate_local_product_promotion_approval(
+    approval: Mapping[str, Any],
+    *,
+    candidate_snapshot: Mapping[str, Any],
+    decision_run_id: str,
+    financial_decision: str,
+    final_decision: str,
+) -> dict[str, Any]:
+    """Validate approval bound to one canonical local-product snapshot."""
+    if financial_decision != FinancialDecision.PASS.value:
+        raise CanonicalProductBridgeError(
+            "local product financial_decision must be PASS"
+        )
+    if final_decision != LOCAL_PRODUCT_FINAL_DECISION:
+        raise CanonicalProductBridgeError(
+            "local product final_decision must be "
+            f"{LOCAL_PRODUCT_FINAL_DECISION}"
+        )
+    snapshot = _require_mapping(
+        candidate_snapshot,
+        "candidate_snapshot",
+    )
+    _require_exact_keys(
+        snapshot,
+        _LOCAL_SNAPSHOT_FIELDS,
+        "candidate_snapshot",
+    )
+    candidate_id = _require_text(
+        snapshot.get("candidate_id"),
+        "candidate_snapshot.candidate_id",
+    )
+    if snapshot.get("product_id") != candidate_id:
+        raise CanonicalProductBridgeError(
+            "candidate_snapshot.product_id must match candidate_id"
+        )
+    return _validate_promotion_approval_values(
+        approval,
+        candidate_id=candidate_id,
+        candidate_sha256=_canonical_mapping_sha256(snapshot),
+        decision_run_id=decision_run_id,
+        financial_decision=financial_decision,
+        final_decision=final_decision,
+    )
 
 
 def _require_text(value: Any, path: str) -> str:
@@ -299,6 +654,9 @@ _ALLOWED_FINAL_DECISIONS = frozenset(
 _FINAL_TO_FINANCIAL_DECISION = {
     "READY_FOR_SANDBOX_BRIEF": "PASS",
     "WATCH_SANDBOX_BRIEF_ONLY": "WATCH",
+}
+_LOCAL_FINAL_TO_FINANCIAL_DECISION = {
+    LOCAL_PRODUCT_FINAL_DECISION: FinancialDecision.PASS.value,
 }
 
 
@@ -482,6 +840,265 @@ def promote_smoke_result_to_local_fixture(
     }
 
 
+def promote_local_product_to_canonical_fixture(
+    catalog_fixture: Mapping[str, Any],
+    financial_input: FinancialInput,
+    financial_result: FinancialResult,
+    decision_record: Mapping[str, Any],
+    approval: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Promote one financially approved local product into canonical custody."""
+    snapshot = canonicalize_local_product_candidate(
+        catalog_fixture,
+        financial_input,
+    )
+    candidate_id = str(snapshot["candidate_id"])
+    product_name = str(snapshot["product_name"])
+
+    if not isinstance(financial_result, FinancialResult):
+        raise CanonicalProductBridgeError(
+            "financial_result must be a FinancialResult"
+        )
+    if financial_result.product_id != candidate_id:
+        raise CanonicalProductBridgeError(
+            "financial_result.product_id must match canonical candidate"
+        )
+    if financial_result.name != product_name:
+        raise CanonicalProductBridgeError(
+            "financial_result.name must match canonical candidate"
+        )
+    snapshot_economics = _require_mapping(
+        snapshot.get("catalog_economics"),
+        "candidate_snapshot.catalog_economics",
+    )
+    expected_assumptions = FinancialAssumptions(
+        payment_fee_pct=Decimal("0"),
+        payment_fixed_fee=_require_finite_decimal(
+            snapshot_economics.get("payment_fee_mxn"),
+            "candidate_snapshot.catalog_economics.payment_fee_mxn",
+            minimum=Decimal("0"),
+        ),
+    )
+    expected_financial_result = evaluate_financials(
+        financial_input,
+        assumptions=expected_assumptions,
+    )
+    if financial_result != expected_financial_result:
+        raise CanonicalProductBridgeError(
+            "financial_result must exactly match canonical evaluation"
+        )
+    if financial_result.decision is not FinancialDecision.PASS:
+        raise CanonicalProductBridgeError(
+            "local product financial decision must be PASS"
+        )
+
+    decision = _require_mapping(
+        decision_record,
+        "decision_record",
+    )
+    if decision.get("product_id") != candidate_id:
+        raise CanonicalProductBridgeError(
+            "decision_record.product_id must match canonical candidate"
+        )
+    if decision.get("financial_decision") != FinancialDecision.PASS.value:
+        raise CanonicalProductBridgeError(
+            "decision_record.financial_decision must be PASS"
+        )
+    final_decision = decision.get("final_decision")
+    if final_decision != LOCAL_PRODUCT_FINAL_DECISION:
+        raise CanonicalProductBridgeError(
+            "decision_record.final_decision must be "
+            f"{LOCAL_PRODUCT_FINAL_DECISION}"
+        )
+
+    run_id = _require_text(
+        decision.get("run_id"),
+        "decision_record.run_id",
+    )
+    normalized_reason_codes = _require_text_sequence(
+        decision.get("reason_codes"),
+        "decision_record.reason_codes",
+    )
+    expected_reason_codes = tuple(
+        sorted(set(financial_result.reason_codes))
+    )
+    if normalized_reason_codes != expected_reason_codes:
+        raise CanonicalProductBridgeError(
+            "decision_record.reason_codes must match financial_result"
+        )
+    snapshot_reason_codes = _require_text_sequence(
+        snapshot.get("reason_codes"),
+        "candidate_snapshot.reason_codes",
+    )
+    if (
+        list(snapshot_reason_codes) != snapshot.get("reason_codes")
+        or snapshot_reason_codes != normalized_reason_codes
+    ):
+        raise CanonicalProductBridgeError(
+            "candidate_snapshot.reason_codes must match decision_record"
+        )
+    if decision.get("promotion_eligible") is not True:
+        raise CanonicalProductBridgeError(
+            "decision_record.promotion_eligible must be true"
+        )
+    base = financial_result.scenarios.get(ScenarioName.BASE)
+    if base is None:
+        raise CanonicalProductBridgeError(
+            "financial_result base scenario is required"
+        )
+
+    for financial_path, actual, expected in (
+        (
+            "financial_result.base.price",
+            base.price,
+            financial_input.price,
+        ),
+        (
+            "financial_result.base.landed_cost",
+            base.landed_cost,
+            financial_input.landed_cost,
+        ),
+        (
+            "financial_result.base.estimated_cac",
+            base.estimated_cac,
+            financial_input.estimated_cac,
+        ),
+    ):
+        _require_decimal_match(
+            actual,
+            expected,
+            actual_path=financial_path,
+            expected_path=financial_path.replace(
+                "financial_result.base",
+                "financial_input",
+            ),
+        )
+
+    validated = validate_local_product_promotion_approval(
+        approval,
+        candidate_snapshot=snapshot,
+        decision_run_id=run_id,
+        financial_decision=FinancialDecision.PASS.value,
+        final_decision=final_decision,
+    )
+    source_fixture = _require_mapping(
+        catalog_fixture,
+        "catalog_fixture",
+    )
+    snapshot_evidence = _require_mapping(
+        snapshot.get("evidence"),
+        "candidate_snapshot.evidence",
+    )
+    snapshot_operator_input = _require_mapping(
+        snapshot.get("operator_input"),
+        "candidate_snapshot.operator_input",
+    )
+    catalog_economics = _require_mapping(
+        snapshot["catalog_economics"],
+        "candidate_snapshot.catalog_economics",
+    )
+
+    promoted_decision: dict[str, Any] = {
+        "outcome": final_decision,
+        "permission_gate": "REVIEW",
+        "reason": (
+            "Producto local promovido explícitamente por el operador "
+            "para vista previa y exportación local."
+        ),
+        "reason_codes": list(normalized_reason_codes),
+        "caveats": [
+            "La entrada procede de un archivo local del operador.",
+            "No constituye evidencia de mercado, demanda o inventario.",
+            "Publicación, gasto y writes permanecen bloqueados.",
+        ],
+    }
+    snapshot_methodology = snapshot.get("methodology")
+    if snapshot_methodology is not None:
+        promoted_decision["methodology"] = _json_ready(
+            _require_mapping(
+                snapshot_methodology,
+                "candidate_snapshot.methodology",
+            )
+        )
+
+    return {
+        "fixture_id": (
+            "canonical_"
+            + _require_text(
+                source_fixture.get("fixture_id"),
+                "catalog_fixture.fixture_id",
+            )
+        ),
+        "source_kind": LOCAL_PRODUCT_PROMOTION_SOURCE_KIND,
+        "scenario": "operator_approved_local_product_promotion",
+        "canonical_bridge": {
+            "schema_version": CUSTODY_SCHEMA_VERSION,
+            "source_kind": LOCAL_PRODUCT_PROMOTION_SOURCE_KIND,
+            "candidate_id": candidate_id,
+            "candidate_sha256": validated["candidate_sha256"],
+            "candidate_snapshot": snapshot,
+            "approval_sha256": _canonical_mapping_sha256(validated),
+            "approval": {
+                "status": validated["status"],
+                "scope": validated["scope"],
+                "operator_id": validated["operator_id"],
+                "approval_record_id": validated[
+                    "approval_record_id"
+                ],
+                "decision_run_id": validated["decision_run_id"],
+                "financial_decision": validated[
+                    "financial_decision"
+                ],
+                "final_decision": validated["final_decision"],
+                "publication_authorized": False,
+                "external_writes_authorized": False,
+                "spend_authorized": False,
+                "fulfillment_authorized": False,
+            },
+        },
+        "product": {
+            "product_id": candidate_id,
+            "name": product_name,
+            "category": snapshot["category"],
+            "supplier": snapshot["supplier_mode"],
+            "market": snapshot["market"],
+            "status": snapshot["product_status"],
+        },
+        "decision": promoted_decision,
+        "operator_input": _json_ready(snapshot_operator_input),
+        "evidence": _json_ready(snapshot_evidence),
+        "economics": {
+            "currency": "MXN",
+            "price_mxn": format(base.price, ".2f"),
+            "product_cost_mxn": catalog_economics[
+                "product_cost_mxn"
+            ],
+            "shipping_cost_mxn": catalog_economics[
+                "shipping_cost_mxn"
+            ],
+            "payment_fee_mxn": catalog_economics[
+                "payment_fee_mxn"
+            ],
+            "landed_cost_mxn": format(base.landed_cost, ".2f"),
+            "estimated_cac_mxn": format(base.estimated_cac, ".2f"),
+            "expected_units": financial_input.expected_units,
+            "contribution_margin_mxn": format(
+                base.contribution_margin,
+                ".2f",
+            ),
+            "break_even_cac_mxn": format(
+                base.break_even_cac,
+                ".2f",
+            ),
+            "financial_decision": FinancialDecision.PASS.value,
+            "notes": (
+                "Economía Decimal local determinista; no son datos "
+                "live de mercado."
+            ),
+        },
+    }
+
+
 _CUSTODY_FIELDS = frozenset(
     {
         "schema_version",
@@ -536,6 +1153,386 @@ def _require_decimal_match(
             f"{actual_path} must match {expected_path}"
         )
 
+
+def _validate_local_product_custody_bindings(
+    *,
+    fixture: Mapping[str, Any],
+    economics: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> None:
+    _require_exact_keys(
+        snapshot,
+        _LOCAL_SNAPSHOT_FIELDS,
+        "fixture.canonical_bridge.candidate_snapshot",
+    )
+    product = _require_mapping(
+        fixture.get("product"),
+        "fixture.product",
+    )
+    decision = _require_mapping(
+        fixture.get("decision"),
+        "fixture.decision",
+    )
+    operator_input = _require_mapping(
+        fixture.get("operator_input"),
+        "fixture.operator_input",
+    )
+    evidence = _require_mapping(
+        fixture.get("evidence"),
+        "fixture.evidence",
+    )
+    snapshot_operator_input = _require_mapping(
+        snapshot.get("operator_input"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "operator_input"
+        ),
+    )
+    snapshot_evidence = _require_mapping(
+        snapshot.get("evidence"),
+        "fixture.canonical_bridge.candidate_snapshot.evidence",
+    )
+    product_status = _require_text(
+        snapshot.get("product_status"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "product_status"
+        ),
+    )
+    if product.get("status") != product_status:
+        raise CanonicalProductBridgeError(
+            "fixture.product.status does not match canonical snapshot"
+        )
+
+    snapshot_reason_codes = _require_text_sequence(
+        snapshot.get("reason_codes"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "reason_codes"
+        ),
+    )
+    if list(snapshot_reason_codes) != snapshot.get("reason_codes"):
+        raise CanonicalProductBridgeError(
+            "fixture canonical snapshot reason_codes must be "
+            "sorted and unique"
+        )
+    if decision.get("reason_codes") != list(snapshot_reason_codes):
+        raise CanonicalProductBridgeError(
+            "fixture.decision.reason_codes does not match "
+            "canonical snapshot"
+        )
+
+    snapshot_methodology = snapshot.get("methodology")
+    if snapshot_methodology is None:
+        if "methodology" in decision:
+            raise CanonicalProductBridgeError(
+                "fixture.decision.methodology does not match "
+                "canonical snapshot"
+            )
+    else:
+        canonical_methodology = _require_mapping(
+            snapshot_methodology,
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "methodology"
+            ),
+        )
+        promoted_methodology = _require_mapping(
+            decision.get("methodology"),
+            "fixture.decision.methodology",
+        )
+        if promoted_methodology != canonical_methodology:
+            raise CanonicalProductBridgeError(
+                "fixture.decision.methodology does not match "
+                "canonical snapshot"
+            )
+
+    if operator_input != snapshot_operator_input:
+        raise CanonicalProductBridgeError(
+            "fixture.operator_input does not match canonical snapshot"
+        )
+    if evidence != snapshot_evidence:
+        raise CanonicalProductBridgeError(
+            "fixture.evidence does not match canonical snapshot"
+        )
+
+    provenance = _require_mapping(
+        snapshot.get("local_provenance"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "local_provenance"
+        ),
+    )
+    _require_exact_keys(
+        provenance,
+        _LOCAL_PROVENANCE_FIELDS,
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "local_provenance"
+        ),
+    )
+    catalog_economics = _require_mapping(
+        snapshot.get("catalog_economics"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics"
+        ),
+    )
+    _require_exact_keys(
+        catalog_economics,
+        _LOCAL_CATALOG_ECONOMICS_FIELDS,
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics"
+        ),
+    )
+
+    if provenance.get("source_kind") != LOCAL_CATALOG_SOURCE_KIND:
+        raise CanonicalProductBridgeError(
+            "fixture canonical local provenance source_kind mismatch"
+        )
+    source_fixture_digest = _require_text(
+        provenance.get("source_fixture_sha256"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "local_provenance.source_fixture_sha256"
+        ),
+    )
+    if not _SHA256_RE.fullmatch(source_fixture_digest):
+        raise CanonicalProductBridgeError(
+            "fixture canonical local source_fixture_sha256 must be "
+            "64 lowercase hexadecimal characters"
+        )
+    source_fixture_id = _require_text(
+        provenance.get("fixture_id"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "local_provenance.fixture_id"
+        ),
+    )
+    _require_text(
+        provenance.get("scenario"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "local_provenance.scenario"
+        ),
+    )
+    if fixture.get("fixture_id") != (
+        "canonical_" + source_fixture_id
+    ):
+        raise CanonicalProductBridgeError(
+            "fixture.fixture_id does not match local provenance"
+        )
+    if fixture.get("scenario") != (
+        "operator_approved_local_product_promotion"
+    ):
+        raise CanonicalProductBridgeError(
+            "fixture.scenario must remain local product promotion"
+        )
+    if catalog_economics.get("currency") != "MXN":
+        raise CanonicalProductBridgeError(
+            "fixture canonical catalog economics currency must be MXN"
+        )
+
+    _require_decimal_match(
+        snapshot.get("price"),
+        catalog_economics.get("price_mxn"),
+        actual_path=(
+            "fixture.canonical_bridge.candidate_snapshot.price"
+        ),
+        expected_path=(
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics.price_mxn"
+        ),
+    )
+    catalog_product_cost = _require_finite_decimal(
+        catalog_economics.get("product_cost_mxn"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics.product_cost_mxn"
+        ),
+        minimum=Decimal("0"),
+    )
+    catalog_shipping_cost = _require_finite_decimal(
+        catalog_economics.get("shipping_cost_mxn"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics.shipping_cost_mxn"
+        ),
+        minimum=Decimal("0"),
+    )
+    _require_finite_decimal(
+        catalog_economics.get("payment_fee_mxn"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics.payment_fee_mxn"
+        ),
+        minimum=Decimal("0"),
+    )
+    _require_decimal_match(
+        snapshot.get("cost"),
+        catalog_product_cost + catalog_shipping_cost,
+        actual_path=(
+            "fixture.canonical_bridge.candidate_snapshot.cost"
+        ),
+        expected_path=(
+            "fixture.canonical_bridge.candidate_snapshot."
+            "catalog_economics product + shipping"
+        ),
+    )
+    _require_finite_decimal(
+        snapshot.get("estimated_cac"),
+        (
+            "fixture.canonical_bridge.candidate_snapshot."
+            "estimated_cac"
+        ),
+        minimum=Decimal("0"),
+    )
+    expected_units = snapshot.get("expected_units")
+    if (
+        isinstance(expected_units, bool)
+        or not isinstance(expected_units, int)
+        or expected_units <= 0
+    ):
+        raise CanonicalProductBridgeError(
+            "fixture canonical expected_units must be a positive integer"
+        )
+
+    recompute_input = FinancialInput(
+        product_id=_require_text(
+            snapshot.get("product_id"),
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "product_id"
+            ),
+        ),
+        name=_require_text(
+            snapshot.get("product_name"),
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "product_name"
+            ),
+        ),
+        price=_require_finite_decimal(
+            snapshot.get("price"),
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "price"
+            ),
+            minimum=Decimal("0.01"),
+        ),
+        landed_cost=_require_finite_decimal(
+            snapshot.get("cost"),
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "cost"
+            ),
+            minimum=Decimal("0.01"),
+        ),
+        estimated_cac=_require_finite_decimal(
+            snapshot.get("estimated_cac"),
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "estimated_cac"
+            ),
+            minimum=Decimal("0"),
+        ),
+        expected_units=expected_units,
+    )
+    recompute_assumptions = FinancialAssumptions(
+        payment_fee_pct=Decimal("0"),
+        payment_fixed_fee=_require_finite_decimal(
+            catalog_economics.get("payment_fee_mxn"),
+            (
+                "fixture.canonical_bridge.candidate_snapshot."
+                "catalog_economics.payment_fee_mxn"
+            ),
+            minimum=Decimal("0"),
+        ),
+    )
+    try:
+        recomputed = evaluate_financials(
+            recompute_input,
+            assumptions=recompute_assumptions,
+        )
+    except ValueError as exc:
+        raise CanonicalProductBridgeError(
+            "fixture canonical financial input is invalid"
+        ) from exc
+    if recomputed.decision is not FinancialDecision.PASS:
+        raise CanonicalProductBridgeError(
+            "fixture canonical financial decision must remain PASS"
+        )
+    if snapshot_reason_codes != tuple(
+        sorted(set(recomputed.reason_codes))
+    ):
+        raise CanonicalProductBridgeError(
+            "fixture canonical reason_codes must match "
+            "canonical financial evaluation"
+        )
+    recomputed_base = recomputed.scenarios[ScenarioName.BASE]
+
+    for economics_field, snapshot_value, snapshot_path in (
+        (
+            "product_cost_mxn",
+            catalog_economics.get("product_cost_mxn"),
+            "candidate_snapshot.catalog_economics.product_cost_mxn",
+        ),
+        (
+            "shipping_cost_mxn",
+            catalog_economics.get("shipping_cost_mxn"),
+            "candidate_snapshot.catalog_economics.shipping_cost_mxn",
+        ),
+        (
+            "payment_fee_mxn",
+            catalog_economics.get("payment_fee_mxn"),
+            "candidate_snapshot.catalog_economics.payment_fee_mxn",
+        ),
+        (
+            "estimated_cac_mxn",
+            snapshot.get("estimated_cac"),
+            "candidate_snapshot.estimated_cac",
+        ),
+    ):
+        _require_decimal_match(
+            economics.get(economics_field),
+            snapshot_value,
+            actual_path=f"fixture.economics.{economics_field}",
+            expected_path=(
+                "fixture.canonical_bridge." + snapshot_path
+            ),
+        )
+
+    for economics_field, expected_value in (
+        (
+            "contribution_margin_mxn",
+            recomputed_base.contribution_margin,
+        ),
+        (
+            "break_even_cac_mxn",
+            recomputed_base.break_even_cac,
+        ),
+    ):
+        _require_decimal_match(
+            economics.get(economics_field),
+            expected_value,
+            actual_path=f"fixture.economics.{economics_field}",
+            expected_path=(
+                "canonical Decimal financial evaluation"
+            ),
+        )
+
+    if economics.get("expected_units") != expected_units:
+        raise CanonicalProductBridgeError(
+            "fixture.economics.expected_units must match "
+            "canonical snapshot"
+        )
+    if economics.get("financial_decision") != FinancialDecision.PASS.value:
+        raise CanonicalProductBridgeError(
+            "fixture.economics.financial_decision must remain PASS"
+        )
+
+
 def validate_promoted_fixture_custody(
     fixture: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -545,9 +1542,15 @@ def validate_promoted_fixture_custody(
         "fixture",
     )
 
-    if fixture_value.get("source_kind") != SOURCE_KIND:
+    source_kind = fixture_value.get("source_kind")
+    allowed_source_kinds = {
+        SOURCE_KIND,
+        LOCAL_PRODUCT_PROMOTION_SOURCE_KIND,
+    }
+    if source_kind not in allowed_source_kinds:
         raise CanonicalProductBridgeError(
-            f"fixture.source_kind must be {SOURCE_KIND}"
+            "fixture.source_kind must be one of:"
+            + ",".join(sorted(allowed_source_kinds))
         )
 
     product = _require_mapping(
@@ -578,7 +1581,7 @@ def validate_promoted_fixture_custody(
             "fixture.canonical_bridge.schema_version mismatch"
         )
 
-    if custody.get("source_kind") != SOURCE_KIND:
+    if custody.get("source_kind") != source_kind:
         raise CanonicalProductBridgeError(
             "fixture.canonical_bridge.source_kind mismatch"
         )
@@ -672,6 +1675,13 @@ def validate_promoted_fixture_custody(
         ),
     )
 
+    if source_kind == LOCAL_PRODUCT_PROMOTION_SOURCE_KIND:
+        _validate_local_product_custody_bindings(
+            fixture=fixture_value,
+            economics=economics,
+            snapshot=snapshot,
+        )
+
     approval = _require_mapping(
         custody.get("approval"),
         "fixture.canonical_bridge.approval",
@@ -757,9 +1767,12 @@ def validate_promoted_fixture_custody(
         )
 
     final_decision = approval["final_decision"]
-    expected_financial_decision = (
-        _FINAL_TO_FINANCIAL_DECISION.get(final_decision)
+    decision_map = (
+        _LOCAL_FINAL_TO_FINANCIAL_DECISION
+        if source_kind == LOCAL_PRODUCT_PROMOTION_SOURCE_KIND
+        else _FINAL_TO_FINANCIAL_DECISION
     )
+    expected_financial_decision = decision_map.get(final_decision)
 
     if expected_financial_decision is None:
         raise CanonicalProductBridgeError(
@@ -788,6 +1801,7 @@ def validate_promoted_fixture_custody(
         "candidate_sha256": digest,
         "approval_sha256": approval_digest,
         "approval_record_id": approval["approval_record_id"],
+        "source_kind": source_kind,
     }
 
 
@@ -808,6 +1822,48 @@ def _canonical_mapping_sha256(
     return hashlib.sha256(
         serialized.encode("utf-8")
     ).hexdigest()
+
+
+def _require_finite_decimal(
+    value: Any,
+    path: str,
+    *,
+    minimum: Decimal,
+) -> Decimal:
+    if isinstance(value, bool) or value is None:
+        raise CanonicalProductBridgeError(
+            f"{path} must be a finite decimal"
+        )
+    try:
+        parsed = (
+            value
+            if isinstance(value, Decimal)
+            else Decimal(str(value).strip())
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        raise CanonicalProductBridgeError(
+            f"{path} must be a finite decimal"
+        ) from None
+    if not parsed.is_finite() or parsed < minimum:
+        raise CanonicalProductBridgeError(
+            f"{path} must be a finite decimal >= {minimum}"
+        )
+    return parsed
+
+
+def _require_text_sequence(
+    value: Any,
+    path: str,
+) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise CanonicalProductBridgeError(
+            f"{path} must be a sequence of strings"
+        )
+    normalized = [
+        _require_text(item, f"{path}[{index}]")
+        for index, item in enumerate(value)
+    ]
+    return tuple(sorted(set(normalized)))
 
 
 def _require_mapping(
@@ -850,14 +1906,22 @@ def _require_exact_keys(
 __all__ = [
     "APPROVAL_SCOPE",
     "APPROVAL_STATUS",
+    "CUSTODY_SCHEMA_VERSION",
+    "LOCAL_CATALOG_SOURCE_KIND",
+    "LOCAL_PRODUCT_FINAL_DECISION",
+    "LOCAL_PRODUCT_PROMOTION_SOURCE_KIND",
     "SCHEMA_VERSION",
     "SOURCE_KIND",
-    "CUSTODY_SCHEMA_VERSION",
     "CanonicalProductBridgeError",
     "canonicalize_discovery_candidate",
+    "canonicalize_local_product_candidate",
     "discovery_candidate_sha256",
+    "local_product_candidate_sha256",
+    "promote_local_product_to_canonical_fixture",
     "promote_smoke_result_to_local_fixture",
     "serialize_discovery_candidate",
+    "serialize_local_product_candidate",
+    "validate_local_product_promotion_approval",
     "validate_promoted_fixture_custody",
     "validate_promotion_approval",
 ]
