@@ -7,7 +7,7 @@ on:
 jobs:
   f1:
     name: f1
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       # Deterministic pytest startup: same contract as the local canonical
       # runner (scripts/run_pytest_stable.ps1) and enforced by
