@@ -4,12 +4,11 @@ from synapse.infra.cli_logging import cli_print
 
 import argparse
 import json
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-import re
+from typing import Any, Dict, List, Optional
 
 __MARKER__ = "META_API_DAY_2026-01-19_V2"
+LEGACY_META_LIVE_PERMANENTLY_DISABLED = "LEGACY_META_LIVE_PERMANENTLY_DISABLED"
 
 SECRET_FILES = {
     "META_ACCESS_TOKEN": "meta_access_token.txt",
@@ -29,6 +28,26 @@ def _safe_str(x: Any, default: str = "") -> str:
         return default
     s = str(x).strip()
     return s if s else default
+
+
+def _offline_contract() -> Dict[str, bool]:
+    return {
+        "offline_only": True,
+        "external_write": False,
+        "legacy_live_disabled": True,
+    }
+
+
+def _legacy_live_disabled() -> int:
+    cli_print(json.dumps({
+        "marker": __MARKER__,
+        "mode": "live",
+        "status": "FAIL",
+        "diagnostic": LEGACY_META_LIVE_PERMANENTLY_DISABLED,
+        **_offline_contract(),
+    }, ensure_ascii=False, indent=2, sort_keys=True))
+    return 2
+
 
 def _append_kv(argv: List[str], flag: str, value: str) -> None:
     v = _safe_str(value, "")
@@ -51,28 +70,19 @@ def _load_secrets_from_dir(secrets_dir: Path) -> Dict[str, str]:
     out["META_AD_ACCOUNT_ID"] = aid
     return out
 
-def _token_sanity(token: str) -> Tuple[bool, Dict[str, Any]]:
-    t = (token or "").strip()
-    meta = {
-        "len": len(t),
-        "has_whitespace": bool(re.search(r"\s", t)),
-        "prefix": t[:4] if len(t) >= 4 else t,
+def _secret_status(secrets: Dict[str, str]) -> Dict[str, Any]:
+    return {
+        "secret_loaded": any(bool(value) for value in secrets.values()),
+        "secret_source": "local_secret_files",
     }
-    if not t:
-        return False, {"reason": "empty", **meta}
-    if meta["has_whitespace"]:
-        return False, {"reason": "whitespace_in_token", **meta}
-    # heurística suave (no bloquea): normalmente tokens empiezan con "EA"
-    meta["looks_like_meta"] = t.startswith("EA")
-    return True, {"reason": "ok", **meta}
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         prog="synapse.meta_api_day_meta",
-        description="One-command Meta API Day runner: gate -> preflight -> execute -> fingerprint match.",
+        description="Local-only Meta API Day runner: preflight -> simulate -> fingerprint match.",
     )
 
-    ap.add_argument("--mode", default="live", choices=["simulate", "live"], help="simulate|live")
+    ap.add_argument("--mode", default="simulate", choices=["simulate", "live"], help="simulate|live (live is disabled)")
     ap.add_argument("--plan", default="data/run/meta_publish_plan.json", help="Path to meta_publish_plan.json")
 
     ap.add_argument("--status", default="", help="Override status for created objects (PAUSED/ACTIVE)")
@@ -86,56 +96,37 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--out-preflight", default="data/run/meta_publish_preflight.json", help="Preflight output JSON")
     ap.add_argument("--out-run", default="data/run/meta_publish_run.json", help="Execute output JSON")
 
-    ap.add_argument("--continue-on-error", action="store_true", help="Continue steps even after an error (live).")
+    ap.add_argument("--continue-on-error", action="store_true", help="Legacy compatibility flag; live remains disabled.")
     ap.add_argument("--ledger-dir", default="data/ledger", help="Ledger directory (default data/ledger)")
-    ap.add_argument("--ledger-disable", action="store_true", help="DANGEROUS: disable idempotency ledger in LIVE")
+    ap.add_argument("--ledger-disable", action="store_true", help="Legacy compatibility flag; live remains disabled.")
 
-    # NEW: secrets loading (future-proof)
+    # Local compatibility only. The live guard returns before this block.
     ap.add_argument("--secrets-dir", default="secrets", help="Directory containing secret txt files (default ./secrets)")
-    ap.add_argument("--load-secrets", action="store_true", help="Load META_* secrets from secrets-dir into process env (safe, no printing).")
-    ap.add_argument("--print-secrets-sanity", action="store_true", help="Print safe sanity (length/prefix only).")
+    ap.add_argument(
+        "--load-secrets",
+        action="store_true",
+        help="Inspect local META_* availability only; values are never exported or delegated.",
+    )
+    ap.add_argument("--print-secrets-sanity", action="store_true", help="Print presence/source metadata only; never secret-derived values.")
 
     args = ap.parse_args(argv)
-    mode = _safe_str(args.mode, "live").lower()
+    mode = _safe_str(args.mode, "simulate").lower()
+    if mode == "live":
+        return _legacy_live_disabled()
 
-    # optionally load secrets into this process (so live_gate + execute see them)
+    # Optional availability check only; live has already failed closed.
     if args.load_secrets:
         sdir = Path(args.secrets_dir).resolve()
         secrets = _load_secrets_from_dir(sdir)
-        # allow CLI overrides for page/ig
-        if _safe_str(args.page_id):
-            secrets["META_PAGE_ID"] = _safe_str(args.page_id)
-        if _safe_str(args.ig_actor_id):
-            secrets["META_IG_ACTOR_ID"] = _safe_str(args.ig_actor_id)
 
-        for k, v in secrets.items():
-            if v:
-                os.environ[k] = v
-
-        ok_tok, tok_meta = _token_sanity(secrets.get("META_ACCESS_TOKEN", ""))
         if args.print_secrets_sanity:
             cli_print(json.dumps({
                 "marker": __MARKER__,
                 "stage": "secrets_sanity",
-                "secrets_dir": str(sdir),
-                "META_ACCESS_TOKEN": tok_meta,   # len/prefix only
-                "META_AD_ACCOUNT_ID_present": bool(secrets.get("META_AD_ACCOUNT_ID")),
-                "META_PAGE_ID_present": bool(secrets.get("META_PAGE_ID")),
-                "META_IG_ACTOR_ID_present": bool(secrets.get("META_IG_ACTOR_ID")),
+                **_secret_status(secrets),
                 "no_secrets_printed": True,
+                **_offline_contract(),
             }, ensure_ascii=False, indent=2, sort_keys=True))
-
-        if mode == "live" and not ok_tok:
-            # no token = no live. this is a feature.
-            cli_print(json.dumps({
-                "marker": __MARKER__,
-                "stage": "secrets_sanity",
-                "status": "FAIL",
-                "reason": "token_invalid_or_empty",
-                "token_meta": tok_meta,
-                "no_secrets_printed": True,
-            }, ensure_ascii=False, indent=2, sort_keys=True))
-            return 2
 
     # Build argv for underlying modules WITHOUT empty flags
     base_rt: List[str] = ["--plan", str(args.plan)]
@@ -147,24 +138,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     _append_kv(base_rt, "--ig-actor-id", _safe_str(args.ig_actor_id))
     _append_kv(base_rt, "--pixel-id", _safe_str(args.pixel_id))
 
-    # 1) LIVE gate (only in live)
-    if mode == "live":
-        from synapse.infra.live_gate import check_meta_live_gate
-
-        gate = check_meta_live_gate()
-        cli_print(json.dumps({
-            "marker": __MARKER__,
-            "stage": "live_gate",
-            "status": gate.status,
-            "ok": bool(gate.ok),
-            "reason": gate.reason,
-            "meta": gate.meta,
-        }, ensure_ascii=False, indent=2, sort_keys=True))
-
-        if not gate.ok:
-            return 0 if gate.status == "SKIP" else 2
-
-    # 2) Preflight
+    # 1) Preflight
     from synapse.meta_publish_preflight import main as preflight_main
     preflight_argv = ["--mode", mode, "--out", str(args.out_preflight)] + base_rt
     rc_pre = int(preflight_main(preflight_argv))
@@ -176,10 +150,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             "status": "FAIL",
             "rc": rc_pre,
             "out_preflight": str(Path(args.out_preflight).resolve()),
+            **_offline_contract(),
         }, ensure_ascii=False, indent=2, sort_keys=True))
         return 2
 
-    # 3) Execute
+    # 2) Execute
     from synapse.meta_publish_execute import main as execute_main
     exec_argv = ["--mode", mode, "--out", str(args.out_run), "--ledger-dir", str(args.ledger_dir)] + base_rt
     if args.continue_on_error:
@@ -189,7 +164,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     rc_ex = int(execute_main(exec_argv))
 
-    # 4) Final contract: fingerprint match
+    # 3) Final contract: fingerprint match
     pre = _read_json(Path(args.out_preflight))
     run = _read_json(Path(args.out_run))
 
@@ -208,6 +183,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "execute_fp12": fp_run,
         "out_preflight": str(Path(args.out_preflight).resolve()),
         "out_run": str(Path(args.out_run).resolve()),
+        **_offline_contract(),
     }, ensure_ascii=False, indent=2, sort_keys=True))
 
     if not ok_fp:

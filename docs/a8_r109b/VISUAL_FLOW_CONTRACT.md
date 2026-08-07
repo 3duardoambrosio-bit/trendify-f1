@@ -291,3 +291,25 @@ python -m synapse.ui.operator_workbench_visual --fixture-dir tests/fixtures/a8_r
 ```
 
 Writing the output HTML locally is the CLI's only side effect.
+
+---
+
+## A8-R113.2 functional-truth addendum
+
+A production-visible control may not exist without a real handler, explicit
+local-only behavior, or an explicit disabled dependency state. A8-R113.2 adds:
+
+- functional multi-candidate filters and sorting;
+- no filter/sort controls in single-candidate renders;
+- effective local draft projection into preview and individual payloads;
+- explicit operator override appendix for copied full packs;
+- truthful local operator context wording (not authentication);
+- keyboard semantics for tabs, navigation, candidates, and local checks;
+- dialog focus behavior for Evidence;
+- scoped DOM ids in multi-candidate workspace output;
+- separation of preparation gaps from publication boundaries;
+- separation of economics verdict from general readiness;
+- constrained current-adapter provenance overrides.
+
+None of these changes authorize live connections, external writes, spend,
+publication, fulfillment, or a commit.

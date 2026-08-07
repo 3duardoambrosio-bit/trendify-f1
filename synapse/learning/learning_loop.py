@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 __LL_MARKER__ = "LL_PATCH_2026-01-12_SYNTHETIC_GUARD_V5"
@@ -160,6 +160,16 @@ def _as_event_list(source: Any) -> List[Any]:
 def _iter_events(ledger_obj: Any) -> List[Any]:
     missing = object()
 
+    for method_name in ("iter_events", "read_events", "load_events", "get_events", "list_events"):
+        fn = getattr(ledger_obj, method_name, None)
+        if callable(fn):
+            try:
+                return _as_event_list(fn())
+            except LedgerReadError:
+                raise
+            except Exception as exc:
+                raise LedgerReadError(f"ledger method '{method_name}()' failed") from exc
+
     for attr in ("events", "_events", "rows"):
         try:
             ev = getattr(ledger_obj, attr, missing)
@@ -175,16 +185,6 @@ def _iter_events(ledger_obj: Any) -> List[Any]:
             raise
         except Exception as exc:  # pragma: no cover - guarded by explicit tests below
             raise LedgerReadError(f"ledger attribute '{attr}' is unreadable") from exc
-
-    for method_name in ("iter_events", "read_events", "load_events", "get_events", "list_events"):
-        fn = getattr(ledger_obj, method_name, None)
-        if callable(fn):
-            try:
-                return _as_event_list(fn())
-            except LedgerReadError:
-                raise
-            except Exception as exc:
-                raise LedgerReadError(f"ledger method '{method_name}()' failed") from exc
 
     try:
         return list(ledger_obj)
@@ -851,6 +851,14 @@ class LearningLoop:
         )
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Delegate the CLI contract lazily to the canonical learning runner."""
+    from synapse.runner import main as runner_main
+
+    rc = runner_main(argv)
+    return rc if isinstance(rc, int) else 3
+
+
 __all__ = [
     "__LL_MARKER__",
     "STATUS_COMPLETED",
@@ -872,4 +880,5 @@ __all__ = [
     "LearningLoop",
     "LearningLoopConfig",
     "LearningRunResult",
+    "main",
 ]

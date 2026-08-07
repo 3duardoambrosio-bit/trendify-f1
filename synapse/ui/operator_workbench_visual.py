@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -49,7 +50,7 @@ from synapse.ui.operator_workbench_view_model import (
     build_view_model_from_path,
 )
 
-VISUAL_VERSION = "a8-r109b.operator_workbench_visual.v5-premium"
+VISUAL_VERSION = "a8-r113.2.operator_workbench_visual.v6-functional-truth"
 
 # Local Fase 1 guardrails/assumptions for the Money Cockpit. These are
 # operator-facing heuristics computed from fixture numbers, never engine
@@ -261,6 +262,33 @@ def _fmt_percent(value: Any) -> str:
         return f"{value}%"
 
 
+def _is_publication_boundary(value: Any) -> bool:
+    text = str(value or "").lower()
+    return "publication" in text and "authoriz" in text
+
+
+def _shopify_gap_split(pack: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    """Separate preparation gaps from deliberate publication boundaries."""
+    missing = [str(item) for item in pack.get("missing_inputs") or []]
+    boundaries = [item for item in missing if _is_publication_boundary(item)]
+    gaps = [item for item in missing if item not in boundaries]
+    return gaps, boundaries
+
+
+# Draft fields that can produce an effective local preview/copy payload without
+# mutating the immutable ViewModel. Full packs remain system snapshots and gain
+# an explicit operator-draft appendix at copy time.
+_PAYLOAD_DRAFT_FIELDS: dict[str, tuple[str, str]] = {
+    "shopify_title": ("shopify_title", "text"),
+    "shopify_short_description": ("shopify_short_description", "text"),
+    "shopify_long_description": ("shopify_long_description", "text"),
+    "shopify_bullets": ("shopify_bullets", "dash_lines"),
+    "marketing_hooks": ("marketing_hooks", "dash_lines"),
+    "marketing_short_ads": ("marketing_short_ads", "dash_lines"),
+    "marketing_long_ads": ("marketing_long_ads", "dash_lines"),
+}
+
+
 def _metric(label: str, value: str, sub: str = "", tone: str = "gold", title: str = "") -> str:
     title_attr = f' title="{_e(title)}"' if title else ""
     sub_html = f'<span class="m-sub">{_e(sub)}</span>' if sub else ""
@@ -279,25 +307,34 @@ def _draft_field(
     kind: str = "textarea",
     hint: str = "",
 ) -> str:
-    """Editable local operator draft. The system value stays in defaultValue;
-    edits live only in localStorage and never touch the fixture/ViewModel."""
+    """Editable local operator draft with an explicit accessible contract."""
     if isinstance(value, (list, tuple)):
         value = "\n".join(str(item) for item in value)
     value = "" if value is None else str(value)
+    control_id = f"draft_{field_key}"
+    hint_id = f"{control_id}_hint" if hint else ""
+    described_by = f' aria-describedby="{_e(hint_id)}"' if hint_id else ""
     if kind == "textarea":
         control = (
-            f'<textarea class="draft-input" rows="{rows}" spellcheck="false"'
-            f' data-draft-field="{_e(field_key)}">{_e(value)}</textarea>'
+            f'<textarea id="{_e(control_id)}" class="draft-input" rows="{rows}"'
+            f' spellcheck="false" data-draft-field="{_e(field_key)}"'
+            f' data-control-id="draft.{_e(field_key)}"{described_by}>{_e(value)}</textarea>'
         )
     else:
         control = (
-            f'<input class="draft-input" type="text" spellcheck="false"'
-            f' value="{_e(value)}" data-draft-field="{_e(field_key)}">'
+            f'<input id="{_e(control_id)}" class="draft-input" type="text"'
+            f' spellcheck="false" value="{_e(value)}"'
+            f' data-draft-field="{_e(field_key)}"'
+            f' data-control-id="draft.{_e(field_key)}"{described_by}>'
         )
-    hint_html = f'<span class="draft-hint">{_e(hint)}</span>' if hint else ""
+    hint_html = (
+        f'<span id="{_e(hint_id)}" class="draft-hint">{_e(hint)}</span>'
+        if hint
+        else ""
+    )
     return (
         '<div class="draft-field" data-draft-wrap>'
-        f'<label class="draft-label">{_e(label)}'
+        f'<label class="draft-label" for="{_e(control_id)}">{_e(label)}'
         f'<span class="chip chip-gold dirty-chip" data-role="draft_dirty_state" hidden>'
         f"EDITADO</span></label>{control}{hint_html}</div>"
     )
@@ -449,19 +486,21 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
         else "sin score"
     )
 
-    # Drivers/blockers straight from the contract: reason codes act as drivers
-    # when the gate passes and as blockers when it blocks.
+    # PASS_* reason codes are positive evidence even when the overall operator
+    # gate is REVIEW. Never paint a passing reason as a blocker.
     gate = str(decision.get("permission_gate", ""))
     codes = [str(code) for code in decision.get("reason_codes") or []]
-    if gate.startswith("PASS"):
-        drivers = codes
-        blockers = [str(item) for item in shopify.get("missing_inputs") or []]
-        blockers.extend(
-            f"rewrite: {entry.get('copy_key', '')}" for entry in _medium_risk_entries(data)
-        )
-    else:
-        drivers = []
-        blockers = codes
+    pass_codes = [code for code in codes if code.upper().startswith("PASS_")]
+    non_pass_codes = [code for code in codes if code not in pass_codes]
+    drivers = pass_codes
+    blockers = list(non_pass_codes)
+    preparation_gaps, _publication_boundaries = _shopify_gap_split(shopify)
+    blockers.extend(preparation_gaps)
+    blockers.extend(
+        f"rewrite: {entry.get('copy_key', '')}" for entry in _medium_risk_entries(data)
+    )
+    if gate.startswith("PASS") and not blockers:
+        blockers = []
 
     return {
         "fid": str(data.get("fixture_id", "")),
@@ -513,11 +552,13 @@ def _render_selector(
     blockers, stage and next action per candidate. Local-only interaction."""
     filters = "".join(
         f'<button type="button" class="pill-btn{" active" if key == "all" else ""}"'
-        f' data-filter="{key}">{_e(label)}</button>'
+        f' data-filter="{key}" data-control-id="candidate.filter.{key}"'
+        f' aria-pressed="{"true" if key == "all" else "false"}">{_e(label)}</button>'
         for key, label in _SELECTOR_FILTERS
     )
     sorts = "".join(
-        f'<button type="button" class="pill-btn" data-sort="{key}">{_e(label)}</button>'
+        f'<button type="button" class="pill-btn" data-sort="{key}"'
+        f' data-control-id="candidate.sort.{key}" aria-pressed="false">{_e(label)}</button>'
         for key, label in _SELECTOR_SORTS
     )
     cards = []
@@ -552,7 +593,9 @@ def _render_selector(
             '<span class="sc-line-label">Blockers</span>' + blocker_chips + "</div>"
         )
         cards.append(
-            f'<div class="sel-card{" active" if active else ""}"'
+            f'<div class="sel-card{" active" if active else ""}" role="button" tabindex="0"'
+            f' aria-pressed="{"true" if active else "false"}"'
+            f' data-control-id="candidate.select.{_e(cand["fid"])}"'
             f' data-candidate-select="{_e(cand["fid"])}"{selected_attr}'
             f' data-candidate-kind="{_e(cand["kind"])}"'
             f' data-sort-score="{_e(cand["sort_score"])}"'
@@ -597,16 +640,28 @@ def _render_selector(
         if len(candidates) == 1
         else f'<p class="honesty">{_e(_source_copy(data, "selector_note"))}</p>'
     )
+    if len(candidates) > 1:
+        controls = (
+            '<div class="sel-controls" role="toolbar"'
+            ' aria-label="Filtrar y ordenar candidatos">'
+            '<span class="sel-ctl-label">Filtrar</span>'
+            f'<span data-role="selector_filters">{filters}</span>'
+            '<span class="sel-ctl-label">Ordenar por</span>'
+            f'<span data-role="selector_sort">{sorts}</span></div>'
+        )
+    else:
+        controls = (
+            '<p class="selector-single-note" data-selector-single="true">'
+            'Un solo candidato: filtros y ordenamiento no aplican.</p>'
+        )
     return (
         '<div class="card selector" data-marker="product_selector"'
         ' data-role="candidate_switcher">'
         f'<h3>{_e(_source_copy(data, "selector_heading"))}</h3>'
-        '<div class="sel-controls">'
-        f'<span class="sel-ctl-label">Filtrar</span>'
-        f'<span data-role="selector_filters">{filters}</span>'
-        f'<span class="sel-ctl-label">Ordenar por</span>'
-        f'<span data-role="selector_sort">{sorts}</span></div>'
+        f'{controls}'
         f'<div class="sel-cards" data-marker="candidate_list">{"".join(cards)}</div>'
+        '<p class="selector-empty" data-selector-empty hidden>'
+        'Ningun candidato coincide con el filtro seleccionado.</p>'
         f"{compare}{single_note}</div>"
     )
 
@@ -680,15 +735,29 @@ def _payload_blocks(
         )
     parts = []
     for item in items:
-        key = _e(item.get("key", ""))
+        raw_key = str(item.get("key", ""))
+        key = _e(raw_key)
         label = _e(item.get("label", ""))
         text = _e(item.get("text", ""))
+        draft_mapping = _PAYLOAD_DRAFT_FIELDS.get(raw_key)
+        effective_attr = ""
+        if draft_mapping:
+            field_key, value_format = draft_mapping
+            effective_attr = (
+                f' data-effective-field="{_e(field_key)}"'
+                f' data-effective-format="{_e(value_format)}"'
+            )
+        append_attr = (
+            ' data-append-drafts'
+            if raw_key in {"shopify_full_pack", "marketing_full_pack", "marketing_full_pack_v2"}
+            else ""
+        )
         block = (
             f'<div class="copyblock" data-payload-key="{key}">'
             f'<div class="cb-head"><span class="cb-title">{label}</span>'
-            f'<button type="button" class="copy-btn" data-copy-button'
-            f' data-copy-target="payload_{key}">Copiar</button></div>'
-            f'<pre class="cb-body" id="payload_{key}">{text}</pre></div>'
+            f'<button type="button" class="copy-btn" data-copy-button{append_attr}'
+            f' data-control-id="copy.{key}" data-copy-target="payload_{key}">Copiar</button></div>'
+            f'<pre class="cb-body" id="payload_{key}"{effective_attr}>{text}</pre></div>'
         )
         if item.get("key") in collapsible_keys:
             block = f"<details><summary>{label} (abrir)</summary>{block}</details>"
@@ -930,8 +999,10 @@ def _render_rail(data: Mapping[str, Any], active_module: str) -> str:
         if entry.get("module_id") == "decision_center" and permission_gate:
             badge = permission_gate
         parts.append(
-            f'<div class="nav-item{active}" data-nav-module="{module_id}"'
-            f' data-module-status="{status}">'
+            f'<div class="nav-item{active}" role="button" tabindex="0"'
+            f' aria-pressed="{"true" if active else "false"}"'
+            f' data-control-id="module.open.{module_id}"'
+            f' data-nav-module="{module_id}" data-module-status="{status}">'
             f'<span class="n">{index:02d}</span>'
             f'<span class="t">{_e(entry.get("label", ""))}</span>'
             f'<span class="b b-{status}">{_e(badge)}</span></div>'
@@ -952,7 +1023,7 @@ def _render_session_gate(data: Mapping[str, Any]) -> str:
         ' data-marker="operator_session_gate" data-session-scope="local_session_only">'
         '<div class="gate-card">'
         '<div class="gate-brand">SYNAPSE <span>OPERATOR OS</span></div>'
-        "<h1>SYNAPSE Operator Session</h1>"
+        "<h1>Contexto local del operador</h1>"
         '<p class="gate-sub">Sistema local de preparacion comercial - Fase 1</p>'
         '<div class="gate-modes">'
         + _chip("Fase 1", "steel")
@@ -963,8 +1034,8 @@ def _render_session_gate(data: Mapping[str, Any]) -> str:
         '<input id="operator_alias_input" class="gate-input" type="text" maxlength="40"'
         ' autocomplete="off" spellcheck="false" placeholder="ej. operador-mx"'
         ' data-marker="operator_alias_memory">'
-        '<button type="button" class="gate-enter" data-gate-enter>Entrar al Workbench</button>'
-        '<p class="gate-disclaimer">No es autenticacion real; sesion local del navegador'
+        '<button type="button" class="gate-enter" data-gate-enter>Abrir Workbench</button>'
+        '<p class="gate-disclaimer">No es un inicio de sesion ni autenticacion; contexto local del navegador'
         " (localStorage). Sin backend, sin cuenta, sin credenciales, sin red.</p>"
         f'<p class="gate-fixture">{_e(_source_copy(data, "rail_source_prefix"))}:'
         f' {_e(data.get("fixture_id", ""))} - offline - deterministico</p>'
@@ -1045,7 +1116,7 @@ def _render_header(data: Mapping[str, Any]) -> str:
         f' title="Cambio guardado en la memoria local del navegador">GUARDADO LOCAL</span>'
         f'<span class="chip chip-alias" data-operator-alias-chip hidden'
         f' title="Alias local del navegador; no es autenticacion real"></span>'
-        f'<button type="button" class="drawer-btn" data-drawer-open'
+        f'<button type="button" class="drawer-btn" data-drawer-open data-control-id="evidence.open"'
         f' title="Auditoria tecnica: origen de datos, cadena determinista, mapa de'
         f' capacidades">Ver evidencia</button>'
         f'<span class="chip chip-steel" title="{_e(_source_copy(data, "offline_badge_title"))}">'
@@ -1797,7 +1868,7 @@ def _render_product_lab(data: Mapping[str, Any], active_module: str) -> str:
         f'<p class="op-summary">{_e(_source_copy(data, "product_lab_summary"))}'
         " El detalle tecnico de auditoria (origen, cadena determinista, mapa de"
         " capacidades) vive en el Evidence Drawer.</p>"
-        '<button type="button" class="drawer-btn" data-drawer-open>Ver evidencia</button>',
+        '<button type="button" class="drawer-btn" data-drawer-open data-control-id="evidence.open">Ver evidencia</button>',
     )
     brief_card = _card(
         "Brief del operador - " + str(richness.get("classification", "")),
@@ -1847,10 +1918,9 @@ def _float_or_none(value: Any) -> float | None:
 
 
 def _economics_verdict(data: Mapping[str, Any]) -> tuple[str, str, str]:
-    """PASS / WATCH / FAIL / KILL from contract gate + local floor guardrail."""
+    """Economic result only; commercial readiness is shown in other modules."""
     decision = data.get("decision") or {}
     summary = data.get("blocked_queue_summary") or {}
-    richness = data.get("input_richness") or {}
     economics = data.get("economics") or {}
     gate = str(decision.get("permission_gate", ""))
     margin = _float_or_none(economics.get("contribution_margin_mxn"))
@@ -1868,11 +1938,13 @@ def _economics_verdict(data: Mapping[str, Any]) -> tuple[str, str, str]:
             "risk",
             f"Margen bajo el piso local de {MARGIN_FLOOR_PCT:.0f}%: no avanzar si margen bajo piso.",
         )
-    if str(richness.get("classification", "")) == "INPUT_LOW":
-        return "WATCH", "warn", "Economia sobre piso, pero el brief esta en INPUT_LOW."
     if gate == "PASS":
-        return "PASS", "go", "Gate PASS del contrato y margen sobre el piso local."
-    return "WATCH", "warn", f"Gate {gate}: revisar caveats antes de avanzar."
+        return "PASS", "go", "Gate economico PASS y margen sobre el piso local."
+    return (
+        "PASS",
+        "go",
+        f"Economia sobre piso. El gate general permanece {gate or 'REVIEW'} por razones no economicas.",
+    )
 
 
 def _waterfall_row(
@@ -1942,11 +2014,11 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
     )
     verdict_card = (
         f'<div class="card verdict-gate" data-marker="verdict_gate">'
-        f"<h3>Verdict gate (economia)</h3>"
+        f"<h3>Resultado economico</h3>"
         f'<div class="gate-legend">{gate_legend}</div>'
         f'<div class="vh-outcome gate-current-{_e(verdict_tone)}">{_e(verdict)}</div>'
         f'<p class="op-summary">{_e(verdict_reason)}</p>'
-        '<p class="honesty">Derivado del permission_gate del contrato + guardrails'
+        '<p class="honesty">Derivado de finanzas del contrato + guardrails'
         " locales; sin forecast de ventas.</p></div>"
     )
 
@@ -2200,25 +2272,35 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
         preview_card = ""
         gap_console = ""
         if not blocked:
-            missing_inputs = [str(item) for item in pack.get("missing_inputs") or []]
+            preparation_gaps, publication_boundaries = _shopify_gap_split(pack)
             asset_gaps = [str(item) for item in pack.get("image_checklist") or []]
-            gap_total = len(missing_inputs) + len(asset_gaps)
-            gap_chips = "".join(_chip(item, "risk") for item in missing_inputs) + "".join(
+            gap_total = len(preparation_gaps) + len(asset_gaps)
+            gap_chips = "".join(_chip(item, "risk") for item in preparation_gaps) + "".join(
                 _chip(item, "warn") for item in asset_gaps
+            )
+            boundary_chips = "".join(
+                _chip(item, "boundary") for item in publication_boundaries
             )
             gap_console = (
                 '<div class="card gap-console" data-marker="publish_gap_console">'
-                "<h3>Que falta para publicar (gaps declarados por el contrato)</h3>"
+                "<h3>Preparacion local y boundary de publicacion</h3>"
                 '<div class="gap-head">'
                 f'<span class="gap-count">{gap_total}</span>'
-                '<div class="gap-copy"><b>pendientes antes de publicar</b>'
-                f"<span>{len(missing_inputs)} input(s) faltantes + {len(asset_gaps)}"
-                " asset(s) del checklist de imagenes. Nada se publica desde aqui;"
-                " el operador resuelve y decide.</span></div></div>"
-                f'<div class="field-chips gap-chips">{gap_chips or _chip("(sin gaps declarados)", "muted")}</div>'
+                '<div class="gap-copy"><b>gap(s) reales de preparacion</b>'
+                f"<span>{len(preparation_gaps)} input(s) por resolver + {len(asset_gaps)}"
+                " asset(s) del checklist. El boundary de publicacion no cuenta como campo faltante."
+                "</span></div></div>"
+                f'<div class="field-chips gap-chips">{gap_chips or _chip("(sin gaps de preparacion)", "go")}</div>'
+                '<h4>Boundary deliberado</h4>'
+                f'<div class="field-chips">{boundary_chips or _chip("(sin boundary declarado)", "muted")}</div>'
                 "</div>"
             )
-            preview_bullets = _ul((pack.get("bullets") or [])[:3], "plain go")
+            preview_bullets = (
+                '<div data-effective-field="shopify_bullets" data-effective-format="html_list"'
+                ' data-effective-limit="3">'
+                + _ul((pack.get("bullets") or [])[:3], "plain go")
+                + "</div>"
+            )
             guard_notes = pack.get("claim_guard_notes") or {}
             trust_row = (
                 '<div class="lp-trust">'
@@ -2244,10 +2326,11 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
                 '<div class="lp-img" title="Gap declarado en image_checklist del contrato">'
                 "Imagen pendiente:<br>fotos reales del proveedor</div>"
                 '<div class="lp-body">'
-                f'<div class="lp-title">{_e(pack.get("title", ""))}</div>'
-                f'<div class="lp-sub">{_e(pack.get("subtitle", ""))}</div>'
+                f'<div class="lp-title" data-effective-field="shopify_title" data-effective-format="text">{_e(pack.get("title", ""))}</div>'
+                f'<div class="lp-sub" data-effective-field="shopify_subtitle" data-effective-format="text">{_e(pack.get("subtitle", ""))}</div>'
                 f'<div class="price-block"><span class="price-now">{_e(pack.get("price", ""))}</span>'
                 f'<span class="price-compare">{_e(pack.get("compare_at_price", ""))}</span></div>'
+                '<div class="lp-note" data-effective-field="shopify_price_note" data-effective-format="text"></div>'
                 f"{preview_bullets}"
                 f"{trust_row}"
                 f'<div class="lp-note">{_e(pack.get("claim_safe_disclaimer", ""))}</div>'
@@ -2255,8 +2338,8 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
             )
         identity_card = _card(
             "Identidad del listing",
-            f'<div class="listing-title">{_e(pack.get("title", ""))}</div>'
-            f'<div class="listing-subtitle">{_e(pack.get("subtitle", ""))}</div>'
+            f'<div class="listing-title" data-effective-field="shopify_title" data-effective-format="text">{_e(pack.get("title", ""))}</div>'
+            f'<div class="listing-subtitle" data-effective-field="shopify_subtitle" data-effective-format="text">{_e(pack.get("subtitle", ""))}</div>'
             + _kv({"handle": pack.get("handle", ""), "categoria": pack.get("category", "")}),
         )
         price_card = _card(
@@ -2266,12 +2349,12 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
         )
         seo_card = _card(
             "SEO",
-            _kv(
-                {
-                    "seo_title": pack.get("seo_title", ""),
-                    "seo_meta_description": pack.get("seo_meta_description", ""),
-                }
-            )
+            '<table class="kv">'
+            '<tr><th>seo_title</th><td data-effective-field="shopify_seo_title"'
+            f' data-effective-format="text">{_e(pack.get("seo_title", ""))}</td></tr>'
+            '<tr><th>seo_meta_description</th><td data-effective-field="shopify_seo_meta_description"'
+            f' data-effective-format="text">{_e(pack.get("seo_meta_description", ""))}</td></tr>'
+            '</table>'
             + "".join(_chip(tag, "muted") for tag in pack.get("tags") or []),
         )
         if blocked:
@@ -2298,9 +2381,9 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
             )
             editor_card = _card(
                 "Editor local del listing (draft del operador)",
-                '<p class="honesty">Drafts locales: no modifican el fixture ni el'
-                " ViewModel y no recalculan el motor. Se guardan solo en este"
-                " navegador.</p>"
+                '<p class="honesty">Drafts locales: actualizan la vista previa y los'
+                " payloads efectivos de esta pantalla. No modifican el fixture ni el"
+                " ViewModel, no recalculan el motor y no autorizan publicacion.</p>"
                 + _draft_field("shopify_title", "Titulo", pack.get("title", ""), kind="input")
                 + _draft_field("shopify_subtitle", "Subtitulo", pack.get("subtitle", ""), kind="input")
                 + _draft_field(
@@ -2343,11 +2426,14 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
             f'<div><div class="a-label">{_e(item)}</div></div></div>'
             for index, item in enumerate(pack.get("image_checklist") or [])
         )
+        preparation_gaps, publication_boundaries = _shopify_gap_split(pack)
         assets_card = _card(
-            "Checklist de assets faltantes (local)",
-            (assets_rows or '<p class="empty">(sin gaps declarados)</p>')
-            + "<h4>Inputs faltantes</h4>"
-            + _ul(pack.get("missing_inputs") or [], "plain risk"),
+            "Checklist de assets y preparacion local",
+            (assets_rows or '<p class="empty">(sin gaps de assets declarados)</p>')
+            + "<h4>Inputs de preparacion pendientes</h4>"
+            + _ul(preparation_gaps, "plain risk")
+            + "<h4>Boundary de publicacion (no es input faltante)</h4>"
+            + _ul(publication_boundaries, "plain warn"),
             attrs='data-marker="missing_assets_checklist"',
         )
         body = (
@@ -2360,7 +2446,12 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
             + editor_card
             + f'<div class="grid g2">{identity_card}{price_card}</div>'
             + seo_card
-            + _card("Bullets", _ul(pack.get("bullets") or []))
+            + _card(
+                "Bullets",
+                '<div data-effective-field="shopify_bullets" data-effective-format="html_list">'
+                + _ul(pack.get("bullets") or [])
+                + '</div>',
+            )
             + _card("Beneficios / Especificaciones", _ul(pack.get("benefits") or [], "plain go") + _kv(spec_rows))
             + _card("FAQ", _ul(faq_rows))
             + assets_card
@@ -2733,14 +2824,19 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
         "lab_learning": None,
     }
     tabs_nav = "".join(
-        f'<span class="lab-tab{" active" if tab_id == LAB_TABS[0][0] else ""}"'
-        f' data-lab-tab="{tab_id}">{_e(label)}'
+        f'<button type="button" id="tab_{_e(tab_id)}"'
+        f' class="lab-tab{" active" if tab_id == LAB_TABS[0][0] else ""}"'
+        f' role="tab" aria-controls="{_e(tab_id)}"'
+        f' aria-selected="{"true" if tab_id == LAB_TABS[0][0] else "false"}"'
+        f' tabindex="{"0" if tab_id == LAB_TABS[0][0] else "-1"}"'
+        f' data-control-id="marketing.tab.{_e(tab_id)}"'
+        f' data-lab-tab="{_e(tab_id)}">{_e(label)}'
         + (
             f'<span class="tab-count">{tab_counts[tab_id]}</span>'
             if tab_counts.get(tab_id)
             else ""
         )
-        + "</span>"
+        + "</button>"
         for tab_id, label in LAB_TABS
     )
     first_test_panel = _render_first_test_panel(data, blocked)
@@ -2929,9 +3025,9 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
     else:
         adcopy_editor_card = _card(
             "Consola de edicion local (drafts del operador, un item por linea)",
-            '<p class="honesty">Drafts locales del navegador; no modifican el pack'
-            " del sistema ni pasan por Claim Guard: valida contra la columna de"
-            " Claim Guard antes de usar.</p>"
+            '<p class="honesty">Drafts locales del navegador; actualizan los payloads'
+            " efectivos de copy en esta pantalla, pero no modifican el pack del sistema"
+            " ni pasan por Claim Guard. Valida antes de aprobar o usar.</p>"
             + _draft_field("marketing_hooks", "Hooks", pack.get("hooks") or [], rows=5)
             + _draft_field("marketing_headlines", "Headlines", pack.get("headlines") or [], rows=3)
             + _draft_field(
@@ -2947,10 +3043,10 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
         '<div class="lab-panel" data-lab-panel id="lab_adcopy" data-marker="ad_copy_console">'
         + '<div class="studio"><div>'
         + adcopy_editor_card
-        + _card("Textos primarios", _ul(pack.get("primary_texts") or []) + _risk_chip_for(data, "primary_texts"))
-        + _card("Anuncios cortos", _ul(pack.get("short_ads") or []) + _risk_chip_for(data, "short_ads"))
-        + _card("Anuncios largos", _ul(pack.get("long_ads") or []) + _risk_chip_for(data, "long_ads"))
-        + _card("Captions", _ul(pack.get("captions") or []))
+        + _card("Textos primarios", '<div data-effective-field="marketing_primary_texts" data-effective-format="html_list">' + _ul(pack.get("primary_texts") or []) + '</div>' + _risk_chip_for(data, "primary_texts"))
+        + _card("Anuncios cortos", '<div data-effective-field="marketing_short_ads" data-effective-format="html_list">' + _ul(pack.get("short_ads") or []) + '</div>' + _risk_chip_for(data, "short_ads"))
+        + _card("Anuncios largos", '<div data-effective-field="marketing_long_ads" data-effective-format="html_list">' + _ul(pack.get("long_ads") or []) + '</div>' + _risk_chip_for(data, "long_ads"))
+        + _card("Captions", '<div data-effective-field="marketing_captions" data-effective-format="html_list">' + _ul(pack.get("captions") or []) + '</div>')
         + adcopy_payload_card
         + "</div>"
         + f'<aside class="guard-rail">{_claim_guard_card(pack.get("claim_guard") or {}, "marketing_pack")}</aside>'
@@ -2993,7 +3089,7 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
     learning = data.get("learning_plan") or {}
     learning_panel = (
         '<div class="lab-panel" data-lab-panel id="lab_learning">'
-        + '<div class="future-box"><span class="fb-tag">FUTURO - DATOS EN VIVO NO CONECTADOS</span>'
+        + '<div class="future-box"><span class="fb-tag">NO OPERATIVO - DATOS EN VIVO NO CONECTADOS</span>'
         "<p>Este panel definira observaciones del operador cuando existan datos reales (Fase 2)."
         " Hoy no hay analytics, no hay fetch de datos, no hay conclusiones.</p></div>"
         + _card("Hipotesis", _ul(learning.get("hypotheses") or []))
@@ -3018,7 +3114,7 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
         f'<p class="purpose">Herramienta del operador: primer test manual, estrategia,'
         f" angulos, copy editable y umbrales de prueba.</p></div>"
         f"{banner}{no_spend_banner}{warning}{rewrites_card}"
-        f'<div class="lab-nav">{tabs_nav}</div>'
+        f'<div class="lab-nav" role="tablist" aria-label="Marketing Engine">{tabs_nav}</div>'
         f"{first_test_panel}{strategy_panel}{angles_panel}{hooks_panel}{adcopy_panel}{channels_panel}"
         f"{testplan_panel}{learning_panel}</section>"
     )
@@ -3206,12 +3302,15 @@ def _render_evidence_drawer(data: Mapping[str, Any]) -> str:
         )
         + "</div></div>"
     )
+    drawer_title_id = f"evidence_drawer_title_{_dom_token(data.get('fixture_id', ''))}"
     return (
         "<!--EVIDENCE_DRAWER_START-->"
-        '<aside class="evidence-drawer" data-evidence-drawer hidden'
+        '<aside class="evidence-drawer" data-evidence-drawer hidden role="dialog"'
+        f' aria-modal="true" aria-labelledby="{_e(drawer_title_id)}" tabindex="-1"'
         ' data-role="evidence_black_box" data-marker="premium_evidence_black_box">'
-        '<div class="drawer-head"><span>Evidence / Audit Drawer</span>'
-        '<button type="button" class="link-btn" data-drawer-close>Cerrar</button></div>'
+        f'<div class="drawer-head"><span id="{_e(drawer_title_id)}">Evidence / Audit Drawer</span>'
+        '<button type="button" class="link-btn" data-drawer-close'
+        ' data-control-id="evidence.close">Cerrar</button></div>'
         '<div class="drawer-body">'
         '<div class="honesty-banner" data-principle="operator_in_control"'
         ' data-determinism="deterministic_renderer" data-network="no_runtime_network">'
@@ -3256,7 +3355,7 @@ def _render_evidence(data: Mapping[str, Any], active_module: str) -> str:
         + _chip("sin red de runtime", "steel")
         + _chip(_source_copy(data, "evidence_source_chip"), "steel")
         + "</div>"
-        f'<button type="button" class="drawer-btn" data-drawer-open>'
+        f'<button type="button" class="drawer-btn" data-drawer-open data-control-id="evidence.open">'
         f"Ver evidencia</button></div></section>"
     )
 
@@ -3270,8 +3369,8 @@ def _render_learning_feedback(data: Mapping[str, Any], active_module: str) -> st
         f' class="module{" active" if active_module == "learning_feedback" else ""}"'
         f' data-module-status="future">'
         f'<div class="mod-head"><h2>Learning / Feedback</h2>'
-        f'<p class="purpose">Placeholder honesto: esquema definido, datos en vivo no conectados.</p></div>'
-        f'<div class="future-box"><span class="fb-tag">FUTURO - DATOS EN VIVO NO CONECTADOS</span>'
+        f'<p class="purpose">Capacidad no operativa: esquema definido, datos en vivo no conectados.</p></div>'
+        f'<div class="future-box"><span class="fb-tag">NO OPERATIVO - DATOS EN VIVO NO CONECTADOS</span>'
         f'<p>Sin analytics, sin fetch de datos, sin claims de PMF. El operador registrara'
         f' observaciones manualmente en Fase 2.</p><div class="slots">{slots}</div></div>'
         f'<div class="grid g2">'
@@ -3292,16 +3391,32 @@ def _render_blocked_queue(data: Mapping[str, Any], active_module: str) -> str:
         if blocked_count
         else ""
     )
+    decision = data.get("decision") or {}
+    if blocked_count:
+        queue_state = "BLOCKED"
+        queue_explanation = "Existe al menos un bloqueo real en la cola."
+    elif summary.get("can_prepare"):
+        queue_state = "SIN BLOQUEOS / PREPARABLE"
+        queue_explanation = "No hay bloqueos y el contrato permite preparar."
+    else:
+        queue_state = "SIN BLOQUEOS / REVISION PENDIENTE"
+        queue_explanation = (
+            "No existe un bloqueo, pero el candidato aun requiere revision o "
+            "enriquecimiento. can_prepare=False no equivale a BLOCKED."
+        )
     summary_block = (
         f'<div class="card" data-contract-section="blocked_queue_summary">'
         f"<h3>Blocked Queue Summary</h3>"
         + _kv(
             {
+                "queue_state": queue_state,
                 "blocked_count": summary.get("blocked_count", 0),
                 "can_prepare": summary.get("can_prepare", False),
+                "decision_outcome": decision.get("outcome", ""),
             }
         )
-        + "<h4>Reason codes</h4>"
+        + f'<p class="honesty">{_e(queue_explanation)}</p>'
+        + "<h4>Reason codes de bloqueo</h4>"
         + "".join(_chip(code, "risk") for code in summary.get("reason_codes") or [])
         + "<h4>Acciones requeridas del operador</h4>"
         + _ul(summary.get("required_operator_actions") or [], "plain warn")
@@ -3356,19 +3471,20 @@ _INLINE_CSS = """
 --sans:"Segoe UI",system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--gold-2);outline-offset:2px}
 body{background:
 radial-gradient(1100px 500px at 85% -10%,rgba(216,179,106,.05),transparent 60%),
 radial-gradient(900px 480px at -10% 0,rgba(138,171,212,.05),transparent 55%),
 var(--bg);
 color:var(--ink);font-family:var(--sans);font-size:13.5px;line-height:1.48}
 .shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
-#module_rail{position:sticky;top:0;height:100vh;overflow-y:auto;
+[data-contract-section="module_rail"]{position:sticky;top:0;height:100vh;overflow-y:auto;
 background:linear-gradient(180deg,#0b0d13,#08090d);
 border-right:1px solid var(--line-soft);padding:18px 12px;display:flex;flex-direction:column;gap:4px}
-#module_rail .logo{font-weight:800;font-size:15px;letter-spacing:.06em;padding:6px 10px 16px;
+[data-contract-section="module_rail"] .logo{font-weight:800;font-size:15px;letter-spacing:.06em;padding:6px 10px 16px;
 border-bottom:1px solid var(--line-soft);margin-bottom:10px}
-#module_rail .logo span{color:var(--gold);font-weight:700}
-#module_rail .logo small{display:block;font-size:9.5px;font-weight:600;color:var(--ink-4);
+[data-contract-section="module_rail"] .logo span{color:var(--gold);font-weight:700}
+[data-contract-section="module_rail"] .logo small{display:block;font-size:9.5px;font-weight:600;color:var(--ink-4);
 text-transform:uppercase;letter-spacing:.14em;margin-top:3px}
 .nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;
 border:1px solid transparent;user-select:none;transition:background .12s,border-color .12s}
@@ -3522,8 +3638,9 @@ details summary{cursor:pointer;font-size:12px;color:var(--ink-2);padding:6px 0}
 text-transform:uppercase;padding:8px 0}
 .lab-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;background:var(--bg-soft);
 border:1px solid var(--line-soft);border-radius:11px;padding:6px}
-.lab-tab{font-size:12px;font-weight:700;color:var(--ink-3);padding:6px 13px;border-radius:8px;
-cursor:pointer;border:1px solid transparent;user-select:none;transition:color .12s,background .12s}
+.lab-tab{appearance:none;background:transparent;font-family:var(--sans);font-size:12px;font-weight:700;
+color:var(--ink-3);padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid transparent;
+user-select:none;transition:color .12s,background .12s}
 .lab-tab:hover{color:var(--ink-2);background:var(--panel-2)}
 .lab-tab.active{background:var(--violet-soft);color:#cbb8ff;border-color:var(--violet-line)}
 .lab-panel{display:none}
@@ -3659,6 +3776,15 @@ background:linear-gradient(180deg,var(--gold-2),var(--gold));box-shadow:0 2px 12
 .gate-fixture{font-size:9.5px;color:var(--ink-4);font-family:var(--mono);margin-top:8px}
 .selector{border-color:var(--gold-line)}
 .selector h3{color:var(--gold-2)}
+.sel-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;
+background:var(--bg-soft);border:1px solid var(--line-soft);border-radius:10px;padding:7px 9px}
+.sel-ctl-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+color:var(--ink-4);margin:0 3px 0 5px}
+.pill-btn{appearance:none;border:1px solid var(--line);background:var(--panel-3);color:var(--ink-2);
+border-radius:7px;padding:5px 9px;font-size:10.5px;font-weight:700;font-family:var(--sans);cursor:pointer}
+.pill-btn:hover{border-color:var(--steel-line);color:var(--ink)}
+.pill-btn.active,.pill-btn[aria-pressed="true"]{border-color:var(--gold-line);background:var(--gold-soft);color:var(--gold-2)}
+.selector-single-note,.selector-empty{font-size:11px;color:var(--ink-3);font-style:italic;margin-bottom:10px}
 .sel-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-bottom:10px}
 .sel-card{background:var(--bg-soft);border:1px solid var(--line-soft);border-radius:12px;
 padding:11px 13px;cursor:pointer;transition:border-color .12s,background .12s}
@@ -3861,7 +3987,7 @@ width:34px;height:26px;display:flex;align-items:center;justify-content:center;fl
 @media(max-width:1100px){.bmap{grid-template-columns:repeat(3,1fr)}
 .kpi-minis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:960px){.shell{grid-template-columns:1fr}
-#module_rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap}
+[data-contract-section="module_rail"]{position:static;height:auto;flex-direction:row;flex-wrap:wrap}
 .g2,.g3,.g21,.studio,.slots,.lp-frame,.kpi-hero,.kpi-minis,.guard-tiles{grid-template-columns:1fr}
 .guard-rail{position:static}
 .bmap{grid-template-columns:repeat(2,1fr)}}
@@ -3872,15 +3998,15 @@ _INLINE_JS = """
 (function () {
   "use strict";
 
-  // Browser-local memory only (localStorage): operator alias, checks, drafts,
-  // tabs, selected candidate. No backend, no account, no real authentication,
-  // nothing leaves the machine.
-  var CHECKS_PREFIX = "r109b_checks_";
-  var TABS_PREFIX = "r109b_tabs_";
-  var DRAFTS_PREFIX = "r109b_drafts_";
-  var ANGLES_PREFIX = "r109b_angles_";
-  var SESSION_KEY = "r109b_operator_session";
-  var WORKSPACE_KEY = "r109b_workspace_state";
+  // Browser-local working state only. No backend, account, authentication,
+  // live write, external network request, or spend authority exists here.
+  var CHECKS_PREFIX = "r1132_checks_";
+  var TABS_PREFIX = "r1132_tabs_";
+  var DRAFTS_PREFIX = "r1132_drafts_";
+  var ANGLES_PREFIX = "r1132_angles_";
+  var SESSION_KEY = "r1132_operator_context";
+  var WORKSPACE_KEY = "r1132_workspace_state";
+  var lastDrawerOpener = null;
 
   function readJson(key) {
     try {
@@ -3891,7 +4017,19 @@ _INLINE_JS = """
   function writeJson(key, value) {
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
-    } catch (err) { /* local-only; storage may be unavailable */ }
+      return true;
+    } catch (err) { return false; }
+  }
+
+  function patchJson(key, patch) {
+    var value = readJson(key);
+    for (var name in patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, name)) {
+        value[name] = patch[name];
+      }
+    }
+    writeJson(key, value);
+    return value;
   }
 
   function rootOf(el) {
@@ -3909,17 +4047,17 @@ _INLINE_JS = """
     return document.querySelectorAll("[data-candidate-root]");
   }
 
+  function setPressed(el, pressed) {
+    if (!el) { return; }
+    el.setAttribute("aria-pressed", pressed ? "true" : "false");
+    el.classList.toggle("active", !!pressed);
+  }
+
   // --- module rail + marketing tabs, scoped per candidate root ---
 
   function saveTabs(root, patch) {
     var key = TABS_PREFIX + (root.getAttribute("data-candidate-root") || "single");
-    var tabs = readJson(key);
-    for (var name in patch) {
-      if (Object.prototype.hasOwnProperty.call(patch, name)) {
-        tabs[name] = patch[name];
-      }
-    }
-    writeJson(key, tabs);
+    patchJson(key, patch);
   }
 
   function activateModule(root, moduleId, remember) {
@@ -3931,8 +4069,9 @@ _INLINE_JS = """
     var navItems = root.querySelectorAll("[data-nav-module]");
     for (var j = 0; j < navItems.length; j++) {
       if (navItems[j].classList.contains("nav-item")) {
-        navItems[j].classList.toggle(
-          "active", navItems[j].getAttribute("data-nav-module") === moduleId);
+        var active = navItems[j].getAttribute("data-nav-module") === moduleId;
+        navItems[j].classList.toggle("active", active);
+        navItems[j].setAttribute("aria-pressed", active ? "true" : "false");
       }
     }
     if (remember) { saveTabs(root, { module: moduleId }); }
@@ -3942,35 +4081,114 @@ _INLINE_JS = """
   function activateLabPanel(root, panelId, remember) {
     var panels = root.querySelectorAll("[data-lab-panel]");
     for (var i = 0; i < panels.length; i++) {
-      panels[i].classList.toggle("active", panels[i].id === panelId);
+      var activePanel = (panels[i].getAttribute("data-lab-panel") || panels[i].id) === panelId;
+      panels[i].classList.toggle("active", activePanel);
+      panels[i].setAttribute("aria-hidden", activePanel ? "false" : "true");
     }
     var tabs = root.querySelectorAll("[data-lab-tab]");
     for (var j = 0; j < tabs.length; j++) {
-      tabs[j].classList.toggle(
-        "active", tabs[j].getAttribute("data-lab-tab") === panelId);
+      var activeTab = tabs[j].getAttribute("data-lab-tab") === panelId;
+      tabs[j].classList.toggle("active", activeTab);
+      tabs[j].setAttribute("aria-selected", activeTab ? "true" : "false");
+      tabs[j].setAttribute("tabindex", activeTab ? "0" : "-1");
     }
     if (remember) { saveTabs(root, { labTab: panelId }); }
   }
 
   function restoreTabs(root) {
-    // Never override the blocked-first default: only restore when the
-    // default module is command_center (no blocked items dominate).
-    if (root.getAttribute("data-default-module") !== "command_center") {
-      return;
-    }
+    if (root.getAttribute("data-default-module") !== "command_center") { return; }
     var key = TABS_PREFIX + (root.getAttribute("data-candidate-root") || "single");
     var tabs = readJson(key);
-    if (tabs.module &&
-        root.querySelector('[data-module="' + tabs.module + '"]')) {
+    if (tabs.module && root.querySelector('[data-module="' + tabs.module + '"]')) {
       activateModule(root, tabs.module, false);
     }
-    if (tabs.labTab &&
-        root.querySelector('[data-lab-panel][id="' + tabs.labTab + '"]')) {
+    if (tabs.labTab && root.querySelector(
+        '[data-lab-panel="' + tabs.labTab + '"], ' +
+        '[data-lab-panel][id="' + tabs.labTab + '"]')) {
       activateLabPanel(root, tabs.labTab, false);
     }
   }
 
-  // --- candidate switcher (workspace mode; local show/hide only) ---
+  // --- candidate switcher: local filtering, sorting, and selection ---
+
+  function selectorCards(root) {
+    return root.querySelectorAll(".sel-card[data-candidate-select]");
+  }
+
+  function updateSelectorEmpty(root) {
+    var cards = selectorCards(root);
+    var visible = 0;
+    for (var i = 0; i < cards.length; i++) {
+      if (!cards[i].hasAttribute("hidden")) { visible++; }
+    }
+    var empty = root.querySelector("[data-selector-empty]");
+    if (empty) {
+      if (visible) { empty.setAttribute("hidden", ""); }
+      else { empty.removeAttribute("hidden"); }
+    }
+  }
+
+  function applyCandidateFilter(root, filterKey, remember) {
+    var cards = selectorCards(root);
+    for (var i = 0; i < cards.length; i++) {
+      var kind = cards[i].getAttribute("data-candidate-kind") || "";
+      var visible = filterKey === "all" || kind === filterKey;
+      if (visible) { cards[i].removeAttribute("hidden"); }
+      else { cards[i].setAttribute("hidden", ""); }
+    }
+    var buttons = root.querySelectorAll("[data-filter]");
+    for (var j = 0; j < buttons.length; j++) {
+      setPressed(buttons[j], buttons[j].getAttribute("data-filter") === filterKey);
+    }
+    updateSelectorEmpty(root);
+    if (remember) { patchJson(WORKSPACE_KEY, { filter: filterKey }); }
+  }
+
+  function sortNumber(card, key, fallback) {
+    var value = Number(card.getAttribute("data-sort-" + key));
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function applyCandidateSort(root, sortKey, remember) {
+    var container = root.querySelector(".sel-cards[data-marker='candidate_list']");
+    if (!container) { return; }
+    var cards = Array.prototype.slice.call(selectorCards(root));
+    cards.sort(function (left, right) {
+      if (sortKey === "risk") {
+        return sortNumber(left, "risk", 999) - sortNumber(right, "risk", 999);
+      }
+      if (sortKey === "state") {
+        return (left.getAttribute("data-sort-state") || "").localeCompare(
+          right.getAttribute("data-sort-state") || "", "es");
+      }
+      var leftValue = sortNumber(left, sortKey, -1);
+      var rightValue = sortNumber(right, sortKey, -1);
+      return rightValue - leftValue;
+    });
+    for (var i = 0; i < cards.length; i++) { container.appendChild(cards[i]); }
+    var buttons = root.querySelectorAll("[data-sort]");
+    for (var j = 0; j < buttons.length; j++) {
+      setPressed(buttons[j], buttons[j].getAttribute("data-sort") === sortKey);
+    }
+    if (remember) { patchJson(WORKSPACE_KEY, { sort: sortKey }); }
+  }
+
+  function applySelectorStateToAll(filterKey, sortKey, remember) {
+    var roots = allRoots();
+    for (var i = 0; i < roots.length; i++) {
+      if (roots[i].querySelector("[data-filter]")) {
+        applyCandidateFilter(roots[i], filterKey || "all", false);
+      }
+      if (sortKey && roots[i].querySelector("[data-sort]")) {
+        applyCandidateSort(roots[i], sortKey, false);
+      }
+    }
+    if (remember) {
+      var patch = { filter: filterKey || "all" };
+      if (sortKey) { patch.sort = sortKey; }
+      patchJson(WORKSPACE_KEY, patch);
+    }
+  }
 
   function selectCandidate(fid, remember) {
     var roots = allRoots();
@@ -3983,36 +4201,92 @@ _INLINE_JS = """
     }
     var cards = document.querySelectorAll("[data-candidate-select]");
     for (var j = 0; j < cards.length; j++) {
-      cards[j].classList.toggle(
-        "active", cards[j].getAttribute("data-candidate-select") === fid);
+      var active = cards[j].getAttribute("data-candidate-select") === fid;
+      cards[j].classList.toggle("active", active);
+      cards[j].setAttribute("aria-pressed", active ? "true" : "false");
     }
-    if (remember) { writeJson(WORKSPACE_KEY, { selected: fid }); }
+    if (remember) { patchJson(WORKSPACE_KEY, { selected: fid }); }
+    var state = readJson(WORKSPACE_KEY);
+    applySelectorStateToAll(state.filter || "all", state.sort || "", false);
     window.scrollTo(0, 0);
   }
 
-  function restoreCandidate() {
+  function restoreCandidateAndSelector() {
     if (document.body.getAttribute("data-mode") !== "workspace_mode") { return; }
     var state = readJson(WORKSPACE_KEY);
     if (state.selected &&
         document.querySelector('[data-candidate-root="' + state.selected + '"]')) {
       selectCandidate(state.selected, false);
     }
+    applySelectorStateToAll(state.filter || "all", state.sort || "", false);
   }
 
-  // --- editable local drafts (never mutate the fixture/ViewModel) ---
+  // --- editable local drafts and effective local preview/payload projection ---
 
   function draftsKey(fid) { return DRAFTS_PREFIX + fid; }
+
+  function splitDraftLines(value) {
+    return String(value || "").split(/\\r?\\n/).map(function (item) {
+      return item.trim();
+    }).filter(function (item) { return !!item; });
+  }
+
+  function renderEffectiveNode(node, value) {
+    var format = node.getAttribute("data-effective-format") || "text";
+    if (format === "dash_lines") {
+      node.textContent = splitDraftLines(value).map(function (item) {
+        return "- " + item;
+      }).join("\\n");
+      return;
+    }
+    if (format === "html_list") {
+      while (node.firstChild) { node.removeChild(node.firstChild); }
+      var items = splitDraftLines(value);
+      var limit = Number(node.getAttribute("data-effective-limit"));
+      if (Number.isFinite(limit) && limit > 0) { items = items.slice(0, limit); }
+      if (!items.length) {
+        var empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "(vacio)";
+        node.appendChild(empty);
+        return;
+      }
+      var list = document.createElement("ul");
+      list.className = "plain go";
+      for (var i = 0; i < items.length; i++) {
+        var li = document.createElement("li");
+        li.textContent = items[i];
+        list.appendChild(li);
+      }
+      node.appendChild(list);
+      return;
+    }
+    node.textContent = String(value || "");
+    node.classList.toggle("empty", !String(value || "").trim());
+  }
+
+  function updateEffectiveField(el) {
+    var root = rootOf(el);
+    var fieldKey = el.getAttribute("data-draft-field");
+    if (!fieldKey) { return; }
+    var targets = root.querySelectorAll('[data-effective-field="' + fieldKey + '"]');
+    for (var i = 0; i < targets.length; i++) {
+      renderEffectiveNode(targets[i], el.value);
+    }
+  }
+
+  function updateAllEffectiveDrafts() {
+    var fields = document.querySelectorAll("[data-draft-field]");
+    for (var i = 0; i < fields.length; i++) { updateEffectiveField(fields[i]); }
+  }
 
   function updateDirty(el) {
     var wrap = el.closest ? el.closest("[data-draft-wrap]") : null;
     if (!wrap) { return; }
     var chip = wrap.querySelector('[data-role="draft_dirty_state"]');
     if (!chip) { return; }
-    if (el.value !== el.defaultValue) {
-      chip.removeAttribute("hidden");
-    } else {
-      chip.setAttribute("hidden", "");
-    }
+    if (el.value !== el.defaultValue) { chip.removeAttribute("hidden"); }
+    else { chip.setAttribute("hidden", ""); }
   }
 
   function onDraftInput(event) {
@@ -4023,13 +4297,11 @@ _INLINE_JS = """
     var fid = fixtureIdOf(el);
     var drafts = readJson(draftsKey(fid));
     var fieldKey = el.getAttribute("data-draft-field");
-    if (el.value === el.defaultValue) {
-      delete drafts[fieldKey];
-    } else {
-      drafts[fieldKey] = el.value;
-    }
+    if (el.value === el.defaultValue) { delete drafts[fieldKey]; }
+    else { drafts[fieldKey] = el.value; }
     writeJson(draftsKey(fid), drafts);
     updateDirty(el);
+    updateEffectiveField(el);
     updateProgress(rootOf(el));
   }
 
@@ -4043,6 +4315,7 @@ _INLINE_JS = """
         el.value = drafts[fieldKey];
       }
       updateDirty(el);
+      updateEffectiveField(el);
     }
   }
 
@@ -4055,6 +4328,7 @@ _INLINE_JS = """
       fields[i].value = fields[i].defaultValue;
       delete drafts[fields[i].getAttribute("data-draft-field")];
       updateDirty(fields[i]);
+      updateEffectiveField(fields[i]);
     }
     writeJson(draftsKey(fid), drafts);
     updateProgress(rootOf(button));
@@ -4070,8 +4344,8 @@ _INLINE_JS = """
     }
     if (!keys.length) { return ""; }
     keys.sort();
-    var out = "\\n\\n=== DRAFTS LOCALES DEL OPERADOR (memoria del navegador," +
-      " no salida del motor) ===";
+    var out = "\\n\\n=== OVERRIDES EFECTIVOS DEL OPERADOR (LOCAL; NO SALIDA DEL MOTOR) ===";
+    out += "\\nAplicar estos valores en lugar de los campos base con el mismo nombre.";
     for (var i = 0; i < keys.length; i++) {
       out += "\\n\\n[" + keys[i] + "]\\n" + drafts[keys[i]];
     }
@@ -4092,9 +4366,7 @@ _INLINE_JS = """
     }
     var pct = checks.length ? Math.round((done * 100) / checks.length) : 0;
     var bars = root.querySelectorAll("[data-checklist-bar]");
-    for (var k = 0; k < bars.length; k++) {
-      bars[k].style.width = pct + "%";
-    }
+    for (var k = 0; k < bars.length; k++) { bars[k].style.width = pct + "%"; }
     var fields = root.querySelectorAll("[data-draft-field]");
     var dirty = 0;
     for (var m = 0; m < fields.length; m++) {
@@ -4111,13 +4383,13 @@ _INLINE_JS = """
     for (var i = 0; i < roots.length; i++) { updateProgress(roots[i]); }
   }
 
-  // --- operator session gate: local browser session, NOT real authentication ---
+  // --- operator context gate: NOT authentication ---
 
   function applyAlias(alias) {
     var chips = document.querySelectorAll("[data-operator-alias-chip]");
     for (var i = 0; i < chips.length; i++) {
       if (alias) {
-        chips[i].textContent = "OPERADOR: " + alias;
+        chips[i].textContent = "OPERADOR LOCAL: " + alias;
         chips[i].removeAttribute("hidden");
       } else {
         chips[i].textContent = "";
@@ -4133,6 +4405,8 @@ _INLINE_JS = """
     applyAlias(alias);
     var gate = document.getElementById("operator_session_gate");
     if (gate) { gate.setAttribute("hidden", ""); }
+    var firstNav = document.querySelector(".nav-item.active") || document.querySelector(".nav-item");
+    if (firstNav && firstNav.focus) { firstNav.focus(); }
   }
 
   function resetSession() {
@@ -4141,7 +4415,7 @@ _INLINE_JS = """
     var gate = document.getElementById("operator_session_gate");
     if (gate) { gate.removeAttribute("hidden"); }
     var input = document.getElementById("operator_alias_input");
-    if (input) { input.value = ""; }
+    if (input) { input.value = ""; input.focus(); }
   }
 
   function initSession() {
@@ -4153,10 +4427,11 @@ _INLINE_JS = """
     } else {
       var input = document.getElementById("operator_alias_input");
       if (input && session.alias) { input.value = session.alias; }
+      if (input) { window.setTimeout(function () { input.focus(); }, 0); }
     }
   }
 
-  // --- copy buttons (payloads + packets; full packet appends local drafts) ---
+  // --- copy buttons: effective payloads + explicit local override appendix ---
 
   function copyPayload(button) {
     var root = rootOf(button);
@@ -4165,13 +4440,12 @@ _INLINE_JS = """
       document.getElementById(targetId);
     if (!source) { return; }
     var text = source.textContent;
-    if (button.hasAttribute("data-append-drafts")) {
-      text += draftAppendix(root);
-    }
+    if (button.hasAttribute("data-append-drafts")) { text += draftAppendix(root); }
     var original = button.textContent;
     function done(ok) {
       button.textContent = ok ? "Copiado" : "Copia manual";
       button.classList.add("done");
+      button.setAttribute("aria-live", "polite");
       window.setTimeout(function () {
         button.textContent = original;
         button.classList.remove("done");
@@ -4191,23 +4465,34 @@ _INLINE_JS = """
       done(ok);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(
-        function () { done(true); }, fallbackCopy);
-    } else {
-      fallbackCopy();
-    }
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallbackCopy);
+    } else { fallbackCopy(); }
   }
 
-  // --- evidence drawer (local show/hide of the embedded audit panel) ---
+  // --- evidence drawer: modal focus, Escape, and focus return ---
+
+  function drawerFor(el) {
+    return rootOf(el).querySelector("[data-evidence-drawer]") ||
+      document.querySelector("[data-evidence-drawer]");
+  }
 
   function openDrawer(el) {
-    var drawer = rootOf(el).querySelector("[data-evidence-drawer]");
-    if (drawer) { drawer.removeAttribute("hidden"); }
+    var drawer = drawerFor(el);
+    if (!drawer) { return; }
+    lastDrawerOpener = el;
+    drawer.removeAttribute("hidden");
+    var close = drawer.querySelector("[data-drawer-close]");
+    if (close && close.focus) { close.focus(); }
+    else if (drawer.focus) { drawer.focus(); }
   }
 
   function closeDrawer(el) {
-    var drawer = el.closest("[data-evidence-drawer]");
-    if (drawer) { drawer.setAttribute("hidden", ""); }
+    var drawer = el && el.closest ? el.closest("[data-evidence-drawer]") : null;
+    drawer = drawer || document.querySelector("[data-evidence-drawer]");
+    if (!drawer) { return; }
+    drawer.setAttribute("hidden", "");
+    if (lastDrawerOpener && lastDrawerOpener.focus) { lastDrawerOpener.focus(); }
+    lastDrawerOpener = null;
   }
 
   // --- local angle selection (browser memory only; never reorders the engine) ---
@@ -4245,14 +4530,19 @@ _INLINE_JS = """
     }
   }
 
-  // --- local checkmarks, keyed per candidate root ---
+  // --- local checkmarks: personal workflow state, not decision authority ---
+
+  function setCheckState(item, checked) {
+    item.classList.toggle("done", !!checked);
+    item.setAttribute("aria-checked", checked ? "true" : "false");
+  }
 
   function toggleCheck(item) {
     var key = CHECKS_PREFIX + fixtureIdOf(item);
     var checks = readJson(key);
     var checkId = item.getAttribute("data-local-check");
     checks[checkId] = !checks[checkId];
-    item.classList.toggle("done", !!checks[checkId]);
+    setCheckState(item, !!checks[checkId]);
     writeJson(key, checks);
     updateProgress(rootOf(item));
   }
@@ -4261,9 +4551,26 @@ _INLINE_JS = """
     var items = document.querySelectorAll("[data-local-check]");
     for (var i = 0; i < items.length; i++) {
       var checks = readJson(CHECKS_PREFIX + fixtureIdOf(items[i]));
-      if (checks[items[i].getAttribute("data-local-check")]) {
-        items[i].classList.add("done");
+      setCheckState(items[i], !!checks[items[i].getAttribute("data-local-check")]);
+    }
+  }
+
+  function initAccessibleControls() {
+    var checks = document.querySelectorAll("[data-local-check]");
+    for (var i = 0; i < checks.length; i++) {
+      checks[i].setAttribute("role", "checkbox");
+      checks[i].setAttribute("tabindex", "0");
+      if (!checks[i].hasAttribute("aria-checked")) {
+        checks[i].setAttribute("aria-checked", "false");
       }
+    }
+    var panels = document.querySelectorAll("[data-lab-panel]");
+    for (var j = 0; j < panels.length; j++) {
+      panels[j].setAttribute("role", "tabpanel");
+      var logicalId = panels[j].getAttribute("data-lab-panel") || panels[j].id;
+      var tab = rootOf(panels[j]).querySelector('[data-lab-tab="' + logicalId + '"]');
+      if (tab && tab.id) { panels[j].setAttribute("aria-labelledby", tab.id); }
+      panels[j].setAttribute("aria-hidden", panels[j].classList.contains("active") ? "false" : "true");
     }
   }
 
@@ -4276,6 +4583,16 @@ _INLINE_JS = """
     if (drawerOpen) { openDrawer(drawerOpen); return; }
     var drawerClose = el.closest("[data-drawer-close]");
     if (drawerClose) { closeDrawer(drawerClose); return; }
+    var filter = el.closest("[data-filter]");
+    if (filter) {
+      applySelectorStateToAll(filter.getAttribute("data-filter"), readJson(WORKSPACE_KEY).sort || "", true);
+      return;
+    }
+    var sort = el.closest("[data-sort]");
+    if (sort) {
+      applySelectorStateToAll(readJson(WORKSPACE_KEY).filter || "all", sort.getAttribute("data-sort"), true);
+      return;
+    }
     var angleBtn = el.closest("[data-select-angle]");
     if (angleBtn) { selectAngle(angleBtn); return; }
     var resetBtn = el.closest("[data-draft-reset]");
@@ -4301,24 +4618,121 @@ _INLINE_JS = """
     }
   });
 
+  document.addEventListener("keydown", function (event) {
+    var el = event.target;
+    if (!el || !el.closest) { return; }
+    if (el.id === "operator_alias_input" && event.key === "Enter") {
+      event.preventDefault(); enterWorkbench(); return;
+    }
+    var drawer = document.querySelector("[data-evidence-drawer]:not([hidden])");
+    if (drawer && event.key === "Escape") {
+      event.preventDefault(); closeDrawer(drawer); return;
+    }
+    var actionable = el.closest("[data-local-check], .nav-item[role='button'], [data-candidate-select][role='button']");
+    if (actionable && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault(); actionable.click(); return;
+    }
+    var tab = el.closest("[data-lab-tab]");
+    if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(event.key) !== -1) {
+      event.preventDefault();
+      var tabs = Array.prototype.slice.call(rootOf(tab).querySelectorAll("[data-lab-tab]"));
+      var index = tabs.indexOf(tab);
+      if (event.key === "Home") { index = 0; }
+      else if (event.key === "End") { index = tabs.length - 1; }
+      else if (event.key === "ArrowLeft") { index = (index - 1 + tabs.length) % tabs.length; }
+      else { index = (index + 1) % tabs.length; }
+      tabs[index].focus();
+      activateLabPanel(rootOf(tab), tabs[index].getAttribute("data-lab-tab"), true);
+    }
+  });
+
   document.addEventListener("input", onDraftInput);
 
+  initAccessibleControls();
   restoreChecks();
   restoreDrafts();
+  updateAllEffectiveDrafts();
   restoreAngles();
   initSession();
   var roots = allRoots();
   for (var i = 0; i < roots.length; i++) { restoreTabs(roots[i]); }
-  restoreCandidate();
+  restoreCandidateAndSelector();
   updateAllProgress();
 })();
 """.strip()
+
+
+def _dom_token(value: Any) -> str:
+    token = "".join(character if str(character).isalnum() else "_" for character in str(value))
+    return token.strip("_") or "candidate"
+
+
+def _scope_marketing_dom_ids(sections: str, fixture_id: Any) -> str:
+    """Make tab/panel ids unique in a multi-candidate document."""
+    prefix = _dom_token(fixture_id)
+    scoped = sections
+    for tab_id, _label in LAB_TABS:
+        panel_id = f"{prefix}_{tab_id}"
+        tab_dom_id = f"{prefix}_tab_{tab_id}"
+        scoped = scoped.replace(
+            f'id="tab_{tab_id}"',
+            f'id="{tab_dom_id}"',
+        )
+        scoped = scoped.replace(
+            f'aria-controls="{tab_id}"',
+            f'aria-controls="{panel_id}"',
+        )
+        scoped = scoped.replace(
+            f'data-lab-panel id="{tab_id}"',
+            f'data-lab-panel="{tab_id}" id="{panel_id}"',
+        )
+    return scoped
+
+def _scope_candidate_dom_ids(markup: str, fixture_id: Any) -> str:
+    """Scope every DOM id and its local references for workspace mode.
+
+    The previous implementation performed one full-string ``replace`` for
+    every ``id`` x reference attribute pair.  Workspace mode embeds several
+    large candidate shells, so that approach scaled poorly and could look
+    stalled during deterministic double-renders.  This implementation builds
+    one mapping and rewrites relevant attributes in a single regex pass.
+    """
+    prefix = _dom_token(fixture_id)
+    identifiers = tuple(dict.fromkeys(re.findall(r'\bid="([^"]+)"', markup)))
+    if not identifiers:
+        return markup
+
+    scoped_ids = {
+        identifier: f"{prefix}__{identifier}"
+        for identifier in identifiers
+    }
+    attribute_pattern = re.compile(
+        r'\b(id|for|aria-describedby|aria-labelledby|aria-controls|data-copy-target)="([^"]+)"'
+    )
+
+    def replace_reference(match: re.Match[str]) -> str:
+        attribute = match.group(1)
+        raw_value = match.group(2)
+        # ARIA relationships may legally contain more than one space-separated
+        # id.  Other supported attributes are single-id references.
+        if attribute in {"aria-describedby", "aria-labelledby"}:
+            rewritten = " ".join(
+                scoped_ids.get(identifier, identifier)
+                for identifier in raw_value.split()
+            )
+        else:
+            rewritten = scoped_ids.get(raw_value, raw_value)
+        return f'{attribute}="{rewritten}"'
+
+    return attribute_pattern.sub(replace_reference, markup)
 
 
 def _candidate_shell(
     data: Mapping[str, Any],
     candidates: Sequence[Mapping[str, Any]],
     selected_fid: str,
+    *,
+    scope_dom_ids: bool = False,
 ) -> str:
     """One candidate's full workbench shell, wrapped in a data-candidate-root
     container so all local memory (checks, drafts, tabs) is scoped per candidate."""
@@ -4339,8 +4753,10 @@ def _candidate_shell(
             _render_blocked_queue(data, active_module),
         )
     )
+    if scope_dom_ids:
+        sections = _scope_marketing_dom_ids(sections, data.get("fixture_id", ""))
     hidden = "" if data.get("fixture_id") == selected_fid else " hidden"
-    return "".join(
+    shell = "".join(
         (
             f'<div class="candidate-shell" data-candidate-root="{_e(data["fixture_id"])}"'
             f' data-default-module="{_e(active_module)}"{hidden}>',
@@ -4357,12 +4773,15 @@ def _candidate_shell(
             "Sin escrituras en vivo - sin gasto - sin red - "
             + _e(_source_copy(data, "footer_source"))
             + ' - operador-en-control &nbsp;<button type="button" class="link-btn"'
-            ' data-session-reset>Reiniciar sesion local</button></footer>',
+            ' data-session-reset>Reiniciar contexto local</button></footer>',
             "</div></div></div>",
             _render_evidence_drawer(data),
             "</div>",
         )
     )
+    if scope_dom_ids:
+        shell = _scope_candidate_dom_ids(shell, data.get("fixture_id", ""))
+    return shell
 
 
 def _document(
@@ -4426,7 +4845,8 @@ def render_workspace_html(view_models: Sequence[WorkbenchViewModel]) -> str:
     candidates = [_candidate_summary(data) for data in datas]
     selected_fid = candidates[0]["fid"]
     shells = "".join(
-        _candidate_shell(data, candidates, selected_fid) for data in datas
+        _candidate_shell(data, candidates, selected_fid, scope_dom_ids=True)
+        for data in datas
     )
     schema_versions = sorted({str(data.get("schema_version", "")) for data in datas})
     body_attrs = (

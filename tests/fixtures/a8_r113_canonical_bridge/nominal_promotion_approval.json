@@ -1,0 +1,16 @@
+{
+  "approval_record_id": "a8-r113-approval-001",
+  "candidate_id": "disc_71c892da6f966e",
+  "candidate_sha256": "cadf3057d0f046b187f35cbfc8d87f39eeba0805feaca081b55b672be728fffb",
+  "decision_run_id": "a8r70_aa5c5d0bad00077f",
+  "external_writes_authorized": false,
+  "final_decision": "READY_FOR_SANDBOX_BRIEF",
+  "financial_decision": "PASS",
+  "fulfillment_authorized": false,
+  "operator_id": "operator-local-001",
+  "publication_authorized": false,
+  "schema_version": "a8-r113.canonical_product_bridge.v1",
+  "scope": "LOCAL_PREVIEW_PIPELINE_ONLY",
+  "spend_authorized": false,
+  "status": "APPROVED_FOR_LOCAL_PROMOTION"
+}

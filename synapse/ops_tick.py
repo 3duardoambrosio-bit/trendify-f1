@@ -111,6 +111,13 @@ def _parse_tick_config(argv: Optional[List[str]] = None) -> TickConfig:
     ap.add_argument("--readonly", action="store_true")
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args(argv)
+    ambient_readonly = os.getenv("SYNAPSE_READONLY", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
     return TickConfig(
         csv=str(args.csv),
         platform=str(args.platform),
@@ -118,9 +125,32 @@ def _parse_tick_config(argv: Optional[List[str]] = None) -> TickConfig:
         prune=bool(args.prune),
         no_import=bool(args.no_import),
         effective_readonly=bool(
-            args.readonly or (args.no_import and not args.write)
+            ambient_readonly
+            or args.readonly
+            or (args.no_import and not args.write)
         ),
     )
+
+
+def _learning_status(step: StepResult) -> Optional[str]:
+    prefix = "LEARNING_STATUS="
+    for line in step.stdout_tail.splitlines():
+        if line.startswith(prefix):
+            value = line[len(prefix):].strip()
+            return value or None
+    return None
+
+
+def _append_learning_downstream_skips(
+    steps: List[StepResult],
+    reason: str,
+) -> None:
+    for name in (
+        "synapse.post_learning",
+        "synapse.creative_queue",
+        "synapse.creative_briefs",
+    ):
+        steps.append(_skip_step(name, reason))
 
 
 def _execute_steps(config: TickConfig) -> List[StepResult]:
@@ -128,10 +158,11 @@ def _execute_steps(config: TickConfig) -> List[StepResult]:
     py = sys.executable
     steps: List[StepResult] = []
 
-    readonly_no_import = config.no_import and config.effective_readonly
-
     if config.prune:
-        steps.append(_run([py, "-m", "synapse.phase1_ready", "--prune"], env))
+        if config.effective_readonly:
+            steps.append(_skip_step("synapse.phase1_ready --prune", "readonly"))
+        else:
+            steps.append(_run([py, "-m", "synapse.phase1_ready", "--prune"], env))
 
     steps.append(_run([py, "-m", "synapse.ledger_ndjson", "validate"], env))
 
@@ -153,29 +184,53 @@ def _execute_steps(config: TickConfig) -> List[StepResult]:
             )
         )
 
-    if readonly_no_import:
-        steps.append(_skip_step("synapse.runner", "no-import + readonly"))
-    else:
-        steps.append(_run([py, "-m", "synapse.runner"], env))
-
-    steps.append(_run([py, "-m", "synapse.post_learning"], env))
-
-    if readonly_no_import:
-        steps.append(
-            _skip_step(
-                "synapse.creative_queue",
-                "no-import + readonly => skip downstream creative queue",
-            )
+    if config.effective_readonly:
+        steps.append(_skip_step("synapse.runner --apply", "readonly"))
+        _append_learning_downstream_skips(
+            steps,
+            "readonly learning apply skipped",
         )
-        steps.append(
-            _skip_step(
-                "synapse.creative_briefs",
-                "no-import + readonly => skip downstream creative briefs",
-            )
+        return steps
+
+    learning_step = _run([py, "-m", "synapse.runner", "--apply"], env)
+    steps.append(learning_step)
+    learning_status = _learning_status(learning_step)
+    if learning_step.returncode != 0:
+        _append_learning_downstream_skips(
+            steps,
+            f"learning did not complete: rc={learning_step.returncode} "
+            f"status={learning_status or 'MISSING'}",
         )
-    else:
-        steps.append(_run([py, "-m", "synapse.creative_queue"], env))
-        steps.append(_run([py, "-m", "synapse.creative_briefs"], env))
+        return steps
+
+    if learning_status != "COMPLETED":
+        if learning_status not in {"SKIPPED", "COMPLETED_DRY_RUN"}:
+            steps.append(
+                StepResult(
+                    cmd="<BLOCK> synapse.learning_contract",
+                    returncode=3,
+                    stdout_tail=(
+                        "runner returned rc=0 without a recognized safe status"
+                    ),
+                    stderr_tail="",
+                )
+            )
+        _append_learning_downstream_skips(
+            steps,
+            f"learning did not complete: rc=0 "
+            f"status={learning_status or 'MISSING'}",
+        )
+        return steps
+
+    post_learning_step = _run([py, "-m", "synapse.post_learning"], env)
+    steps.append(post_learning_step)
+    if post_learning_step.returncode != 0:
+        for name in ("synapse.creative_queue", "synapse.creative_briefs"):
+            steps.append(_skip_step(name, "post_learning failed"))
+        return steps
+
+    steps.append(_run([py, "-m", "synapse.creative_queue"], env))
+    steps.append(_run([py, "-m", "synapse.creative_briefs"], env))
 
     return steps
 

@@ -45,6 +45,8 @@ REQUIRED_BUILDER_MARKERS = {
     "bundle_encoding_audit.txt",
     "post_commit_bom_scan.txt",
     "git_show_head_name_only.txt",
+    "rev-list --parents -n 1 HEAD",
+    'diff --name-only "HEAD^1" HEAD',
     "HOOK_SMOKE_NOT_RUN_BY_BUNDLE_BUILDER=1",
     "HOOK_SMOKE_RC_SEMANTIC=NA",
     "source_snapshots",
@@ -235,3 +237,156 @@ def test_full_audit_bundle_builder_contains_durable_contract_markers() -> None:
         "builder lost durable A8-R29/A8-R30 contract markers: "
         f"{missing_markers}"
     )
+
+
+
+def test_merge_head_name_only_contract_uses_first_parent_diff() -> None:
+    builder = (
+        repo_root()
+        / "tools"
+        / "build_full_audit_bundle.ps1"
+    )
+
+    builder_text = builder.read_text(
+        encoding="utf-8-sig",
+    )
+
+    assert "rev-list --parents -n 1 HEAD" in builder_text
+    assert 'diff --name-only "HEAD^1" HEAD' in builder_text
+
+    temp_root = (
+        Path("C:/Temp")
+        if os.name == "nt"
+        else Path(tempfile.gettempdir())
+    )
+
+    with tempfile.TemporaryDirectory(
+        prefix="synapse_a8_r30_merge_",
+        dir=temp_root,
+    ) as temporary:
+        synthetic_repo = Path(temporary) / "repo"
+        synthetic_repo.mkdir()
+
+        def run_git(
+            *arguments: str,
+        ) -> subprocess.CompletedProcess[str]:
+            result = subprocess.run(
+                ["git", *arguments],
+                cwd=synthetic_repo,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+            )
+
+            assert result.returncode == 0, (
+                f"git failed: {arguments}\n"
+                f"stdout={result.stdout}\n"
+                f"stderr={result.stderr}"
+            )
+
+            return result
+
+        run_git("init", "-q")
+        run_git(
+            "config",
+            "user.email",
+            "a8-r30@example.invalid",
+        )
+        run_git(
+            "config",
+            "user.name",
+            "A8 R30 Regression",
+        )
+
+        base_marker = synthetic_repo / "base.txt"
+        base_marker.write_text(
+            "base\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+        run_git("add", "base.txt")
+        run_git("commit", "-q", "-m", "base")
+
+        base_head = run_git(
+            "rev-parse",
+            "HEAD",
+        ).stdout.strip()
+
+        run_git(
+            "checkout",
+            "-q",
+            "-b",
+            "synthetic-side",
+        )
+
+        side_marker = synthetic_repo / "side.txt"
+        side_marker.write_text(
+            "side\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+        run_git("add", "side.txt")
+        run_git("commit", "-q", "-m", "side")
+
+        run_git(
+            "checkout",
+            "-q",
+            "-b",
+            "synthetic-main",
+            base_head,
+        )
+
+        main_marker = synthetic_repo / "main.txt"
+        main_marker.write_text(
+            "main\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+        run_git("add", "main.txt")
+        run_git("commit", "-q", "-m", "main")
+
+        run_git(
+            "merge",
+            "-q",
+            "--no-ff",
+            "synthetic-side",
+            "-m",
+            "synthetic merge",
+        )
+
+        parent_record = run_git(
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            "HEAD",
+        ).stdout.split()
+
+        assert len(parent_record) == 3
+
+        legacy_names = run_git(
+            "show",
+            "--name-only",
+            "--pretty=format:",
+            "HEAD",
+        ).stdout.strip()
+
+        assert legacy_names == ""
+
+        first_parent_names = {
+            line.strip()
+            for line in run_git(
+                "diff",
+                "--name-only",
+                "HEAD^1",
+                "HEAD",
+            ).stdout.splitlines()
+            if line.strip()
+        }
+
+        assert first_parent_names == {"side.txt"}

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from synapse.meta.graph_version import resolve_meta_graph_version
 from synapse.infra.cli_logging import cli_print
 
 
@@ -12,12 +11,10 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from urllib import request as urlrequest
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from typing import Any, Dict, List, Optional
 
 __MARKER__ = "META_PUBLISH_EXECUTE_2026-01-17_V7"
+LEGACY_META_LIVE_PERMANENTLY_DISABLED = "LEGACY_META_LIVE_PERMANENTLY_DISABLED"
 
 DEFAULT_PLAN = Path("data/run/meta_publish_plan.json")
 DEFAULT_OUT = Path("data/run/meta_publish_run.json")
@@ -52,6 +49,32 @@ def _safe_str(x: Any, default: str = "") -> str:
     return s if s else default
 
 
+def _offline_contract() -> Dict[str, bool]:
+    return {
+        "offline_only": True,
+        "external_write": False,
+        "legacy_live_disabled": True,
+    }
+
+
+def _legacy_live_disabled() -> int:
+    cli_print(
+        json.dumps(
+            {
+                "marker": __MARKER__,
+                "mode": "live",
+                "status": "FAIL",
+                "diagnostic": LEGACY_META_LIVE_PERMANENTLY_DISABLED,
+                **_offline_contract(),
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 2
+
+
 def _sha256_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
@@ -75,94 +98,6 @@ def _load_json_arg(s: str) -> Optional[Dict[str, Any]]:
     if not isinstance(obj, dict):
         raise ValueError("JSON must be an object/dict")
     return obj
-
-
-def _multipart_formdata(fields: Dict[str, Any], files: Dict[str, Tuple[str, bytes, str]]) -> Tuple[bytes, str]:
-    boundary = "----synapseboundary" + _sha256_text(_utc_now_z())[:16]
-    lines: List[bytes] = []
-
-    def add_line(x: str) -> None:
-        lines.append(x.encode("utf-8"))
-
-    for k, v in fields.items():
-        add_line(f"--{boundary}")
-        add_line(f'Content-Disposition: form-data; name="{k}"')
-        add_line("")
-        add_line(str(v))
-
-    for k, (filename, content, ctype) in files.items():
-        add_line(f"--{boundary}")
-        add_line(f'Content-Disposition: form-data; name="{k}"; filename="{filename}"')
-        add_line(f"Content-Type: {ctype}")
-        add_line("")
-        lines.append(content)
-
-    add_line(f"--{boundary}--")
-    add_line("")
-    body = b"\r\n".join(lines)
-    return body, f"multipart/form-data; boundary={boundary}"
-
-
-def _http_post(url: str, data: Dict[str, Any], access_token: str) -> Dict[str, Any]:
-    form: Dict[str, str] = {"access_token": access_token}
-    for k, v in data.items():
-        if isinstance(v, (dict, list)):
-            form[k] = json.dumps(v, ensure_ascii=False)
-        else:
-            form[k] = str(v)
-
-    body = urlencode(form).encode("utf-8")
-    req = urlrequest.Request(url, data=body, method="POST")
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
-
-    try:
-        with urlrequest.urlopen(req, timeout=60) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            return json.loads(raw) if raw.strip().startswith("{") else {"raw": raw}
-    except HTTPError as e:
-        raw = e.read().decode("utf-8", errors="replace")
-        try:
-            return {"error": json.loads(raw), "http_status": e.code}
-        except (json.JSONDecodeError, TypeError):
-            return {"error": raw, "http_status": e.code}
-    except URLError as e:
-        return {"error": str(e), "http_status": None}
-
-
-def _http_post_multipart(
-    url: str,
-    fields: Dict[str, Any],
-    file_field: str,
-    file_path: Path,
-    access_token: str,
-) -> Dict[str, Any]:
-    if not file_path.exists():
-        return {"error": f"file not found: {file_path}", "http_status": None}
-
-    content = file_path.read_bytes()
-    filename = file_path.name
-    ctype = "application/octet-stream"
-
-    fields2 = dict(fields)
-    fields2["access_token"] = access_token
-
-    body, content_type = _multipart_formdata(fields2, {file_field: (filename, content, ctype)})
-
-    req = urlrequest.Request(url, data=body, method="POST")
-    req.add_header("Content-Type", content_type)
-
-    try:
-        with urlrequest.urlopen(req, timeout=120) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            return json.loads(raw) if raw.strip().startswith("{") else {"raw": raw}
-    except HTTPError as e:
-        raw = e.read().decode("utf-8", errors="replace")
-        try:
-            return {"error": json.loads(raw), "http_status": e.code}
-        except (json.JSONDecodeError, TypeError):
-            return {"error": raw, "http_status": e.code}
-    except URLError as e:
-        return {"error": str(e), "http_status": None}
 
 
 @dataclass
@@ -259,6 +194,9 @@ def _simulate_id(key: str, plan_hash: str) -> str:
 def _dry_print_steps(plan: Dict[str, Any]) -> None:
     steps = plan.get("steps", [])
     cli_print("=== META PUBLISH EXECUTE (DRY) ===")
+    cli_print("offline_only=true")
+    cli_print("external_write=false")
+    cli_print("legacy_live_disabled=true")
     cli_print(f"marker: {plan.get('marker')}")
     cli_print(f"plan_hash: {plan.get('plan_hash')}")
     cli_print(f"graph_version: {plan.get('graph_version')}")
@@ -321,13 +259,13 @@ def _runtime_snapshot(
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         prog="synapse.meta_publish_execute",
-        description="Execute a Meta publish plan in DRY/SIMULATE/LIVE mode (default DRY).",
+        description="Execute a Meta publish plan locally in DRY/SIMULATE mode; legacy LIVE is permanently disabled.",
     )
     ap.add_argument("--plan", default=str(DEFAULT_PLAN), help="Path to meta_publish_plan.json")
     ap.add_argument("--out", default=str(DEFAULT_OUT), help="Output run report JSON")
     ap.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR), help="Directory to store run history JSON")
-    ap.add_argument("--mode", default="dry", choices=["dry", "simulate", "live"], help="dry|simulate|live")
-    ap.add_argument("--continue-on-error", action="store_true", help="Continue steps even after an error (live).")
+    ap.add_argument("--mode", default="dry", choices=["dry", "simulate", "live"], help="dry|simulate|live (live is disabled)")
+    ap.add_argument("--continue-on-error", action="store_true", help="Legacy compatibility flag; live remains disabled.")
 
     # Runtime injects
     ap.add_argument("--daily-budget", default="", help="DAILY_BUDGET_MINOR_UNITS (e.g. 500 = $5.00)")
@@ -340,9 +278,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Ledger controls
     ap.add_argument("--ledger-dir", default="data/ledger", help="Ledger directory (default data/ledger)")
-    ap.add_argument("--ledger-disable", action="store_true", help="DANGEROUS: disable idempotency ledger in LIVE")
+    ap.add_argument("--ledger-disable", action="store_true", help="Legacy compatibility flag; live remains disabled.")
 
     args = ap.parse_args(argv)
+    mode = _safe_str(args.mode, "dry").lower()
+    if mode == "live":
+        return _legacy_live_disabled()
 
     plan_path = Path(args.plan).resolve()
     out_path = Path(args.out).resolve()
@@ -382,11 +323,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         status_override=_safe_str(args.status, "").upper() or None,
     )
 
-    mode = _safe_str(args.mode, "dry").lower()
-
-    if mode == "live" and bool(args.ledger_disable):
-        raise RuntimeError("--ledger-disable is forbidden in --mode live")
-
     # Dry mode: keep it fast and readable
     if mode == "dry":
         _dry_print_steps(plan)
@@ -423,117 +359,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     file_fps = compute_file_fingerprints_from_steps([s for s in steps if isinstance(s, dict)], cwd=repo_root)
 
-    # If LIVE and files missing -> FAIL FAST (before touching Meta)
-    missing_paths: List[str] = []
-    if int(file_fps.get("missing") or 0) > 0:
-        entries = file_fps.get("entries") or {}
-        for pth, meta in entries.items():
-            if isinstance(meta, dict) and meta.get("missing"):
-                missing_paths.append(str(pth))
-
     # fingerprint (SAFE, no secrets)
     from synapse.infra.run_fingerprint import compute_run_fingerprint
 
     runtime_snapshot = _runtime_snapshot(rt, mode=mode, meta_aid=meta_aid, graph_version=graph_version, file_fps=file_fps)
     run_fp = compute_run_fingerprint(plan_hash=plan_hash, runtime_snapshot=runtime_snapshot)
-
-    # LIVE gate
-    if mode == "live":
-        from synapse.infra.live_gate import check_meta_live_gate
-
-        gate = check_meta_live_gate()
-        if not gate.ok:
-            run = {
-                "marker": __MARKER__,
-                "ts": _utc_now_z(),
-                "mode": mode,
-                "plan_path": str(plan_path),
-                "plan_hash": plan_hash,
-                "run_fingerprint": run_fp.fingerprint,
-                "run_fingerprint_12": run_fp.fingerprint_12,
-                "runtime_snapshot": runtime_snapshot,
-                "counts": {"steps": len(steps), "results": 0, "errors": 0},
-                "status": gate.status,
-                "gate": {"status": gate.status, "reason": gate.reason, "meta": gate.meta},
-                "results": [],
-                "errors": [],
-                "ledger": {"enabled": (not bool(args.ledger_disable)), "dir": str(Path(args.ledger_dir).resolve())},
-                "files": {"count": file_fps.get("count"), "missing": file_fps.get("missing"), "overall_sha12": file_fps.get("overall_sha12")},
-            }
-            _write_json(out_path, run)
-            out_dir.mkdir(parents=True, exist_ok=True)
-            hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            _write_json(out_dir / hist_name, run)
-
-            cli_print(json.dumps({
-                "marker": __MARKER__,
-                "ts": run["ts"],
-                "mode": mode,
-                "status": run["status"],
-                "out": str(out_path),
-                "history": str(out_dir / hist_name),
-                "counts": run["counts"],
-                "gate": run["gate"],
-                "run_fingerprint_12": run_fp.fingerprint_12,
-                "files": run["files"],
-            }, ensure_ascii=False, indent=2, sort_keys=True))
-            return 0 if gate.status == "SKIP" else 2
-
-        # gate OK -> enforce files
-        if missing_paths:
-            run = {
-                "marker": __MARKER__,
-                "ts": _utc_now_z(),
-                "mode": mode,
-                "plan_path": str(plan_path),
-                "plan_hash": plan_hash,
-                "run_fingerprint": run_fp.fingerprint,
-                "run_fingerprint_12": run_fp.fingerprint_12,
-                "runtime_snapshot": runtime_snapshot,
-                "counts": {"steps": len(steps), "results": 0, "errors": 1},
-                "status": "FAIL",
-                "gate": {"status": "OK", "reason": "passed", "meta": {}},
-                "results": [],
-                "errors": [{"code": "missing_files", "missing": missing_paths[:50]}],
-                "ledger": {"enabled": (not bool(args.ledger_disable)), "dir": str(Path(args.ledger_dir).resolve())},
-                "files": {"count": file_fps.get("count"), "missing": file_fps.get("missing"), "overall_sha12": file_fps.get("overall_sha12")},
-            }
-            _write_json(out_path, run)
-            out_dir.mkdir(parents=True, exist_ok=True)
-            hist_name = f"meta_publish_run_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            _write_json(out_dir / hist_name, run)
-
-            cli_print(json.dumps({
-                "marker": __MARKER__,
-                "ts": run["ts"],
-                "mode": mode,
-                "status": run["status"],
-                "out": str(out_path),
-                "history": str(out_dir / hist_name),
-                "counts": run["counts"],
-                "run_fingerprint_12": run_fp.fingerprint_12,
-                "files": run["files"],
-                "error": "missing_files",
-            }, ensure_ascii=False, indent=2, sort_keys=True))
-            return 2
-
-    # credentials only for live
-    access_token = _safe_str(os.getenv("META_ACCESS_TOKEN"), "")
-    if mode == "live":
-        if not access_token:
-            raise RuntimeError("META_ACCESS_TOKEN env var is required for --mode live")
-        if not meta_aid:
-            raise RuntimeError("META_AD_ACCOUNT_ID env var is required for --mode live")
-
-    # ledger (LIVE only)
-    ledger = None
-    if mode == "live" and (not bool(args.ledger_disable)):
-        from synapse.infra.meta_publish_ledger import MetaPublishLedger, default_config, LedgerDriftError
-
-        ledger_cfg = default_config(Path(args.ledger_dir))
-        ledger = MetaPublishLedger(run_fingerprint=run_fp.fingerprint, plan_hash=plan_hash, cfg=ledger_cfg)
-    else:
-        LedgerDriftError = RuntimeError  # type: ignore
 
     id_map: Dict[str, str] = {}
     results: List[Dict[str, Any]] = []
@@ -576,159 +406,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             "depends_on": depends_on,
             "unresolved": unresolved,
             "status": "OK",
+            **_offline_contract(),
         }
 
-        if mode == "simulate":
-            sid = _simulate_id(key, plan_hash)
-            id_map[key] = sid
-            step_report["simulated_id"] = sid
-            results.append(step_report)
-            continue
-
-        if mode == "live":
-            missing_deps = [d for d in depends_on if _safe_str(d) and _safe_str(d) not in id_map]
-            if missing_deps:
-                err = {"key": key, "op": op, "error": f"missing deps: {missing_deps}"}
-                errors.append(err)
-                step_report["status"] = "FAIL"
-                step_report["error"] = err["error"]
-                results.append(step_report)
-                if not args.continue_on_error:
-                    break
-                continue
-
-            if unresolved:
-                err = {"key": key, "op": op, "error": f"unresolved placeholders: {unresolved}"}
-                errors.append(err)
-                step_report["status"] = "FAIL"
-                step_report["error"] = err["error"]
-                results.append(step_report)
-                if not args.continue_on_error:
-                    break
-                continue
-
-            payload_sha256 = _sha256_obj(payload2)
-
-            # -------- LEDGER REUSE (anti-duplicados) --------
-            if ledger is not None:
-                try:
-                    reused = ledger.reuse_or_raise_drift(
-                        step_key=key,
-                        op=op,
-                        endpoint_resolved=endpoint_resolved,
-                        payload_sha256=payload_sha256,
-                    )
-                    if reused:
-                        id_map[key] = reused
-                        step_report["status"] = "REUSED"
-                        step_report["reused_id"] = reused
-                        step_report["payload_sha256_12"] = payload_sha256[:12]
-                        results.append(step_report)
-                        continue
-                except LedgerDriftError as e:
-                    err = {"key": key, "op": op, "error": str(e)}
-                    errors.append(err)
-                    step_report["status"] = "FAIL"
-                    step_report["error"] = str(e)
-                    step_report["payload_sha256_12"] = payload_sha256[:12]
-                    results.append(step_report)
-                    if not args.continue_on_error:
-                        break
-                    continue
-            else:
-                step_report["payload_sha256_12"] = payload_sha256[:12]
-
-            url = f"https://graph.facebook.com/{graph_version}{endpoint_resolved}"
-
-            if op == "upload_video":
-                source = payload2.get("source")
-                m = FILE_REF_RE.match(_safe_str(source, ""))
-                if not m:
-                    err = {"key": key, "op": op, "error": f"upload_video missing <FILE:...> source (got {source})"}
-                    errors.append(err)
-                    step_report["status"] = "FAIL"
-                    step_report["error"] = err["error"]
-                    results.append(step_report)
-                    if not args.continue_on_error:
-                        break
-                    continue
-
-                file_path = Path(m.group(1)).expanduser()
-                if not file_path.is_absolute():
-                    file_path = (repo_root / file_path).resolve()
-                else:
-                    file_path = file_path.resolve()
-
-                # hard safety (should already be caught before, but double tap)
-                if not file_path.exists():
-                    err = {"key": key, "op": op, "error": f"file not found: {file_path}"}
-                    errors.append(err)
-                    step_report["status"] = "FAIL"
-                    step_report["error"] = err["error"]
-                    results.append(step_report)
-                    if not args.continue_on_error:
-                        break
-                    continue
-
-                fields = {"name": _safe_str(payload2.get("name"), key)}
-                resp = _http_post_multipart(url, fields=fields, file_field="source", file_path=file_path, access_token=access_token)
-            else:
-                resp = _http_post(url, data=payload2, access_token=access_token)
-
-            step_report["response"] = resp
-
-            rid = None
-            if isinstance(resp, dict):
-                rid = resp.get("id") or resp.get("video_id")
-
-            if isinstance(resp, dict) and ("error" in resp):
-                step_report["status"] = "FAIL"
-                errors.append({"key": key, "op": op, "response_error": resp.get("error")})
-                results.append(step_report)
-                if not args.continue_on_error:
-                    break
-                continue
-
-            if not rid:
-                step_report["status"] = "FAIL"
-                step_report["error"] = "missing_created_id"
-                step_report["payload_sha256_12"] = payload_sha256[:12]
-                errors.append({
-                    "key": key,
-                    "op": op,
-                    "error": "missing_created_id",
-                    "response": resp,
-                })
-                results.append(step_report)
-                if not args.continue_on_error:
-                    break
-                continue
-
-            if rid:
-                rid_str = str(rid)
-                id_map[key] = rid_str
-                step_report["created_id"] = rid_str
-                step_report["status"] = "OK"
-
-                if ledger is not None:
-                    resp_meta = {}
-                    if isinstance(resp, dict):
-                        for kk in ("id", "video_id"):
-                            if kk in resp:
-                                resp_meta[kk] = resp.get(kk)
-                    ledger.commit(
-                        step_key=key,
-                        op=op,
-                        endpoint_resolved=endpoint_resolved,
-                        payload_sha256=payload_sha256,
-                        created_id=rid_str,
-                        response_meta=resp_meta or None,
-                    )
-                    step_report["ledger_committed"] = True
-
-            results.append(step_report)
-            continue
-
+        sid = _simulate_id(key, plan_hash)
+        id_map[key] = sid
+        step_report["simulated_id"] = sid
         results.append(step_report)
 
     run = {
@@ -747,11 +430,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         "errors": errors,
         "status": "OK" if not errors else "FAIL",
         "ledger": {
-            "enabled": (mode == "live" and (not bool(args.ledger_disable))),
+            "enabled": False,
             "dir": str(Path(args.ledger_dir).resolve()),
             "scope": "run_fingerprint",
         },
         "files": {"count": file_fps.get("count"), "missing": file_fps.get("missing"), "overall_sha12": file_fps.get("overall_sha12")},
+        **_offline_contract(),
     }
 
     _write_json(out_path, run)
@@ -770,6 +454,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "ledger": run["ledger"],
         "run_fingerprint_12": run_fp.fingerprint_12,
         "files": run["files"],
+        **_offline_contract(),
     }, ensure_ascii=False, indent=2, sort_keys=True))
 
     return 0 if run["status"] == "OK" else 2

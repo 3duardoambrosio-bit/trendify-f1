@@ -65,3 +65,20 @@ def test_invoke_falls_back_to_main_when_no_kwargs() -> None:
     rc = invoke_best(mod, argv=["--product-id", "p1"])
     assert rc == 0
     assert called["main"] == 1
+
+
+def test_invoke_discovers_learning_loop_main(monkeypatch) -> None:
+    import synapse.learning.learning_loop as learning_loop
+    import synapse.runner as runner
+
+    calls: list[list[str] | None] = []
+
+    def fake_runner_main(argv=None) -> int:
+        calls.append(argv)
+        return 2
+
+    monkeypatch.setattr(runner, "main", fake_runner_main)
+
+    assert callable(learning_loop.main)
+    assert invoke_best(learning_loop, argv=["--apply"]) == 2
+    assert calls == [["--apply"]]

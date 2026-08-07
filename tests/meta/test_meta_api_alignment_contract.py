@@ -73,14 +73,29 @@ def test_legacy_detailed_targeting_modules_do_not_feed_meta_write_path() -> None
     )
 
 
-def test_meta_write_guards_remain_paused_no_live_and_ledger_safe() -> None:
+def test_meta_write_guards_remain_paused_and_legacy_live_is_retired() -> None:
     safe_client = _read("synapse/meta/safe_client.py")
     publisher = _read("synapse/meta/publisher_adapter.py")
     execute = _read("synapse/meta_publish_execute.py")
+    api_day = _read("synapse/meta_api_day_meta.py")
 
     assert 'payload["status"] = "PAUSED"' in safe_client
     assert '"status": "PAUSED"' in safe_client
     assert "SYNAPSE_META_LIVE" in publisher
     assert "SYNAPSE_FLAG_META_LIVE_API" not in publisher
     assert "Default/off mode stays mock/compat" in publisher
-    assert "--ledger-disable is forbidden in --mode live" in execute
+    assert "LEGACY_META_LIVE_PERMANENTLY_DISABLED" in execute
+    assert "LEGACY_META_LIVE_PERMANENTLY_DISABLED" in api_day
+    assert 'default="simulate"' in api_day
+
+    for removed_surface in (
+        "urlopen",
+        "_http_post(",
+        "_http_post_multipart(",
+        "graph.facebook.com",
+        "META_ACCESS_TOKEN",
+        "check_meta_live_gate",
+        "MetaPublishLedger",
+        "ledger.commit",
+    ):
+        assert removed_surface not in execute

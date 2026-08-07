@@ -1,11 +1,7 @@
-import os, urllib.request, urllib.parse
-from urllib.error import HTTPError
-from infra.network_guard import enforce_url_policy
+from __future__ import annotations
 
-t=os.environ.get("META_ACCESS_TOKEN","")
-u="https://graph.facebook.com/v22.0/me?" + urllib.parse.urlencode({"fields":"id,name","access_token":t})
-enforce_url_policy(u)
-try:
-    print(urllib.request.urlopen(u, timeout=30).read().decode("utf-8","replace"))
-except HTTPError as e:
-    print(e.read().decode("utf-8","replace"))
+from synapse.meta_auth_check import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

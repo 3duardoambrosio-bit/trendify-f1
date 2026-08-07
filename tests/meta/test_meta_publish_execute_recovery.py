@@ -1,129 +1,53 @@
-"""Regression tests for live-ledger safety in meta_publish_execute."""
+"""Regression tests for permanent retirement of legacy Meta live execution."""
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-import synapse.infra.file_fingerprint as file_fingerprint
-import synapse.infra.live_gate as live_gate
-import synapse.infra.meta_publish_ledger as meta_publish_ledger
-import synapse.infra.run_fingerprint as run_fingerprint
 import synapse.meta_publish_execute as mpe
 
 
-def _write_plan(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "steps": [
-                    {
-                        "i": 1,
-                        "key": "step-1",
-                        "op": "create_campaign",
-                        "endpoint": "/act_<META_AD_ACCOUNT_ID>/campaigns",
-                        "payload": {"name": "Regression Campaign"},
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
-def test_live_ledger_disable_is_forbidden(tmp_path: Path) -> None:
-    plan = tmp_path / "plan.json"
+def test_live_recovery_flags_fail_closed_without_reading_malformed_plan(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    plan = tmp_path / "malformed-plan.json"
+    original = "{this is deliberately invalid json"
+    plan.write_text(original, encoding="utf-8")
     out = tmp_path / "out.json"
-    out_dir = tmp_path / "history"
-    _write_plan(plan)
+    history = tmp_path / "history"
 
-    with pytest.raises(RuntimeError, match="--ledger-disable is forbidden in --mode live"):
-        mpe.main(
-            [
-                "--plan",
-                str(plan),
-                "--out",
-                str(out),
-                "--out-dir",
-                str(out_dir),
-                "--mode",
-                "live",
-                "--ledger-disable",
-            ]
-        )
-
-
-def test_live_missing_created_id_returns_fail_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    plan = tmp_path / "plan.json"
-    out = tmp_path / "out.json"
-    out_dir = tmp_path / "history"
-    _write_plan(plan)
-
-    monkeypatch.setenv("META_ACCESS_TOKEN", "token-test")
-    monkeypatch.setenv("META_AD_ACCOUNT_ID", "1234567890")
-
-    monkeypatch.setattr(mpe, "_repo_root_from_plan", lambda _plan_path: tmp_path)
-    monkeypatch.setattr(mpe, "_runtime_snapshot", lambda *args, **kwargs: {"mode": kwargs.get("mode", "live")})
-
-    monkeypatch.setattr(
-        file_fingerprint,
-        "compute_file_fingerprints_from_steps",
-        lambda steps, cwd: {"count": 0, "missing": 0, "entries": {}, "overall_sha12": "0" * 12},
-    )
-    monkeypatch.setattr(
-        run_fingerprint,
-        "compute_run_fingerprint",
-        lambda plan_hash, runtime_snapshot: SimpleNamespace(
-            fingerprint="f" * 64,
-            fingerprint_12="f" * 12,
-        ),
-    )
-    monkeypatch.setattr(
-        live_gate,
-        "check_meta_live_gate",
-        lambda: SimpleNamespace(ok=True, status="OK", reason="passed", meta={}),
-    )
-
-    commit_calls: list[dict] = []
-
-    class DummyLedger:
-        def __init__(self, *args, **kwargs) -> None:
-            self.args = args
-            self.kwargs = kwargs
-
-        def reuse_or_raise_drift(self, **kwargs):
-            return None
-
-        def commit(self, **kwargs) -> None:
-            commit_calls.append(kwargs)
-
-    monkeypatch.setattr(meta_publish_ledger, "default_config", lambda path: {"path": str(path)})
-    monkeypatch.setattr(meta_publish_ledger, "MetaPublishLedger", DummyLedger)
-    monkeypatch.setattr(mpe, "_http_post", lambda url, data, access_token: {"ok": True})
-
-    exit_code = mpe.main(
+    rc = mpe.main(
         [
+            "--mode",
+            "live",
             "--plan",
             str(plan),
             "--out",
             str(out),
             "--out-dir",
-            str(out_dir),
-            "--mode",
-            "live",
+            str(history),
+            "--continue-on-error",
+            "--ledger-disable",
         ]
     )
 
-    assert exit_code == 2
-    assert out.exists() is True
+    diagnostic = json.loads(capsys.readouterr().out)
+    assert rc == 2
+    assert diagnostic["diagnostic"] == "LEGACY_META_LIVE_PERMANENTLY_DISABLED"
+    assert plan.read_text(encoding="utf-8") == original
+    assert not out.exists()
+    assert not history.exists()
 
-    run = json.loads(out.read_text(encoding="utf-8"))
-    assert run["status"] == "FAIL"
-    assert run["counts"]["errors"] == 1
-    assert run["errors"][0]["error"] == "missing_created_id"
-    assert run["results"][0]["status"] == "FAIL"
-    assert run["results"][0]["error"] == "missing_created_id"
-    assert commit_calls == []
+
+def test_live_disabled_helper_has_no_transport_injection_surface() -> None:
+    assert str(mpe.LEGACY_META_LIVE_PERMANENTLY_DISABLED) == (
+        "LEGACY_META_LIVE_PERMANENTLY_DISABLED"
+    )
+
+    parameters = list(inspect.signature(mpe._legacy_live_disabled).parameters)
+    assert parameters == []
