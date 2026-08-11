@@ -1,0 +1,113 @@
+{
+  "operator_review_required": true,
+  "rule_decisions": [
+    {
+      "decision_text": "reject or operator review",
+      "framework": "ClaimRisk",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 97,
+      "rule_id": "CLR-D003",
+      "semantic_matched": true,
+      "source_anchor": "CLAIMS",
+      "triggers": [
+        "claim_rejected",
+        "safe_rewrite",
+        "operator_review_required"
+      ]
+    },
+    {
+      "decision_text": "route to lower-claim wording or operator review",
+      "framework": "ProofRequirement",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 94,
+      "rule_id": "PRF-D006",
+      "semantic_matched": true,
+      "source_anchor": "SYNAPSE",
+      "triggers": [
+        "proof_gap",
+        "lower_claim_or_reject",
+        "operator_review_required"
+      ]
+    },
+    {
+      "decision_text": "route risky claim to operator review",
+      "framework": "ChannelConstraint",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 98,
+      "rule_id": "CHN-D002",
+      "semantic_matched": true,
+      "source_anchor": "CLAIMS",
+      "triggers": [
+        "channel_constraint",
+        "operator_review_required"
+      ]
+    },
+    {
+      "decision_text": "use softer evaluation CTA",
+      "framework": "CTA",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 98,
+      "rule_id": "CTA-D002",
+      "semantic_matched": true,
+      "source_anchor": "CLAIMS",
+      "triggers": [
+        "cta_softened_or_rejected"
+      ]
+    },
+    {
+      "decision_text": "avoid discount-dependent offer",
+      "framework": "OfferConstruction",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 98,
+      "rule_id": "OFF-D002",
+      "semantic_matched": true,
+      "source_anchor": "SYNAPSE",
+      "triggers": [
+        "reject_discount_offer",
+        "operator_review_required"
+      ]
+    },
+    {
+      "decision_text": "reject scarcity/limited-time offer",
+      "framework": "OfferConstruction",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 94,
+      "rule_id": "OFF-D006",
+      "semantic_matched": false,
+      "source_anchor": "CLAIMS",
+      "triggers": []
+    },
+    {
+      "decision_text": "select high-intent/direct angle",
+      "framework": "AngleSelection",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 95,
+      "rule_id": "ANG-D005",
+      "semantic_matched": false,
+      "source_anchor": "SYNAPSE",
+      "triggers": []
+    }
+  ],
+  "safe_output": "Blocked: do not use the current salud message yet. Primary reason: claim safety: for salud, current wording risks implying the specific buyer problem for salud is solved beyond the available proof (Producto declarado por el operador para organización personal.). Evidence checked: Producto declarado por el operador para organización personal.; proof available: Registro CSV local; no clinical proof. Operator action: remove the risky salud claim, keep only the supported fact 'Producto declarado por el operador para organización personal.', or collect stronger proof before review. Operator review required. Safe next step: create a proof-safe rewrite for a problem-aware buyer on Meta, then review before use.",
+  "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+  "selected_framework": "ClaimRisk",
+  "selected_rule_id": "CLR-D003",
+  "status": "blocked",
+  "triggers": [
+    "claim_rejected",
+    "safe_rewrite",
+    "operator_review_required",
+    "proof_gap",
+    "lower_claim_or_reject",
+    "channel_constraint",
+    "cta_softened_or_rejected",
+    "reject_discount_offer"
+  ]
+}

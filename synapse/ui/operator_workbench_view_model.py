@@ -12,13 +12,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SCHEMA_VERSION = "a8-r109a.workbench_view_model.v3"
 RENDER_MODE = "offline_static_html"
 SOURCE_KIND_DEFAULT = "frozen_local_fixture"
+SOURCE_KIND_OPERATOR_CATALOG = "operator_local_catalog_import"
 GENERATED_AT_POLICY = "deterministic_no_runtime_clock"
+
+_MONEY_CENT = Decimal("0.01")
+_OPERATOR_MARGIN_FLOOR = Decimal("0.25")
 
 BASE_HEAD = "c189cb09f963417596f2b6a02bfbd9e9ae2459a2"
 ISLAND = "A8-R109A"
@@ -298,6 +303,17 @@ def _money(value: Any, currency: str = "MXN") -> str:
     return f"{currency} {amount:.2f}"
 
 
+def _decimal_value(value: Any) -> Decimal | None:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _guidance_money(value: Decimal) -> str:
+    return f"MXN {value.quantize(_MONEY_CENT):.2f}"
+
+
 def _lines(items: Sequence[str], bullet: str = "- ") -> str:
     return "\n".join(f"{bullet}{item}" for item in items)
 
@@ -347,6 +363,9 @@ class WorkbenchViewModel:
     action_queue: tuple[dict[str, Any], ...]
     system_health_board: dict[str, Any]
     capability_surface_map: dict[str, Any]
+    # A8-R115 presentation-only guidance. Routing and sealed outputs remain in
+    # their original fields and are never rewritten here.
+    operator_decision_guidance: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
         """Canonical JSON-ready dict (tuples become lists, key order stable)."""
@@ -383,6 +402,271 @@ def classify_input_richness(operator_input: Mapping[str, Any]) -> dict[str, Any]
         "filled_fields": filled,
         "missing_fields": missing,
         "warning": LOW_INPUT_WARNING if classification == INPUT_LOW else "",
+    }
+
+
+def _operator_reason_label(code: str, *, brief_is_rich: bool) -> str:
+    labels = {
+        "CATALOG_INTAKE": (
+            "El producto entró por catálogo CSV local; es procedencia, no un bloqueo."
+        ),
+        "NO_OPERATOR_BRIEF": (
+            "El brief faltaba durante el intake; el enriquecimiento actual ya está "
+            "completo. Es contexto histórico, no un bloqueo."
+            if brief_is_rich
+            else "Falta completar el brief del operador; es una brecha de preparación."
+        ),
+        "METHODOLOGY_BLOCKED": (
+            "El motor metodológico bloqueó el mensaje actual."
+        ),
+    }
+    if code in labels:
+        return labels[code]
+    if code.startswith("CLR-"):
+        return "La regla de seguridad de afirmaciones exige revisión."
+    if code.startswith("PRF-"):
+        return "La evidencia disponible no sostiene todavía el mensaje."
+    return "Existe un bloqueo activo registrado por el sistema."
+
+
+def build_operator_decision_guidance(
+    fixture: Mapping[str, Any],
+    input_richness: Mapping[str, Any],
+    marketing_pack: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive R115 operator orientation without changing source decisions.
+
+    This contract is presentation-only. It reads the already-computed economics,
+    routing and sealed methodology, but never writes back into any of them.
+    """
+
+    is_operator_catalog = (
+        _text(fixture.get("source_kind")) == SOURCE_KIND_OPERATOR_CATALOG
+    )
+    decision = _mapping(fixture.get("decision"))
+    economics = _mapping(fixture.get("economics"))
+    methodology = _mapping(decision.get("methodology"))
+    blocked_items = [
+        _mapping(item)
+        for item in fixture.get("blocked") or []
+        if isinstance(item, Mapping)
+    ]
+    decision_codes = _texts(decision.get("reason_codes"))
+    active_codes: list[str] = []
+    for item in blocked_items:
+        for code in _texts(item.get("reason_codes")):
+            if code not in active_codes:
+                active_codes.append(code)
+    if _text(decision.get("outcome")) == OUTCOME_BLOCKED:
+        for code in decision_codes:
+            if code == "METHODOLOGY_BLOCKED" and code not in active_codes:
+                active_codes.append(code)
+    informational_codes = [
+        code for code in decision_codes if code not in active_codes
+    ]
+    brief_is_rich = _text(input_richness.get("classification")) == INPUT_RICH
+
+    margin = _decimal_value(economics.get("contribution_margin_mxn"))
+    price = _decimal_value(economics.get("price_mxn"))
+    cost = _decimal_value(economics.get("product_cost_mxn"))
+    shipping = _decimal_value(economics.get("shipping_cost_mxn"))
+    fee = _decimal_value(economics.get("payment_fee_mxn"))
+
+    cpa_status = "NO_ECONOMICS"
+    cpa_message = "No hay economía suficiente para determinar un CPA."
+    recovery_conditions: list[str] = []
+    primary_action: dict[str, Any] = {}
+    break_even_price: Decimal | None = None
+    break_even_max_costs: Decimal | None = None
+    viable_price: Decimal | None = None
+    viable_max_costs: Decimal | None = None
+
+    total_costs = None
+    if None not in (cost, shipping, fee):
+        total_costs = cost + shipping + fee  # type: ignore[operator]
+
+    if margin is not None and margin <= 0:
+        cpa_status = "NO_VIABLE_CPA"
+        cpa_message = (
+            "Ningún CPA es viable, ni siquiera MXN 0.00: la unidad pierde "
+            f"{_guidance_money(abs(margin))} antes de publicidad."
+        )
+        if price is not None and total_costs is not None:
+            break_even_price = (total_costs + _MONEY_CENT).quantize(
+                _MONEY_CENT, rounding=ROUND_CEILING
+            )
+            break_even_max_costs = (price - _MONEY_CENT).quantize(
+                _MONEY_CENT, rounding=ROUND_FLOOR
+            )
+            viable_price = (
+                total_costs / (Decimal("1") - _OPERATOR_MARGIN_FLOOR)
+            ).quantize(_MONEY_CENT, rounding=ROUND_CEILING)
+            viable_max_costs = (price * (
+                Decimal("1") - _OPERATOR_MARGIN_FLOOR
+            )).quantize(_MONEY_CENT, rounding=ROUND_FLOOR)
+            recovery_conditions = [
+                (
+                    "Punto de equilibrio contable, no precio viable: precio mínimo "
+                    f"{_guidance_money(break_even_price)} o costos totales máximos "
+                    f"{_guidance_money(break_even_max_costs)}; deja solo MXN 0.01 "
+                    "antes de adquisición."
+                ),
+                (
+                    "Referencia de viabilidad del guardrail local (25%): precio de al "
+                    f"menos {_guidance_money(viable_price)} o costos totales de como "
+                    f"máximo {_guidance_money(viable_max_costs)}."
+                ),
+            ]
+            primary_action = {
+                "action_id": "r115_repair_negative_unit_economics",
+                "label": (
+                    "Reparar la economía: alcanzar precio de al menos "
+                    f"{_guidance_money(viable_price)} o costos totales de como máximo "
+                    f"{_guidance_money(viable_max_costs)}; si no, descartar el producto."
+                ),
+                "kind": "repair_economics",
+                "target": "economics",
+                "notes": cpa_message,
+            }
+    elif margin is not None:
+        cpa_status = "POSITIVE_CPA_LIMIT"
+        cpa_message = (
+            f"CPA contable máximo antes de reserva: {_guidance_money(margin)}."
+        )
+
+    floor_amount = (
+        (price * _OPERATOR_MARGIN_FLOOR).quantize(
+            _MONEY_CENT, rounding=ROUND_CEILING
+        )
+        if price is not None
+        else None
+    )
+    raw_plan = _mapping(marketing_pack.get("testing_plan_with_thresholds"))
+    raw_criteria = {
+        key: _texts(raw_plan.get(key))
+        for key in ("continue_if", "review_if", "kill_if")
+    }
+    if all(raw_criteria.values()):
+        decision_criteria = {**raw_criteria, "source": "marketing_plan"}
+    elif margin is not None and margin <= 0 and viable_price is not None:
+        decision_criteria = {
+            "continue_if": [
+                "Continuar solo después de verificar margen positivo y alcanzar el "
+                f"piso local: precio ≥ {_guidance_money(viable_price)} o costos "
+                f"totales ≤ {_guidance_money(viable_max_costs)}."
+            ],
+            "review_if": [
+                "Revisar una propuesta reparada solo si su CPA objetivo es menor que "
+                "el nuevo margen unitario verificado."
+            ],
+            "kill_if": [
+                "Descartar si no se puede superar el punto contable de "
+                f"{_guidance_money(break_even_price)} de precio o reducir costos por "
+                f"debajo de {_guidance_money(price)}."
+            ],
+            "source": "operator_orientation_fallback",
+        }
+    elif margin is not None and floor_amount is not None:
+        decision_criteria = {
+            "continue_if": [
+                "Continuar solo si el margen verificado se mantiene en "
+                f"{_guidance_money(floor_amount)} o más (25% del precio actual)."
+            ],
+            "review_if": [
+                "Revisar si el margen cae por debajo de "
+                f"{_guidance_money(floor_amount)} o cambia cualquier costo."
+            ],
+            "kill_if": [
+                "Descartar si el margen unitario llega a MXN 0.00 o menos."
+            ],
+            "source": "operator_orientation_fallback",
+        }
+    else:
+        decision_criteria = {
+            "continue_if": ["Continuar solo cuando la economía esté completa."],
+            "review_if": ["Revisar cuando cambie cualquier dato del operador."],
+            "kill_if": ["Descartar si no puede demostrarse margen positivo."],
+            "source": "operator_orientation_fallback",
+        }
+
+    methodology_status = _text(methodology.get("status"))
+    if methodology_status == "blocked":
+        methodology_summary = (
+            "La metodología bloqueó el mensaje actual. Primero repara la economía; "
+            "después revisa afirmaciones y evidencia antes de reconsiderar."
+        )
+        methodology_status_label = "BLOQUEADO"
+    elif methodology_status == "accepted":
+        methodology_summary = (
+            "La metodología aceptó preparar material local. Esto no autoriza "
+            "publicación, gasto ni escrituras en vivo."
+        )
+        methodology_status_label = "ACEPTADO PARA PREPARACIÓN LOCAL"
+    else:
+        methodology_summary = (
+            "La metodología requiere revisión antes de preparar material."
+        )
+        methodology_status_label = "REVISIÓN"
+
+    if margin is not None and margin <= 0:
+        operator_summary = cpa_message
+    elif margin is not None:
+        operator_summary = (
+            f"Margen unitario actual: {_guidance_money(margin)}. La calidad del "
+            "brief no sustituye esta evaluación económica."
+        )
+    else:
+        operator_summary = "Faltan datos económicos para orientar la decisión."
+
+    filled = int(input_richness.get("filled_count") or 0)
+    total = int(input_richness.get("total_fields") or 0)
+    return {
+        "presentation_only": True,
+        "operator_catalog": is_operator_catalog,
+        "cpa_status": cpa_status,
+        "cpa_message": cpa_message,
+        "operator_summary": operator_summary,
+        "recovery_conditions": recovery_conditions,
+        "primary_action": primary_action,
+        "can_recover": any(
+            bool(item.get("can_recover", False)) for item in blocked_items
+        ),
+        "break_even_price_mxn": (
+            float(break_even_price) if break_even_price is not None else None
+        ),
+        "break_even_max_costs_mxn": (
+            float(break_even_max_costs)
+            if break_even_max_costs is not None
+            else None
+        ),
+        "viable_price_mxn": float(viable_price) if viable_price is not None else None,
+        "viable_max_costs_mxn": (
+            float(viable_max_costs) if viable_max_costs is not None else None
+        ),
+        "active_blocker_codes": active_codes,
+        "active_blockers": [
+            _operator_reason_label(code, brief_is_rich=brief_is_rich)
+            for code in active_codes
+        ],
+        "informational_codes": informational_codes,
+        "informational_context": [
+            _operator_reason_label(code, brief_is_rich=brief_is_rich)
+            for code in informational_codes
+        ],
+        "brief_quality_label": f"CALIDAD DEL BRIEF {filled}/{total}",
+        "brief_quality_note": (
+            "Mide completitud del brief; no mide viabilidad comercial."
+        ),
+        "methodology_status_label": methodology_status_label,
+        "methodology_summary": methodology_summary,
+        "decision_criteria": decision_criteria,
+        "source_fields": [
+            "economics",
+            "decision",
+            "blocked",
+            "input_richness",
+            "marketing_pack.testing_plan_with_thresholds",
+        ],
     }
 
 
@@ -964,7 +1248,32 @@ def _normalize_action(item: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_blocked_queue(fixture: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _operator_facing_action(
+    item: Mapping[str, Any],
+    guidance: Mapping[str, Any],
+) -> dict[str, Any]:
+    action = _normalize_action(item)
+    if not guidance.get("operator_catalog"):
+        return action
+    if action["kind"] == "review_blocked":
+        economic_first = guidance.get("cpa_status") == "NO_VIABLE_CPA"
+        action["label"] = (
+            "Después de reparar la economía, revisar o reescribir las afirmaciones "
+            "usando únicamente evidencia comprobable."
+            if economic_first
+            else "Revisar o reescribir las afirmaciones usando evidencia comprobable."
+        )
+        action["notes"] = (
+            "Paso secundario de revisión del mensaje; no cambia el bloqueo ni autoriza uso."
+        )
+    return action
+
+
+def build_blocked_queue(
+    fixture: Mapping[str, Any],
+    guidance: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    operator_guidance = _mapping(guidance)
     queue: list[dict[str, Any]] = []
     for item in fixture.get("blocked") or []:
         if not isinstance(item, Mapping):
@@ -977,10 +1286,18 @@ def build_blocked_queue(fixture: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "severity": _text(item.get("severity"), "unknown"),
                 "can_recover": bool(item.get("can_recover", False)),
                 "operator_actions": [
-                    _normalize_action(action)
+                    _operator_facing_action(action, operator_guidance)
                     for action in item.get("operator_actions") or []
                     if isinstance(action, Mapping)
                 ],
+                "operator_reason": (
+                    _text(operator_guidance.get("operator_summary"))
+                    if operator_guidance.get("operator_catalog")
+                    else _text(item.get("reason"))
+                ),
+                "recovery_conditions": _texts(
+                    operator_guidance.get("recovery_conditions")
+                ),
                 "safety_boundary": dict(BLOCKED_ITEM_SAFETY_BOUNDARY),
             }
         )
@@ -991,12 +1308,18 @@ def build_operator_actions(
     fixture: Mapping[str, Any],
     input_richness: Mapping[str, Any],
     has_product: bool,
+    guidance: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    operator_guidance = _mapping(guidance)
     actions = [
-        _normalize_action(item)
+        _operator_facing_action(item, operator_guidance)
         for item in fixture.get("operator_actions") or []
         if isinstance(item, Mapping)
     ]
+
+    primary_economic_action = _mapping(operator_guidance.get("primary_action"))
+    if operator_guidance.get("operator_catalog") and primary_economic_action:
+        actions.insert(0, _normalize_action(primary_economic_action))
 
     if has_product and input_richness.get("classification") == INPUT_LOW:
         missing = list(input_richness.get("missing_fields") or [])[:MAX_ENRICH_ACTIONS]
@@ -1484,6 +1807,7 @@ def build_module_status_summary(
     blocked_queue: Sequence[Mapping[str, Any]],
     operator_actions: Sequence[Mapping[str, Any]],
     has_product: bool,
+    operator_decision_guidance: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Per-module health so R109B renders real status instead of inferring it."""
     decision = _mapping(fixture.get("decision"))
@@ -1495,6 +1819,8 @@ def build_module_status_summary(
     filled = int(input_richness.get("filled_count") or 0)
     total = int(input_richness.get("total_fields") or 0)
     missing_fields = _texts(input_richness.get("missing_fields"))
+    orientation = _mapping(operator_decision_guidance)
+    operator_catalog = bool(orientation.get("operator_catalog"))
 
     prohibited_copy = _has_prohibited_copy(marketing_pack)
     rewrites = _medium_rewrite_count(marketing_pack)
@@ -1547,7 +1873,7 @@ def build_module_status_summary(
         "command_center",
         command_status,
         command_badges[command_status],
-        reason,
+        _text(orientation.get("operator_summary")) if operator_catalog else reason,
         primary_action,
         ("decision.outcome", "decision.reason", "operator_actions"),
     )
@@ -1556,7 +1882,11 @@ def build_module_status_summary(
         "decision_center",
         outcome_status(),
         outcome or "N/A",
-        ", ".join(reason_codes),
+        (
+            "; ".join(_texts(orientation.get("active_blockers")))
+            if operator_catalog and orientation.get("active_blockers")
+            else ", ".join(reason_codes)
+        ),
         "Leer caveats antes de invertir tiempo en el candidato.",
         ("decision", "scores"),
     )
@@ -1580,8 +1910,17 @@ def build_module_status_summary(
         add(
             "product_lab",
             lab_status,
-            f"{filled}/{total}",
-            f"Brief clasificado {classification} ({filled}/{total} campos).",
+            (
+                _text(orientation.get("brief_quality_label"))
+                if operator_catalog
+                else f"{filled}/{total}"
+            ),
+            (
+                f"{_text(orientation.get('brief_quality_note'))} "
+                f"Brief clasificado {classification} ({filled}/{total} campos)."
+                if operator_catalog
+                else f"Brief clasificado {classification} ({filled}/{total} campos)."
+            ),
             lab_action,
             ("input_richness",),
         )
@@ -1595,6 +1934,19 @@ def build_module_status_summary(
             "Sin producto seleccionado: no hay economia que evaluar.",
             "",
             ("economics",),
+        )
+    elif (
+        operator_catalog
+        and _decimal_value(economics.get("contribution_margin_mxn")) is not None
+        and _decimal_value(economics.get("contribution_margin_mxn")) <= 0
+    ):
+        add(
+            "economics",
+            MODULE_STATUS_BLOCKED,
+            f"{margin_percent}%",
+            _text(orientation.get("cpa_message")),
+            _text(_mapping(orientation.get("primary_action")).get("label")),
+            ("economics", "operator_decision_guidance"),
         )
     elif "MARGIN_BELOW_FLOOR" in reason_codes:
         add(
@@ -1729,7 +2081,11 @@ def build_module_status_summary(
             "safety_claim_guard",
             MODULE_STATUS_BLOCKED,
             "RIESGO CRITICO",
-            _text(claim_guard.get("claim_guard_summary")),
+            (
+                _text(orientation.get("methodology_summary"))
+                if operator_catalog
+                else _text(claim_guard.get("claim_guard_summary"))
+            ),
             "No preparar venta mientras el claim central sea prohibido.",
             ("claim_guard", "decision.outcome"),
         )
@@ -1845,7 +2201,9 @@ def build_candidate_pipeline(
 def build_blocked_queue_summary(
     fixture: Mapping[str, Any],
     blocked_queue: Sequence[Mapping[str, Any]],
+    operator_decision_guidance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    orientation = _mapping(operator_decision_guidance)
     outcome = _decision_outcome(fixture)
     reason_codes: list[str] = []
     required_actions: list[str] = []
@@ -1855,6 +2213,7 @@ def build_blocked_queue_summary(
             {
                 "product_name": _text(item.get("product_name")),
                 "reason": _text(item.get("reason")),
+                "operator_reason": _text(item.get("operator_reason")),
                 "reason_codes": _texts(item.get("reason_codes")),
                 "severity": _text(item.get("severity"), "unknown"),
                 "can_recover": bool(item.get("can_recover", False)),
@@ -1872,6 +2231,11 @@ def build_blocked_queue_summary(
         "reason_codes": sorted(set(reason_codes)),
         "required_operator_actions": required_actions,
         "can_prepare": outcome == OUTCOME_RECOMMENDED,
+        "active_blockers": _texts(orientation.get("active_blockers")),
+        "informational_context": _texts(
+            orientation.get("informational_context")
+        ),
+        "recovery_conditions": _texts(orientation.get("recovery_conditions")),
         "source_fields": ["blocked", "decision.outcome"],
     }
 
@@ -1985,8 +2349,16 @@ def build_view_model(
     shopify_pack = build_shopify_pack(fixture, claim_guard, has_product)
     marketing_pack = build_marketing_pack(fixture, claim_guard, input_richness, has_product)
     learning_plan = build_learning_plan(fixture)
-    blocked_queue = build_blocked_queue(fixture)
-    operator_actions = build_operator_actions(fixture, input_richness, has_product)
+    operator_decision_guidance = build_operator_decision_guidance(
+        fixture, input_richness, marketing_pack
+    )
+    blocked_queue = build_blocked_queue(fixture, operator_decision_guidance)
+    operator_actions = build_operator_actions(
+        fixture,
+        input_richness,
+        has_product,
+        operator_decision_guidance,
+    )
     copy_payloads = build_copy_payloads(
         has_product, shopify_pack, marketing_pack, learning_plan, claim_guard
     )
@@ -2006,11 +2378,14 @@ def build_view_model(
         blocked_queue,
         operator_actions,
         has_product,
+        operator_decision_guidance,
     )
     candidate_pipeline = build_candidate_pipeline(
         fixture, input_richness, blocked_queue, has_product
     )
-    blocked_queue_summary = build_blocked_queue_summary(fixture, blocked_queue)
+    blocked_queue_summary = build_blocked_queue_summary(
+        fixture, blocked_queue, operator_decision_guidance
+    )
     action_queue = build_action_queue(operator_actions)
     system_health_board = build_system_health_board(
         fixture, claim_guard, input_richness, shopify_pack, marketing_pack, has_product
@@ -2043,6 +2418,7 @@ def build_view_model(
         action_queue=tuple(action_queue),
         system_health_board=system_health_board,
         capability_surface_map=build_capability_surface_map(),
+        operator_decision_guidance=operator_decision_guidance,
     )
 
 

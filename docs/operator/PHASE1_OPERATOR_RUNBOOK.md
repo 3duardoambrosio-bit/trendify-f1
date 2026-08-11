@@ -167,6 +167,11 @@ Fewer than four produce `INPUT_LOW`.
 
 Do not fill fields merely to force `INPUT_RICH`.
 
+Input richness measures brief completeness, not commercial viability. Rich,
+well-supported context lets the expert pack become more specific; sparse or
+generic context produces generic output even when the workflow completes.
+Always evaluate unit economics separately before trusting or using the copy.
+
 ## 6. Rebuild
 
 Run the same launcher again:

@@ -255,6 +255,60 @@ def _fmt_money(value: Any) -> str:
         return f"MXN {value}"
 
 
+def _orientation(data: Mapping[str, Any]) -> dict[str, Any]:
+    value = data.get("operator_decision_guidance")
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _optional_money(value: Any) -> str:
+    return "No disponible" if value is None or value == "" else _fmt_money(value)
+
+
+def _cpa_metric(data: Mapping[str, Any]) -> tuple[str, str, str, str]:
+    guidance = _orientation(data)
+    if guidance.get("cpa_status") == "NO_VIABLE_CPA":
+        return (
+            "CPA viable",
+            "NINGUNO",
+            "Ni siquiera MXN 0.00: la unidad ya pierde dinero.",
+            "risk",
+        )
+    economics = data.get("economics") or {}
+    return (
+        "Breakeven CPA",
+        _fmt_money(economics.get("breakeven_cpa_mxn")),
+        "tope de adquisicion por unidad",
+        "gold",
+    )
+
+
+def _operator_claim_guard_notes(
+    data: Mapping[str, Any],
+    raw_notes: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not _is_local_catalog_source(data):
+        return dict(raw_notes)
+    guidance = _orientation(data)
+    blocked = bool(guidance.get("active_blockers"))
+    return {
+        "allowed_claims": [
+            "Usar únicamente hechos y pruebas documentados por el operador."
+        ],
+        "risky_claims": (
+            ["El mensaje actual excede la evidencia disponible."] if blocked else []
+        ),
+        "prohibited_claims": (
+            ["No usar el mensaje bloqueado ni promesas no comprobadas."]
+            if blocked
+            else []
+        ),
+        "safe_wording": [
+            "Revisar cada afirmación contra la evidencia antes de usarla."
+        ],
+        "summary": guidance.get("methodology_summary", ""),
+    }
+
+
 def _fmt_percent(value: Any) -> str:
     try:
         return f"{float(value):.1f}%"
@@ -438,6 +492,8 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
     scores = data.get("scores") or {}
     shopify = data.get("shopify_pack") or {}
     modules = _modules_by_id(data)
+    guidance = _orientation(data)
+    operator_catalog = bool(guidance.get("operator_catalog"))
     status = (modules.get("command_center") or {}).get("status", "empty")
 
     blocked_count = int(summary.get("blocked_count") or 0)
@@ -457,10 +513,16 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
 
     margin = economics.get("contribution_margin_mxn")
     margin_str = (
-        f"{_fmt_money(margin)} margen/unidad" if margin else "sin economia de candidato"
+        f"{_fmt_money(margin)} margen/unidad"
+        if margin is not None
+        else "sin economia de candidato"
     )
     breakeven = economics.get("breakeven_cpa_mxn")
-    breakeven_str = _fmt_money(breakeven) if breakeven else "-"
+    breakeven_str = (
+        "Ningún CPA viable"
+        if guidance.get("cpa_status") == "NO_VIABLE_CPA"
+        else (_fmt_money(breakeven) if breakeven is not None else "-")
+    )
     richness_str = (
         f"brief {richness.get('filled_count', 0)}/{richness.get('total_fields', 0)}"
         f" {richness.get('classification', '')}"
@@ -468,8 +530,17 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
         else "sin brief"
     )
     if blocked_count:
+        active = (
+            guidance.get("active_blockers") or []
+            if operator_catalog
+            else []
+        )
         codes = summary.get("reason_codes") or []
-        next_str = f"Bloqueo: {codes[0]}" if codes else "Bloqueo activo"
+        next_str = (
+            f"Bloqueo: {active[0]}"
+            if active
+            else (f"Bloqueo: {codes[0]}" if codes else "Bloqueo activo")
+        )
     else:
         primary = _first_primary(data)
         next_str = (
@@ -483,7 +554,11 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
     score_str = (
         f"{opportunity} / umbral {threshold}"
         if opportunity is not None
-        else "sin score"
+        else (
+            "Sin score de viabilidad"
+            if operator_catalog
+            else "sin score"
+        )
     )
 
     # PASS_* reason codes are positive evidence even when the overall operator
@@ -501,6 +576,12 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
     )
     if gate.startswith("PASS") and not blockers:
         blockers = []
+    informational: list[str] = []
+    if operator_catalog:
+        blockers = [str(item) for item in guidance.get("active_blockers") or []]
+        informational = [
+            str(item) for item in guidance.get("informational_context") or []
+        ]
 
     return {
         "fid": str(data.get("fixture_id", "")),
@@ -524,6 +605,7 @@ def _candidate_summary(data: Mapping[str, Any]) -> dict[str, Any]:
         "sort_risk": str(scores.get("claim_risk") if scores.get("claim_risk") is not None else 99),
         "drivers": drivers[:3],
         "blockers": blockers[:3],
+        "informational": informational[:3],
     }
 
 
@@ -578,11 +660,19 @@ def _render_selector(
         )
         driver_chips = (
             "".join(_chip(item, "go") for item in cand["drivers"])
-            or '<span class="sc-none">(sin drivers)</span>'
+            or (
+                '<span class="sc-none">Sin drivers de viabilidad</span>'
+                if _is_local_catalog_source(data)
+                else '<span class="sc-none">(sin drivers)</span>'
+            )
         )
         blocker_chips = (
             "".join(_chip(item, "risk") for item in cand["blockers"])
-            or '<span class="sc-none">(sin blockers)</span>'
+            or (
+                '<span class="sc-none">Sin bloqueos activos</span>'
+                if _is_local_catalog_source(data)
+                else '<span class="sc-none">(sin blockers)</span>'
+            )
         )
         drivers = (
             '<div class="sc-line sc-drivers" data-drivers="top_drivers">'
@@ -591,6 +681,17 @@ def _render_selector(
         blockers = (
             '<div class="sc-line sc-blockers" data-blockers="top_blockers">'
             '<span class="sc-line-label">Blockers</span>' + blocker_chips + "</div>"
+        )
+        informational = (
+            '<div class="sc-line sc-info" data-orientation-group="informational_context">'
+            '<span class="sc-line-label">Contexto informativo</span>'
+            + (
+                "".join(_chip(item, "muted") for item in cand.get("informational") or [])
+                or '<span class="sc-none">Sin contexto adicional</span>'
+            )
+            + "</div>"
+            if _is_local_catalog_source(data)
+            else ""
         )
         cards.append(
             f'<div class="sel-card{" active" if active else ""}" role="button" tabindex="0"'
@@ -609,11 +710,12 @@ def _render_selector(
             f'<div class="sc-name">{_e(cand["name"])}</div>'
             f"{stage_track}"
             f'<div class="sc-stats">'
-            f'<span class="sc-stat"><span class="sc-stat-label">Score compuesto</span>'
+            f'<span class="sc-stat"><span class="sc-stat-label">'
+            f'{"Score de viabilidad" if _is_local_catalog_source(data) else "Score compuesto"}</span>'
             f'<b>{_e(cand["score_str"])}</b></span>'
             f'<span class="sc-stat"><span class="sc-stat-label">Dinero</span>'
             f'<b class="sc-money">{_e(cand["margin_str"])}</b></span></div>'
-            f"{drivers}{blockers}"
+            f"{drivers}{blockers}{informational}"
             f'<div class="sc-next">{_e(cand["next_str"])}<span class="sc-arrow">-&gt;</span></div>'
             f'<div class="sc-rich">{_e(cand["richness_str"])}</div></div>'
         )
@@ -624,11 +726,15 @@ def _render_selector(
         f"<td>{_e(cand['richness_str'])}</td><td>{_e(cand['next_str'])}</td></tr>"
         for cand in candidates
     )
+    score_header = (
+        "score de viabilidad" if _is_local_catalog_source(data) else "score"
+    )
+    cpa_header = "CPA" if _is_local_catalog_source(data) else "breakeven CPA"
     compare = (
         '<details class="sel-compare" data-marker="candidate_comparison">'
         "<summary>Tabla compacta / comparacion (solo campos existentes del ViewModel)</summary>"
         '<table class="kv"><tr><th>candidato</th><td>estado</td><td>etapa</td>'
-        "<td>score</td><td>margen</td><td>breakeven CPA</td><td>brief</td>"
+        f"<td>{score_header}</td><td>margen</td><td>{cpa_header}</td><td>brief</td>"
         "<td>siguiente / bloqueo</td></tr>"
         + compare_rows
         + "</table></details>"
@@ -1056,7 +1162,18 @@ def _render_header(data: Mapping[str, Any]) -> str:
     command_status = _e((modules.get("command_center") or {}).get("status", "empty"))
 
     margin = economics.get("contribution_margin_mxn")
-    if margin:
+    if margin is not None:
+        cpa_label, cpa_value, cpa_sub, cpa_tone = _cpa_metric(data)
+        compare_at = economics.get("compare_at_price_mxn")
+        compare_sub = (
+            (
+                f"precio de referencia {_optional_money(compare_at)}"
+                if compare_at is not None
+                else "sin precio de referencia"
+            )
+            if _is_local_catalog_source(data)
+            else f"compare-at {_fmt_money(compare_at)}"
+        )
         metrics = (
             _metric(
                 "Margen / unidad",
@@ -1066,16 +1183,16 @@ def _render_header(data: Mapping[str, Any]) -> str:
                 title=f"economics.contribution_margin_mxn ({_source_copy(data, 'economics_number_source')})",
             )
             + _metric(
-                "Breakeven CPA",
-                _fmt_money(economics.get("breakeven_cpa_mxn")),
-                sub="tope de adquisicion por unidad",
-                tone="gold",
+                cpa_label,
+                cpa_value,
+                sub=cpa_sub,
+                tone=cpa_tone,
                 title=f"economics.breakeven_cpa_mxn ({_source_copy(data, 'economics_number_source')})",
             )
             + _metric(
                 "Precio",
                 _fmt_money(economics.get("price_mxn")),
-                sub=f"compare-at {_fmt_money(economics.get('compare_at_price_mxn'))}",
+                sub=compare_sub,
                 tone="ink",
                 title="economics.price_mxn / compare_at_price_mxn",
             )
@@ -1557,6 +1674,7 @@ def _render_command_center(
     board = dict(data.get("system_health_board") or {})
     queue = data.get("action_queue") or []
     modules = data.get("module_status_summary") or []
+    guidance = _orientation(data)
 
     pipeline_fields = {
         key: pipeline.get(key)
@@ -1669,6 +1787,35 @@ def _render_command_center(
         )
         + "</div>"
     )
+    decision_block = (
+        _card(
+            "Decisión",
+            _kv(
+                {
+                    "estado": decision.get("outcome", ""),
+                    "revisión humana": (
+                        "OBLIGATORIA"
+                        if decision.get("permission_gate") == "REVIEW"
+                        else decision.get("permission_gate", "")
+                    ),
+                    "orientación": guidance.get(
+                        "operator_summary", decision.get("reason", "")
+                    ),
+                }
+            ),
+        )
+        if _is_local_catalog_source(data)
+        else _card(
+            "Decision",
+            _kv(
+                {
+                    "outcome": decision.get("outcome", ""),
+                    "permission_gate": decision.get("permission_gate", ""),
+                    "reason": decision.get("reason", ""),
+                }
+            ),
+        )
+    )
 
     return (
         f'<section id="command_center" data-module="command_center"'
@@ -1681,7 +1828,7 @@ def _render_command_center(
         f'<div class="grid g2">{progress_card}{notes_card}</div>'
         f"{export_panel}"
         f"{stack}"
-        f'<div class="grid g2">{_card("Decision", _kv({"outcome": decision.get("outcome", ""), "permission_gate": decision.get("permission_gate", ""), "reason": decision.get("reason", "")}))}{pipeline_block}</div>'
+        f'<div class="grid g2">{decision_block}{pipeline_block}</div>'
         f'<div class="grid g2">{actions_block}{board_block}</div>'
         f"</section>"
     )
@@ -1696,6 +1843,24 @@ def _render_methodology_decision(
         return ""
 
     decision, methodology = resolved
+    if _is_local_catalog_source(data):
+        guidance = _orientation(data)
+        review_required = str(methodology["operator_review_required"]).lower()
+        return (
+            '<div class="card methodology-decision"'
+            ' data-contract-section="methodology_decision"'
+            ' data-methodology-present="true"'
+            ' data-permission-gate="REVIEW"'
+            f' data-operator-review-required="{review_required}"'
+            ' data-safe-output-review-required="true">'
+            '<h3>Resumen metodológico para el operador — solo lectura</h3>'
+            f'<div class="vh-outcome">{_e(guidance.get("methodology_status_label", "REVISIÓN"))}</div>'
+            f'<p class="op-summary">{_e(guidance.get("methodology_summary", ""))}</p>'
+            '<p class="honesty">La decisión técnica completa permanece intacta en el'
+            ' artefacto de auditoría. Esta vista solo orienta y nunca autoriza'
+            ' publicación, gasto ni escrituras en vivo.</p>'
+            '</div><!-- methodology-decision:end -->'
+        )
 
     rules = []
 
@@ -1779,6 +1944,8 @@ def _render_decision_center(data: Mapping[str, Any], active_module: str) -> str:
     scores = data.get("scores") or {}
     richness = data.get("input_richness") or {}
     methodology_panel = _render_methodology_decision(data)
+    guidance = _orientation(data)
+    operator_catalog = _is_local_catalog_source(data)
 
     score_rows = []
     for key, value in scores.items():
@@ -1793,7 +1960,7 @@ def _render_decision_center(data: Mapping[str, Any], active_module: str) -> str:
         )
 
     richness_block = _card(
-        "Input richness",
+        "Calidad del brief" if operator_catalog else "Input richness",
         _kv(
             {
                 "classification": richness.get("classification", ""),
@@ -1808,22 +1975,53 @@ def _render_decision_center(data: Mapping[str, Any], active_module: str) -> str:
         ),
     )
 
-    scores_html = "".join(score_rows) or '<p class="empty">(sin scores)</p>'
-    scores_card = _card("Scores del motor", scores_html)
-    decision_card = _card(
-        "Decision y razones",
-        _kv(
-            {
-                "outcome": decision.get("outcome", ""),
-                "permission_gate": decision.get("permission_gate", ""),
-                "reason": decision.get("reason", ""),
-            }
-        )
-        + "<h4>Reason codes</h4>"
-        + _ul(decision.get("reason_codes") or [])
-        + "<h4>Caveats</h4>"
-        + _ul(decision.get("caveats") or [], "plain warn"),
+    scores_html = "".join(score_rows) or (
+        '<p class="empty">No hay score de viabilidad comercial.</p>'
+        if operator_catalog
+        else '<p class="empty">(sin scores)</p>'
     )
+    scores_card = _card(
+        "Score de viabilidad (si existe)" if operator_catalog else "Scores del motor",
+        scores_html,
+    )
+    if operator_catalog:
+        decision_card = _card(
+            "Decisión y orientación",
+            _kv(
+                {
+                    "estado": decision.get("outcome", ""),
+                    "revisión humana": (
+                        "OBLIGATORIA"
+                        if decision.get("permission_gate") == "REVIEW"
+                        else decision.get("permission_gate", "")
+                    ),
+                    "resumen": guidance.get("operator_summary", ""),
+                }
+            )
+            + '<div data-orientation-group="active_blockers">'
+            + "<h4>Bloqueos activos</h4>"
+            + _ul(guidance.get("active_blockers") or [], "plain risk")
+            + "</div>"
+            + '<div data-orientation-group="informational_context">'
+            + "<h4>Contexto informativo (no bloquea)</h4>"
+            + _ul(guidance.get("informational_context") or [], "plain")
+            + "</div>",
+        )
+    else:
+        decision_card = _card(
+            "Decision y razones",
+            _kv(
+                {
+                    "outcome": decision.get("outcome", ""),
+                    "permission_gate": decision.get("permission_gate", ""),
+                    "reason": decision.get("reason", ""),
+                }
+            )
+            + "<h4>Reason codes</h4>"
+            + _ul(decision.get("reason_codes") or [])
+            + "<h4>Caveats</h4>"
+            + _ul(decision.get("caveats") or [], "plain warn"),
+        )
     active = " active" if active_module == "decision_center" else ""
     return (
         f'<section id="decision_center" data-module="decision_center" class="module{active}">'
@@ -1838,6 +2036,7 @@ def _render_product_lab(data: Mapping[str, Any], active_module: str) -> str:
     richness = data.get("input_richness") or {}
     marketing = data.get("marketing_pack") or {}
     queue = data.get("action_queue") or []
+    guidance = _orientation(data)
 
     field_chips = "".join(
         f'<span class="chip chip-go">{_e(field)}</span>'
@@ -1871,8 +2070,20 @@ def _render_product_lab(data: Mapping[str, Any], active_module: str) -> str:
         '<button type="button" class="drawer-btn" data-drawer-open data-control-id="evidence.open">Ver evidencia</button>',
     )
     brief_card = _card(
-        "Brief del operador - " + str(richness.get("classification", "")),
-        '<div class="field-chips">' + field_chips + "</div>" + enrich_block,
+        (
+            str(guidance.get("brief_quality_label"))
+            if _is_local_catalog_source(data)
+            else "Brief del operador - " + str(richness.get("classification", ""))
+        ),
+        '<div class="field-chips">'
+        + field_chips
+        + "</div>"
+        + (
+            f'<p class="honesty">{_e(str(guidance.get("brief_quality_note", "")))}</p>'
+            if _is_local_catalog_source(data)
+            else ""
+        )
+        + enrich_block,
     )
     pains_card = _card("Dolores", _ul(marketing.get("pain_points") or [], "plain risk"))
     desires_card = _card("Deseos", _ul(marketing.get("desire") or [], "plain go"))
@@ -2002,6 +2213,7 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
     pct = _float_or_none(economics.get("contribution_margin_percent"))
     breakeven = _float_or_none(economics.get("breakeven_cpa_mxn"))
     verdict, verdict_tone, verdict_reason = _economics_verdict(data)
+    guidance = _orientation(data)
 
     gate_legend = "".join(
         f'<span class="gate-chip gate-{tone}{" current" if level == verdict else ""}">{level}</span>'
@@ -2047,6 +2259,7 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
 
     margin_state, margin_tone = _floor_state(margin)
     buffer_state, buffer_tone = _floor_state(buffer)
+    cpa_label, cpa_value, cpa_sub, cpa_tone = _cpa_metric(data)
     hero_tiles = "".join(
         (
             _kpi_tile(
@@ -2058,10 +2271,11 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
                 state_tone=margin_tone,
             ),
             _kpi_tile(
-                "Breakeven CPA",
-                _fmt_money(breakeven),
-                sub="tope de adquisicion por unidad",
+                cpa_label,
+                cpa_value,
+                sub=cpa_sub,
                 hero=True,
+                tone=cpa_tone,
             ),
             _kpi_tile(
                 "Buffer post-reserva",
@@ -2075,7 +2289,20 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
     )
     mini_tiles = "".join(
         (
-            _kpi_tile("Precio", _fmt_money(price), sub=f"compare-at {_fmt_money(economics.get('compare_at_price_mxn'))}", tone="ink"),
+            _kpi_tile(
+                "Precio",
+                _fmt_money(price),
+                sub=(
+                    (
+                        f"precio de referencia {_optional_money(economics.get('compare_at_price_mxn'))}"
+                        if economics.get("compare_at_price_mxn") is not None
+                        else "sin precio de referencia"
+                    )
+                    if _is_local_catalog_source(data)
+                    else f"compare-at {_fmt_money(economics.get('compare_at_price_mxn'))}"
+                ),
+                tone="ink",
+            ),
             _kpi_tile("Costo producto", _fmt_money(cost), tone="ink"),
             _kpi_tile("Envio", _fmt_money(shipping), tone="ink"),
             _kpi_tile("Fees", _fmt_money(fee), tone="ink"),
@@ -2091,6 +2318,17 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
         + (f'<p class="honesty">{_e(notes)}</p>' if notes else "")
         + "</div>"
     )
+    recovery_card = ""
+    if guidance.get("cpa_status") == "NO_VIABLE_CPA":
+        recovery_card = _card(
+            "Reparación económica obligatoria",
+            f'<p class="blocked-banner">{_e(guidance.get("cpa_message", ""))}</p>'
+            + '<h4>Condiciones cuantificadas</h4>'
+            + _ul(guidance.get("recovery_conditions") or [], "plain risk")
+            + '<p class="honesty">Recuperable solo bajo estas condiciones; de lo'
+            ' contrario, descartar. Reparar el mensaje no repara la economía.</p>',
+            attrs='data-marker="economic_recovery_conditions"',
+        )
 
     kept_pct = round(margin * 100 / price, 1) if price else 0.0
     waterfall_card = (
@@ -2198,6 +2436,8 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
     shopify = data.get("shopify_pack") or {}
     missing = [str(item) for item in shopify.get("missing_inputs") or []]
     actions: list[str] = []
+    if guidance.get("primary_action"):
+        actions.append(str((guidance.get("primary_action") or {}).get("label", "")))
     if any("stock" in item or "proveedor" in item or "costo" in item for item in missing):
         actions.append("Confirmar costo final y stock con el proveedor antes del primer test.")
     conservative_margin = round(price * 0.9 - cost * 1.1 - shipping * 1.1 - fee, 2)
@@ -2215,6 +2455,7 @@ def _render_economics(data: Mapping[str, Any], active_module: str) -> str:
 
     body = (
         kpi_card
+        + recovery_card
         + f'<div class="grid g21">{waterfall_card}{verdict_card}</div>'
         + guardrails_card
         + f'<div class="grid g2">{sensitivity_card}{scenarios_card}</div>'
@@ -2463,7 +2704,7 @@ def _render_shopify_studio(data: Mapping[str, Any], active_module: str) -> str:
             + supplier_block
             + payload_card
             + "</div>"
-            + f'<aside class="guard-rail">{_claim_guard_card(pack.get("claim_guard_notes") or {}, "shopify_pack")}</aside>'
+            + f'<aside class="guard-rail">{_claim_guard_card(_operator_claim_guard_notes(data, pack.get("claim_guard_notes") or {}), "shopify_pack")}</aside>'
             + "</div></div>"
         )
 
@@ -2518,13 +2759,19 @@ def _render_first_test_panel(data: Mapping[str, Any], blocked: bool) -> str:
             for hyp in pack.get("creative_hypotheses") or []
             if hyp.get("linked_angle_id") == best_id
         ] or list(pack.get("creative_hypotheses") or [])
+        promise_value = best.get("promise_type", "")
+        if (
+            _is_local_catalog_source(data)
+            and promise_value == "sealed_methodology_output"
+        ):
+            promise_value = "Guía metodológica sellada"
         angle_card = _card(
             "Primer angulo ajustado por riesgo (risk-adjusted first angle)",
             f'<div class="vh-outcome">[{_e(best_id)}] {_e(best.get("angle_name", ""))}</div>'
             + _kv(
                 {
                     "riesgo de claims": best.get("claim_risk", ""),
-                    "promesa": best.get("promise_type", ""),
+                    "promesa": promise_value,
                     "segmento": best.get("target_segment", ""),
                     "redaccion segura": best.get("safe_wording", ""),
                 }
@@ -2846,18 +3093,26 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
         f" ({_e(entry.get('basis', ''))})</span>"
         for section, entry in (pack.get("confidence_by_section") or {}).items()
     )
+    strategy_fields = (
+        {
+            "ángulo central": pack.get("core_angle", ""),
+            "resumen de estrategia": pack.get("strategy_summary", ""),
+            "por qué este ángulo": pack.get("why_this_angle", ""),
+            "perfil del comprador": pack.get("buyer_profile", ""),
+        }
+        if _is_local_catalog_source(data)
+        else {
+            "core_angle": pack.get("core_angle", ""),
+            "strategy_summary": pack.get("strategy_summary", ""),
+            "why_this_angle": pack.get("why_this_angle", ""),
+            "buyer_profile": pack.get("buyer_profile", ""),
+        }
+    )
     strategy_panel = (
         f'<div class="lab-panel" data-lab-panel id="lab_strategy">'
         + _card(
             "Estrategia",
-            _kv(
-                {
-                    "core_angle": pack.get("core_angle", ""),
-                    "strategy_summary": pack.get("strategy_summary", ""),
-                    "why_this_angle": pack.get("why_this_angle", ""),
-                    "buyer_profile": pack.get("buyer_profile", ""),
-                }
-            ),
+            _kv(strategy_fields),
             attrs='data-marker="strategy_snapshot"',
         )
         + _card("Confianza por seccion", f'<div class="conf-strip">{confidence_pills}</div>')
@@ -2897,6 +3152,33 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
             rank_class = ""
             rank_marker = ""
             rank_chip = f'<span class="chip chip-gold">P{priority}</span>'
+        angle_fields = {
+            key: angle.get(key, "")
+            for key in (
+                "promise_type",
+                "target_segment",
+                "pain_addressed",
+                "desire_addressed",
+                "objection_addressed",
+                "proof_needed",
+                "safe_wording",
+            )
+        }
+        if _is_local_catalog_source(data):
+            promise = angle_fields.pop("promise_type")
+            angle_fields = {
+                "tipo de promesa": (
+                    "Guía metodológica sellada"
+                    if promise == "sealed_methodology_output"
+                    else promise
+                ),
+                "segmento objetivo": angle_fields.pop("target_segment"),
+                "dolor atendido": angle_fields.pop("pain_addressed"),
+                "deseo atendido": angle_fields.pop("desire_addressed"),
+                "objeción atendida": angle_fields.pop("objection_addressed"),
+                "prueba necesaria": angle_fields.pop("proof_needed"),
+                "redacción segura": angle_fields.pop("safe_wording"),
+            }
         angle_cards.append(
             f'<div class="angle-card{rank_class}" data-angle-card="{angle_id}"{rank_marker}>'
             f'<div class="a-top"><b>[{angle_id}]'
@@ -2907,20 +3189,7 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
             f'<span class="chip chip-warn">riesgo {_e(angle.get("claim_risk", ""))}</span>'
             f'<span class="chip chip-gold angle-chosen" data-angle-chosen hidden>'
             f"ANGULO ELEGIDO (LOCAL)</span></span></div>"
-            + _kv(
-                {
-                    key: angle.get(key, "")
-                    for key in (
-                        "promise_type",
-                        "target_segment",
-                        "pain_addressed",
-                        "desire_addressed",
-                        "objection_addressed",
-                        "proof_needed",
-                        "safe_wording",
-                    )
-                }
-            )
+            + _kv(angle_fields)
             + f'<div class="a-why">Puede funcionar: {_e(angle.get("why_it_might_work", ""))}</div>'
             + f'<div class="a-fail">Puede fallar: {_e(angle.get("why_it_might_fail", ""))}</div>'
             + use_button
@@ -3049,7 +3318,7 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
         + _card("Captions", '<div data-effective-field="marketing_captions" data-effective-format="html_list">' + _ul(pack.get("captions") or []) + '</div>')
         + adcopy_payload_card
         + "</div>"
-        + f'<aside class="guard-rail">{_claim_guard_card(pack.get("claim_guard") or {}, "marketing_pack")}</aside>'
+        + f'<aside class="guard-rail">{_claim_guard_card(_operator_claim_guard_notes(data, pack.get("claim_guard") or {}), "marketing_pack")}</aside>'
         + "</div></div>"
     )
 
@@ -3066,7 +3335,13 @@ def _render_marketing_engine(data: Mapping[str, Any], active_module: str) -> str
         + "</div>"
     )
 
-    plan = pack.get("testing_plan_with_thresholds") or {}
+    raw_plan = pack.get("testing_plan_with_thresholds") or {}
+    guidance_criteria = _orientation(data).get("decision_criteria") or {}
+    plan = dict(raw_plan)
+    if _is_local_catalog_source(data):
+        for key in ("continue_if", "review_if", "kill_if"):
+            if not plan.get(key):
+                plan[key] = list(guidance_criteria.get(key) or [])
     testplan_panel = (
         '<div class="lab-panel" data-lab-panel id="lab_testplan"'
         ' data-contract-section="testing_plan_with_thresholds">'
@@ -3166,7 +3441,7 @@ def _render_safety(data: Mapping[str, Any], active_module: str) -> str:
         f' class="module{active}" data-module-status="{_e(status)}">'
         f'<div class="mod-head"><h2>Safety / Claim Guard</h2>'
         f'<p class="purpose">Que se puede decir, que no, y el estado del boundary.</p></div>'
-        f'<div class="grid g2">{_claim_guard_card(guard_notes, "safety_module")}{risk_card}</div>'
+        f'<div class="grid g2">{_claim_guard_card(_operator_claim_guard_notes(data, guard_notes), "safety_module")}{risk_card}</div>'
         f"{guard_state_card}{boundary_card}</section>"
     )
 
@@ -3362,6 +3637,16 @@ def _render_evidence(data: Mapping[str, Any], active_module: str) -> str:
 
 def _render_learning_feedback(data: Mapping[str, Any], active_module: str) -> str:
     learning = data.get("learning_plan") or {}
+    criteria = _orientation(data).get("decision_criteria") or {}
+    continue_if = learning.get("continue_if") or (
+        criteria.get("continue_if") if _is_local_catalog_source(data) else []
+    )
+    review_if = learning.get("review_if") or (
+        criteria.get("review_if") if _is_local_catalog_source(data) else []
+    )
+    kill_if = learning.get("kill_if") or (
+        criteria.get("kill_if") if _is_local_catalog_source(data) else []
+    )
     schema_fields = (learning.get("operator_observations_schema") or {}).get("fields") or []
     slots = "".join(f'<div class="slot">{_e(field)} -&gt; (pendiente)</div>' for field in schema_fields)
     return (
@@ -3374,7 +3659,7 @@ def _render_learning_feedback(data: Mapping[str, Any], active_module: str) -> st
         f'<p>Sin analytics, sin fetch de datos, sin claims de PMF. El operador registrara'
         f' observaciones manualmente en Fase 2.</p><div class="slots">{slots}</div></div>'
         f'<div class="grid g2">'
-        f"{_card('Continuar / Revisar / Matar', '<h4>Continuar si</h4>' + _ul(learning.get('continue_if') or [], 'plain go') + '<h4>Revisar si</h4>' + _ul(learning.get('review_if') or [], 'plain warn') + '<h4>Matar si</h4>' + _ul(learning.get('kill_if') or [], 'plain risk'))}"
+        f"{_card('Continuar / Revisar / Matar', '<h4>Continuar si</h4>' + _ul(continue_if, 'plain go') + '<h4>Revisar si</h4>' + _ul(review_if, 'plain warn') + '<h4>Matar si</h4>' + _ul(kill_if, 'plain risk'))}"
         f"{_card('Senales', '<h4>Primera venta</h4>' + _ul(learning.get('first_sale_signals') or [], 'plain go') + '<h4>Riesgo</h4>' + _ul(learning.get('risk_signals') or [], 'plain risk'))}"
         f"</div>{_payload_blocks(data, 'learning_plan')}</section>"
     )
@@ -3384,6 +3669,8 @@ def _render_blocked_queue(data: Mapping[str, Any], active_module: str) -> str:
     summary = data.get("blocked_queue_summary") or {}
     queue = data.get("blocked_queue") or []
     blocked_count = int(summary.get("blocked_count") or 0)
+    guidance = _orientation(data)
+    operator_catalog = _is_local_catalog_source(data)
 
     banner = (
         '<div class="blocked-banner">HAY PRODUCTOS BLOQUEADOS - NUNCA LISTOS PARA PREPARAR'
@@ -3404,20 +3691,41 @@ def _render_blocked_queue(data: Mapping[str, Any], active_module: str) -> str:
             "No existe un bloqueo, pero el candidato aun requiere revision o "
             "enriquecimiento. can_prepare=False no equivale a BLOCKED."
         )
+    summary_values = (
+        {
+            "estado de la cola": queue_state,
+            "productos bloqueados": summary.get("blocked_count", 0),
+            "preparación permitida": summary.get("can_prepare", False),
+            "decisión": decision.get("outcome", ""),
+        }
+        if operator_catalog
+        else {
+            "queue_state": queue_state,
+            "blocked_count": summary.get("blocked_count", 0),
+            "can_prepare": summary.get("can_prepare", False),
+            "decision_outcome": decision.get("outcome", ""),
+        }
+    )
+    orientation_groups = (
+        '<div data-orientation-group="active_blockers"><h4>Bloqueos activos</h4>'
+        + _ul(guidance.get("active_blockers") or [], "plain risk")
+        + "</div>"
+        + '<div data-orientation-group="informational_context">'
+        + "<h4>Contexto informativo (no bloquea)</h4>"
+        + _ul(guidance.get("informational_context") or [], "plain")
+        + "</div>"
+        if operator_catalog
+        else (
+            "<h4>Reason codes de bloqueo</h4>"
+            + "".join(_chip(code, "risk") for code in summary.get("reason_codes") or [])
+        )
+    )
     summary_block = (
         f'<div class="card" data-contract-section="blocked_queue_summary">'
-        f"<h3>Blocked Queue Summary</h3>"
-        + _kv(
-            {
-                "queue_state": queue_state,
-                "blocked_count": summary.get("blocked_count", 0),
-                "can_prepare": summary.get("can_prepare", False),
-                "decision_outcome": decision.get("outcome", ""),
-            }
-        )
+        f"<h3>{'Resumen de productos bloqueados' if operator_catalog else 'Blocked Queue Summary'}</h3>"
+        + _kv(summary_values)
         + f'<p class="honesty">{_e(queue_explanation)}</p>'
-        + "<h4>Reason codes de bloqueo</h4>"
-        + "".join(_chip(code, "risk") for code in summary.get("reason_codes") or [])
+        + orientation_groups
         + "<h4>Acciones requeridas del operador</h4>"
         + _ul(summary.get("required_operator_actions") or [], "plain warn")
         + "</div>"
@@ -3431,17 +3739,40 @@ def _render_blocked_queue(data: Mapping[str, Any], active_module: str) -> str:
             ],
             "plain warn",
         )
+        item_values = (
+            {
+                "razón para el operador": item.get("operator_reason", ""),
+                "severidad": item.get("severity", ""),
+                "recuperación": (
+                    "CONDICIONADA A LAS CIFRAS SIGUIENTES"
+                    if item.get("can_recover", False)
+                    else "NO"
+                ),
+            }
+            if operator_catalog
+            else {
+                "reason": item.get("reason", ""),
+                "severity": item.get("severity", ""),
+                "can_recover": item.get("can_recover", False),
+            }
+        )
+        recovery = (
+            "<h4>Condiciones cuantificadas de recuperación</h4>"
+            + _ul(item.get("recovery_conditions") or [], "plain risk")
+            if operator_catalog and item.get("can_recover", False)
+            else ""
+        )
+        raw_codes = (
+            ""
+            if operator_catalog
+            else "".join(_chip(code, "risk") for code in item.get("reason_codes") or [])
+        )
         item_blocks.append(
             f'<div class="card blocked-item" data-marker="repair_or_reject_only">'
             f'<h3>{_e(item.get("product_name", ""))}</h3>'
-            + _kv(
-                {
-                    "reason": item.get("reason", ""),
-                    "severity": item.get("severity", ""),
-                    "can_recover": item.get("can_recover", False),
-                }
-            )
-            + "".join(_chip(code, "risk") for code in item.get("reason_codes") or [])
+            + _kv(item_values)
+            + recovery
+            + raw_codes
             + "<h4>Decision del operador (solo reparar o rechazar)</h4>"
             + actions
             + "</div>"

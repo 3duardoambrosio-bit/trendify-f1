@@ -177,6 +177,7 @@ def _assert_read_only_panel(
     panel: str,
     *,
     operator_review_required: bool,
+    raw_methodology: bool = True,
 ) -> None:
     for forbidden in (
         "data-copy-button",
@@ -200,22 +201,25 @@ def _assert_read_only_panel(
         in panel
     )
     assert 'data-safe-output-review-required="true"' in panel
-    assert 'data-methodology-safe-output="inert"' in panel
-
-    assert (
-        "Salida del motor sellado. Requiere revisión "
-        "del operador."
-    ) in panel
-
-    assert (
-        "no autoriza publicación, gasto ni escrituras "
-        "en vivo"
-    ) in panel
-
-    assert (
-        "Cuando su valor es false, no elimina "
-        "permission_gate=REVIEW."
-    ) in panel
+    if raw_methodology:
+        assert 'data-methodology-safe-output="inert"' in panel
+        assert (
+            "Salida del motor sellado. Requiere revisión "
+            "del operador."
+        ) in panel
+        assert (
+            "no autoriza publicación, gasto ni escrituras "
+            "en vivo"
+        ) in panel
+        assert (
+            "Cuando su valor es false, no elimina "
+            "permission_gate=REVIEW."
+        ) in panel
+    else:
+        assert 'data-methodology-safe-output="inert"' not in panel
+        assert "Resumen metodológico para el operador" in panel
+        assert "nunca autoriza publicación, gasto ni escrituras en vivo" in panel
+        assert "safe_output" not in panel
 
 
 def test_nominal_bridge_renders_methodology_read_only() -> None:
@@ -251,6 +255,7 @@ def test_nominal_bridge_renders_methodology_read_only() -> None:
     _assert_read_only_panel(
         visual_panel,
         operator_review_required=False,
+        raw_methodology=False,
     )
 
     assert workspace.count(
@@ -269,7 +274,9 @@ def test_nominal_bridge_renders_methodology_read_only() -> None:
         "safe_output",
     ):
         assert field in audit_panel
-        assert field in visual_panel
+
+    assert "Resumen metodológico para el operador" in visual_panel
+    assert "ACEPTADO PARA PREPARACIÓN LOCAL" in visual_panel
 
     tabular_rule_fields = (
         "rule_id",
@@ -288,11 +295,11 @@ def test_nominal_bridge_renders_methodology_read_only() -> None:
 
     for field in tabular_rule_fields:
         assert f"<th>{field}</th>" in audit_panel
-        assert f"<th>{field}</th>" in visual_panel
+        assert f"<th>{field}</th>" not in visual_panel
 
     for field in listed_rule_fields:
         assert f"<h4>{field}</h4>" in audit_panel
-        assert f"<h4>{field}</h4>" in visual_panel
+        assert f"<h4>{field}</h4>" not in visual_panel
 
     escaped_output = html.escape(
         methodology["safe_output"],
@@ -300,7 +307,7 @@ def test_nominal_bridge_renders_methodology_read_only() -> None:
     )
 
     assert escaped_output in audit_panel
-    assert escaped_output in visual_panel
+    assert escaped_output not in visual_panel
 
     assert scan_forbidden_tokens(audit) == []
     assert scan_forbidden_tokens(visual) == []
@@ -327,7 +334,7 @@ def test_safe_output_is_escaped_and_inert() -> None:
     escaped = "&lt;em&gt;unsafe &amp; inert&lt;/em&gt;"
 
     assert escaped in audit_panel
-    assert escaped in visual_panel
+    assert escaped not in visual_panel
     assert "<em>unsafe & inert</em>" not in audit_panel
     assert "<em>unsafe & inert</em>" not in visual_panel
 
@@ -338,6 +345,7 @@ def test_safe_output_is_escaped_and_inert() -> None:
     _assert_read_only_panel(
         visual_panel,
         operator_review_required=False,
+        raw_methodology=False,
     )
 
 
@@ -395,6 +403,7 @@ def test_true_operator_review_flag_is_preserved() -> None:
     _assert_read_only_panel(
         visual_panel,
         operator_review_required=True,
+        raw_methodology=False,
     )
 
     assert (

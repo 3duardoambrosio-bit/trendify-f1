@@ -204,9 +204,16 @@ def test_blocked_methodology_action_is_visible_in_workspace(tmp_path: Path) -> N
             encoding="utf-8"
         )
     )
-    action = candidate["blocked"][0]["operator_actions"][0]["label"]
+    raw_action = candidate["blocked"][0]["operator_actions"][0]["label"]
+    view_model = build_view_model(
+        candidate,
+        source_fixture="catalog.csv#a8_r110_cat_001",
+    ).to_dict()
+    operator_action = view_model["blocked_queue"][0]["operator_actions"][0]["label"]
     document = (workspace / "workspace.html").read_text(encoding="utf-8")
 
-    assert action.startswith("Operator action:")
-    assert html.escape(action, quote=True) in document
+    assert raw_action.startswith("Operator action:")
+    assert html.escape(raw_action, quote=True) not in document
+    assert operator_action.startswith("Revisar o reescribir las afirmaciones")
+    assert html.escape(operator_action, quote=True) in document
     assert candidate["decision"]["outcome"] == "BLOCKED"

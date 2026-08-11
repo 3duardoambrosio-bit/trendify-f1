@@ -1,0 +1,30 @@
+{
+  "operator_review_required": false,
+  "rule_decisions": [
+    {
+      "decision_text": "select demonstration/use-case angle",
+      "framework": "AngleSelection",
+      "missing_fields": [],
+      "predicate_matched": true,
+      "priority": 99,
+      "rule_id": "ANG-D001",
+      "semantic_matched": true,
+      "source_anchor": "PERSUASION",
+      "triggers": [
+        "angle_selected",
+        "demo_angle",
+        "tie_break_applied"
+      ]
+    }
+  ],
+  "safe_output": "Hook: show hogar_y_oficina solving the specific buyer problem for hogar_y_oficina with Identidad declarada por el operador: Producto Nominal, Proveedor declarado por el operador: Proveedor MX, then prove it with Registro CSV local del operador con identidad y costos completos. Buyer fit: For a warm buyer already aware of the specific buyer problem for hogar_y_oficina, connect hogar_y_oficina directly to Identidad declarada por el operador: Producto Nominal and move from active pain point to proof to comparison before a margin-safe next step. Objection handled: buyer needs proof before promise, so tie hogar_y_oficina only to the evidence shown. Offer/margin: do not lead with price; frame hogar_y_oficina around Identidad declarada por el operador: Producto Nominal, then test a margin-safe CTA. CTA: invite the buyer to watch the proof, then compare whether hogar_y_oficina's Identidad declarada por el operador: Producto Nominal solves the shown problem. Meta note: open with the visual problem for hogar_y_oficina, then show Identidad declarada por el operador: Producto Nominal before the CTA. Operator asset: build the first creative around 'Identidad declarada por el operador: Producto Nominal, Proveedor declarado por el operador: Proveedor MX' as the proof scene, state the offer as margin-safe value before price, keep the claim narrower than the evidence, and use the CTA only after the proof is visible.",
+  "schema_version": "synapse.marketing_methodology.decision_engine.v1",
+  "selected_framework": "AngleSelection",
+  "selected_rule_id": "ANG-D001",
+  "status": "accepted",
+  "triggers": [
+    "angle_selected",
+    "demo_angle",
+    "tie_break_applied"
+  ]
+}
